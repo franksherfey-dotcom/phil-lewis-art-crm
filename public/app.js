@@ -914,7 +914,54 @@ async function loadSettings() {
     form.querySelector('[name="smtp_port"]').value = s.smtp_port||'587';
     form.querySelector('[name="smtp_pass"]').value = s.smtp_pass||'';
     form.querySelector('[name="smtp_secure"]').value = s.smtp_secure||'false';
+    // IMAP
+    const imap = document.getElementById('imap-form');
+    if (imap) {
+      imap.querySelector('[name="imap_host"]').value = s.imap_host||'';
+      imap.querySelector('[name="imap_port"]').value = s.imap_port||'993';
+      imap.querySelector('[name="imap_secure"]').value = s.imap_secure||'true';
+      imap.querySelector('[name="imap_sent_folder"]').value = s.imap_sent_folder||'Sent';
+    }
   } catch(e) { toast(e.message, 'error'); }
+}
+
+async function saveImapSettings(e) {
+  e.preventDefault();
+  const form = document.getElementById('imap-form');
+  const msg = document.getElementById('imap-msg');
+  const body = {
+    imap_host: form.querySelector('[name="imap_host"]').value,
+    imap_port: form.querySelector('[name="imap_port"]').value,
+    imap_secure: form.querySelector('[name="imap_secure"]').value,
+    imap_sent_folder: form.querySelector('[name="imap_sent_folder"]').value,
+  };
+  try {
+    await apiFetch('/api/settings', { method: 'POST', body: JSON.stringify(body) });
+    msg.textContent = 'IMAP settings saved.';
+    msg.className = 'settings-msg success';
+    msg.style.display = 'block';
+    toast('IMAP settings saved', 'success');
+  } catch(err) {
+    msg.textContent = err.message;
+    msg.className = 'settings-msg error';
+    msg.style.display = 'block';
+  }
+}
+
+async function syncInbox() {
+  const msg = document.getElementById('imap-msg');
+  msg.textContent = 'Syncing inbox…';
+  msg.className = 'settings-msg';
+  msg.style.display = 'block';
+  try {
+    const r = await apiFetch('/api/inbox/sync', { method: 'POST' });
+    msg.textContent = `Sync complete — ${r.found} email${r.found!==1?'s':''} scanned, ${r.imported} new repl${r.imported!==1?'ies':'y'} imported.`;
+    msg.className = 'settings-msg success';
+    toast(`Inbox synced: ${r.imported} new replies`, 'success');
+  } catch(err) {
+    msg.textContent = `Sync failed: ${err.message}`;
+    msg.className = 'settings-msg error';
+  }
 }
 
 async function saveSettings(e) {

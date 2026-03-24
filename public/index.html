@@ -304,6 +304,51 @@
             </ul>
           </div>
         </div>
+
+        <div class="settings-card">
+          <h2>📥 IMAP / RoundCube Sync</h2>
+          <p class="settings-help">Connect your IMAP inbox so sent emails appear in your RoundCube Sent folder, and replies from contacts sync back into the CRM Activity Log.</p>
+          <form id="imap-form" onsubmit="saveImapSettings(event)">
+            <div class="form-row">
+              <div class="form-group">
+                <label>IMAP Host</label>
+                <input type="text" name="imap_host" placeholder="mail.yourdomain.com">
+              </div>
+              <div class="form-group">
+                <label>IMAP Port</label>
+                <input type="number" name="imap_port" placeholder="993">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Use SSL/TLS</label>
+                <select name="imap_secure">
+                  <option value="true">Yes — SSL (port 993, recommended)</option>
+                  <option value="false">No — STARTTLS (port 143)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Sent Folder Name</label>
+                <input type="text" name="imap_sent_folder" placeholder="Sent">
+                <small style="color:#888;font-size:0.78rem">Usually "Sent" — check RoundCube for exact name</small>
+              </div>
+            </div>
+            <p class="settings-help" style="margin:0 0 0.5rem">Uses the same username &amp; password as SMTP above.</p>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">Save IMAP Settings</button>
+              <button type="button" class="btn btn-outline" onclick="syncInbox()">↓ Sync Inbox Now</button>
+            </div>
+            <div id="imap-msg" class="settings-msg"></div>
+          </form>
+          <div class="smtp-help-box">
+            <strong>RoundCube / cPanel hosts (most common):</strong>
+            <ul>
+              <li>IMAP Host: <strong>mail.yourdomain.com</strong>, port <strong>993</strong>, SSL</li>
+              <li>Sent folder: <strong>Sent</strong> (or <strong>INBOX.Sent</strong> for some hosts)</li>
+              <li>Username &amp; password: same as your email login</li>
+            </ul>
+          </div>
+        </div>
       </section>
     </main>
   </div>

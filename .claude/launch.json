@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Phil Lewis Art CRM",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["start"],
+      "port": 3000,
+      "autoPort": true
+    },
+    {
+      "name": "esll-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "/Users/franksherfey/Desktop/ESLL Snack Shack Scheduler", "run", "dev", "--", "--port", "5173"],
+      "port": 5173,
+      "autoPort": true
+    }
+  ]
+}

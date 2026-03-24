@@ -6,7 +6,7 @@ const multer = require('multer')
 const { parse } = require('csv-parse/sync')
 
 const pool = require('./lib/db')
-const { sendEmail, testConnection, interpolate } = require('./emailer')
+const { sendEmail, syncInbox, testConnection, interpolate } = require('./emailer')
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -325,64 +325,55 @@ app.delete('/api/enrollments/:id', async (req, res) => {
 // ─── OUTREACH QUEUE ───────────────────────────────────────────────────────────
 
 async function getQueueItems() {
-  const enrollments = await all(`
-    SELECT e.*, s.name AS sequence_name,
+  // Single query — avoids N+1 pattern that caused Vercel timeouts
+  const rows = await all(`
+    SELECT
+      e.id AS enrollment_id, e.contact_id, e.sequence_id, e.current_step, e.started_at,
+      s.name AS sequence_name,
+      ss.subject AS step_subject, ss.body AS step_body, ss.delay_days,
+      (SELECT COUNT(*)::int FROM sequence_steps WHERE sequence_id = e.sequence_id) AS total_steps,
       c.first_name, c.last_name, c.email, c.title, c.company_id,
-      co.name AS company_name, co.type AS company_type, co.website
+      co.name AS company_name, co.type AS company_type, co.website,
+      (SELECT MAX(sent_at) FROM activities WHERE enrollment_id = e.id) AS last_activity_at
     FROM enrollments e
     JOIN sequences s ON e.sequence_id = s.id
+    JOIN sequence_steps ss ON ss.sequence_id = e.sequence_id AND ss.step_number = e.current_step
     JOIN contacts c ON e.contact_id = c.id
     LEFT JOIN companies co ON c.company_id = co.id
     WHERE e.status = 'active'
   `)
 
+  const now = new Date()
   const queue = []
-  await Promise.all(enrollments.map(async enr => {
-    const step = await one(
-      'SELECT * FROM sequence_steps WHERE sequence_id=$1 AND step_number=$2',
-      [enr.sequence_id, enr.current_step]
-    )
-    if (!step) return
-
+  for (const row of rows) {
     let dueDate
-    if (enr.current_step === 1) {
-      const started = new Date(enr.started_at)
-      dueDate = new Date(started.getTime() + step.delay_days * 86400000)
+    if (row.current_step === 1) {
+      dueDate = new Date(new Date(row.started_at).getTime() + row.delay_days * 86400000)
     } else {
-      const lastActivity = await one(
-        'SELECT sent_at FROM activities WHERE enrollment_id=$1 ORDER BY sent_at DESC LIMIT 1',
-        [enr.id]
-      )
-      if (!lastActivity) return
-      dueDate = new Date(new Date(lastActivity.sent_at).getTime() + step.delay_days * 86400000)
+      if (!row.last_activity_at) continue
+      dueDate = new Date(new Date(row.last_activity_at).getTime() + row.delay_days * 86400000)
     }
-
-    if (dueDate <= new Date()) {
-      const { n: total_steps } = await one(
-        'SELECT COUNT(*)::int AS n FROM sequence_steps WHERE sequence_id=$1',
-        [enr.sequence_id]
-      )
+    if (dueDate <= now) {
       queue.push({
-        enrollment_id: enr.id,
-        contact_id: enr.contact_id,
-        sequence_id: enr.sequence_id,
-        sequence_name: enr.sequence_name,
-        current_step: enr.current_step,
-        total_steps,
-        first_name: enr.first_name,
-        last_name: enr.last_name,
-        email: enr.email,
-        title: enr.title,
-        company_name: enr.company_name,
-        company_type: enr.company_type,
-        website: enr.website,
-        step_subject: step.subject,
-        step_body: step.body,
+        enrollment_id: row.enrollment_id,
+        contact_id: row.contact_id,
+        sequence_id: row.sequence_id,
+        sequence_name: row.sequence_name,
+        current_step: row.current_step,
+        total_steps: row.total_steps,
+        first_name: row.first_name,
+        last_name: row.last_name,
+        email: row.email,
+        title: row.title,
+        company_name: row.company_name,
+        company_type: row.company_type,
+        website: row.website,
+        step_subject: row.step_subject,
+        step_body: row.step_body,
         due_date: dueDate.toISOString(),
       })
     }
-  }))
-
+  }
   return queue
 }
 
@@ -603,7 +594,10 @@ app.get('/api/settings', async (req, res) => {
 
 app.post('/api/settings', async (req, res) => {
   try {
-    const fields = ['smtp_host','smtp_port','smtp_user','smtp_from_name','smtp_secure']
+    const fields = [
+      'smtp_host','smtp_port','smtp_user','smtp_from_name','smtp_secure',
+      'imap_host','imap_port','imap_secure','imap_sent_folder',
+    ]
     await Promise.all(
       fields
         .filter(k => req.body[k] !== undefined)
@@ -619,6 +613,43 @@ app.post('/api/settings', async (req, res) => {
       )
     }
     res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ─── INBOX SYNC ───────────────────────────────────────────────────────────────
+
+app.post('/api/inbox/sync', async (req, res) => {
+  try {
+    const rows = await all('SELECT key, value FROM settings')
+    const settings = {}
+    rows.forEach(r => { settings[r.key] = r.value })
+
+    // Build set of known contact emails for matching
+    const contacts = await all('SELECT id, email FROM contacts WHERE email IS NOT NULL AND email != \'\'')
+    const emailToContactId = {}
+    contacts.forEach(c => { emailToContactId[c.email.toLowerCase()] = c.id })
+    const knownEmails = new Set(Object.keys(emailToContactId))
+
+    const received = await syncInbox(settings, knownEmails)
+
+    let imported = 0
+    for (const msg of received) {
+      const contactId = emailToContactId[msg.from_email]
+      if (!contactId) continue
+      // Avoid duplicates — check if this subject+sent_at already logged
+      const existing = await one(
+        `SELECT id FROM activities WHERE contact_id=$1 AND type='received_email' AND subject=$2 AND sent_at=$3`,
+        [contactId, msg.subject, msg.received_at]
+      )
+      if (existing) continue
+      await run(
+        `INSERT INTO activities (contact_id, type, subject, body, status, sent_at)
+         VALUES ($1,'received_email',$2,$3,'received',$4)`,
+        [contactId, msg.subject, msg.body, msg.received_at]
+      )
+      imported++
+    }
+    res.json({ ok: true, found: received.length, imported })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
