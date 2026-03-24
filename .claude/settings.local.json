@@ -110,7 +110,14 @@
       "Bash(curl -s -H \"Authorization: token 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\" https://api.github.com/user)",
       "Bash(curl -s -X POST -H \"Authorization: token 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\" -H \"Content-Type: application/json\" https://api.github.com/user/repos -d '{\"\"\"\"name\"\"\"\":\"\"\"\"phil-lewis-art-crm\"\"\"\",\"\"\"\"description\"\"\"\":\"\"\"\"Phil Lewis Art — Licensing Outreach CRM\"\"\"\",\"\"\"\"private\"\"\"\":true}')",
       "Bash(cat:*)",
-      "Bash(pbcopy echo:*)"
+      "Bash(pbcopy echo:*)",
+      "Bash(curl -s -X PATCH -H \"Authorization: token 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\" -H \"Accept: application/vnd.github.v3+json\" https://api.github.com/repos/franksherfey/phil-lewis-art-crm -d '{\"\"\"\"private\"\"\"\": false}')",
+      "Bash(curl -s -X PATCH -H \"Authorization: token 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\" -H \"Accept: application/vnd.github.v3+json\" https://api.github.com/repos/franksherfey/phil-lewis-art-crm -d '{\"\"private\"\": false}')",
+      "Bash(curl -s -H \"Authorization: token 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\" -H \"Accept: application/vnd.github.v3+json\" \"https://api.github.com/user/repos?type=all&per_page=20\")",
+      "Bash(curl -s -X PATCH -H \"Authorization: token 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\" -H \"Accept: application/vnd.github.v3+json\" https://api.github.com/repos/franksherfey-dotcom/phil-lewis-art-crm -d '{\"\"\"\"private\"\"\"\": false}')",
+      "Bash(GIT_ASKPASS=echo git -c credential.helper=\"\" push \"https://x-access-token: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@github.com/franksherfey-dotcom/phil-lewis-art-crm.git\" main)",
+      "Bash(curl -s -H \"Authorization: token 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\" https://api.github.com/repos/franksherfey-dotcom/phil-lewis-art-crm)",
+      "Bash(GIT_TERMINAL_PROMPT=0 git push \"https://x-access-token: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@github.com/franksherfey-dotcom/phil-lewis-art-crm.git\" main)"
     ]
   }
 }

@@ -116,7 +116,12 @@ document.querySelectorAll('.modal-overlay').forEach(overlay => {
 // ── DASHBOARD ─────────────────────────────────────────────────────────────
 async function loadDashboard() {
   try {
-    const d = await apiFetch('/api/dashboard');
+    const [d, stuckData] = await Promise.all([
+      apiFetch('/api/dashboard'),
+      apiFetch('/api/pipeline/stuck-count').catch(() => ({ count: 0 })),
+    ]);
+    const stuckCount = stuckData.count || 0;
+    const stuckClass = stuckCount > 0 ? 'stat-card stat-stuck stat-clickable' : 'stat-card stat-clickable';
     document.getElementById('stats-grid').innerHTML = `
       <div class="stat-card stat-clickable" onclick="showPage('prospects')" title="View all companies">
         <div class="stat-label">Companies</div>
@@ -148,6 +153,12 @@ async function loadDashboard() {
         <div class="stat-sub">ready to send</div>
         <div class="stat-link-hint">View queue →</div>
       </div>
+      <div class="${stuckClass}" onclick="showPage('pipeline')" title="View stuck contacts in pipeline" style="${stuckCount > 0 ? 'border-color:var(--danger);' : ''}">
+        <div class="stat-label" style="${stuckCount > 0 ? 'color:var(--danger);' : ''}">Stuck</div>
+        <div class="stat-value" style="${stuckCount > 0 ? 'color:var(--danger);' : ''}">${stuckCount}</div>
+        <div class="stat-sub">${stuckCount > 0 ? 'no contact in 2+ weeks' : 'no stuck contacts'}</div>
+        <div class="stat-link-hint">View pipeline →</div>
+      </div>
     `;
     updateBadge('badge-queue', d.queueCount);
 
@@ -158,7 +169,12 @@ async function loadDashboard() {
     }
     actEl.innerHTML = `<div class="activity-list">${d.recentActivity.map(a => `
       <div class="activity-row">
-        <div class="activity-name">${esc(a.first_name)} ${esc(a.last_name||'')}</div>
+        <div class="activity-name">
+          ${a.contact_id
+            ? `<a href="#" class="contact-name-link" onclick="event.preventDefault();openContactDetail(${a.contact_id})">${esc(a.first_name)} ${esc(a.last_name||'')}</a>`
+            : `${esc(a.first_name)} ${esc(a.last_name||'')}`
+          }
+        </div>
         <div class="activity-co">${esc(a.company_name||'—')}</div>
         <div class="activity-subj">${esc(a.subject||'—')}</div>
         <div class="activity-date">${fmtDate(a.sent_at)}</div>
@@ -172,6 +188,113 @@ function updateBadge(id, count) {
   if (!el) return;
   el.textContent = count > 0 ? count : '';
   el.style.display = count > 0 ? '' : 'none';
+}
+
+// ── CONTACT DETAIL MODAL ──────────────────────────────────────────────────
+async function openContactDetail(contactId) {
+  try {
+    const [contact, activities] = await Promise.all([
+      apiFetch(`/api/contacts/${contactId}`),
+      apiFetch(`/api/activities?contact_id=${contactId}`),
+    ]);
+
+    // Fetch enrollment info from pipeline
+    let enrollmentInfo = null;
+    try {
+      const pipeline = await apiFetch('/api/pipeline');
+      enrollmentInfo = pipeline.find(p => p.id === contactId) || null;
+    } catch(e) { /* ignore */ }
+
+    const statusLabel = enrollmentInfo
+      ? (enrollmentInfo.enrollment_status || 'not enrolled')
+      : 'not enrolled';
+    const statusColor = {
+      active: 'var(--primary)',
+      completed: 'var(--success)',
+      replied: 'var(--success)',
+      stopped: 'var(--text-muted)',
+    }[statusLabel] || 'var(--text-muted)';
+
+    const activityRows = activities.length
+      ? activities.map(a => `
+        <tr>
+          <td style="color:var(--text-muted);white-space:nowrap">${fmtDate(a.sent_at)}</td>
+          <td>
+            <span class="status-pill" style="background:var(--primary-pale);color:var(--primary);font-size:10px">
+              ${esc(a.type === 'received_email' ? 'reply received' : a.type)}
+            </span>
+          </td>
+          <td style="font-size:12px">${esc(a.subject||'—')}</td>
+        </tr>
+      `).join('')
+      : `<tr><td colspan="3" style="color:var(--text-muted);text-align:center;padding:12px">No activity recorded yet.</td></tr>`;
+
+    document.getElementById('contact-detail-title').textContent =
+      `${contact.first_name} ${contact.last_name || ''}`.trim();
+
+    document.getElementById('contact-detail-body').innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+        <div>
+          <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">Name</div>
+          <div style="font-size:14px;font-weight:600">${esc(contact.first_name)} ${esc(contact.last_name||'')}</div>
+        </div>
+        ${contact.title ? `
+        <div>
+          <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">Title</div>
+          <div style="font-size:13px">${esc(contact.title)}</div>
+        </div>` : ''}
+        ${contact.company_name ? `
+        <div>
+          <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">Company</div>
+          <div style="font-size:13px">
+            ${contact.company_id
+              ? `<a href="#" onclick="event.preventDefault();closeModal('modal-contact-detail');openCompanyDetail(${contact.company_id})">${esc(contact.company_name)}</a>`
+              : esc(contact.company_name)
+            }
+          </div>
+        </div>` : ''}
+        ${contact.email ? `
+        <div>
+          <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">Email</div>
+          <div style="font-size:13px"><a href="mailto:${esc(contact.email)}">${esc(contact.email)}</a></div>
+        </div>` : ''}
+        <div>
+          <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">Sequence Status</div>
+          <div style="font-size:13px">
+            <span style="color:${statusColor};font-weight:600;text-transform:capitalize">${esc(statusLabel)}</span>
+            ${enrollmentInfo && enrollmentInfo.sequence_name ? ` — <span style="font-size:12px;color:var(--text-muted)">${esc(enrollmentInfo.sequence_name)}</span>` : ''}
+            ${enrollmentInfo && enrollmentInfo.enrollment_status === 'active' && enrollmentInfo.total_steps
+              ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px">Step ${enrollmentInfo.current_step} of ${enrollmentInfo.total_steps}</div>`
+              : ''}
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-bottom:6px;font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">
+        Communications (${activities.length})
+      </div>
+      <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden">
+        <table class="data-table" style="margin:0;font-size:12px">
+          <thead>
+            <tr>
+              <th style="width:110px">Date</th>
+              <th style="width:110px">Type</th>
+              <th>Subject</th>
+            </tr>
+          </thead>
+          <tbody>${activityRows}</tbody>
+        </table>
+      </div>
+
+      <div style="margin-top:14px;text-align:right">
+        ${contact.company_id
+          ? `<a href="#" class="btn btn-outline btn-sm" onclick="event.preventDefault();closeModal('modal-contact-detail');showPage('pipeline')">View in Pipeline →</a>`
+          : ''}
+      </div>
+    `;
+
+    openModal('modal-contact-detail');
+  } catch(e) { toast(e.message, 'error'); }
 }
 
 // ── COMPANIES ─────────────────────────────────────────────────────────────
@@ -955,9 +1078,10 @@ async function syncInbox() {
   msg.style.display = 'block';
   try {
     const r = await apiFetch('/api/inbox/sync', { method: 'POST' });
-    msg.textContent = `Sync complete — ${r.found} email${r.found!==1?'s':''} scanned, ${r.imported} new repl${r.imported!==1?'ies':'y'} imported.`;
+    const autoStoppedMsg = r.autoStopped > 0 ? ` ${r.autoStopped} sequence${r.autoStopped!==1?'s':''} auto-stopped.` : '';
+    msg.textContent = `Sync complete — ${r.found} email${r.found!==1?'s':''} scanned, ${r.imported} new repl${r.imported!==1?'ies':'y'} imported.${autoStoppedMsg}`;
     msg.className = 'settings-msg success';
-    toast(`Inbox synced: ${r.imported} new replies`, 'success');
+    toast(`Inbox synced: ${r.imported} new replies${r.autoStopped > 0 ? `, ${r.autoStopped} sequence${r.autoStopped!==1?'s':''} stopped` : ''}`, 'success');
   } catch(err) {
     msg.textContent = `Sync failed: ${err.message}`;
     msg.className = 'settings-msg error';
@@ -1103,6 +1227,19 @@ const PIPELINE_STAGE_CLASSES = {
   'Sequence Complete': 'stage-complete',
 };
 
+function isStuckContact(c) {
+  if (c.enrollment_status !== 'active') return false;
+  const now = Date.now();
+  const cutoff = 14 * 24 * 60 * 60 * 1000; // 14 days in ms
+  if (c.last_contact_at) {
+    return (now - new Date(c.last_contact_at).getTime()) > cutoff;
+  }
+  if (c.started_at) {
+    return (now - new Date(c.started_at).getTime()) > cutoff;
+  }
+  return false;
+}
+
 async function loadPipeline() {
   try {
     const contacts = await apiFetch('/api/pipeline');
@@ -1113,81 +1250,169 @@ async function loadPipeline() {
       return;
     }
 
-    // Group contacts by stage
-    const stageMap = {};
+    // Count summary stats
+    const totalActive = contacts.filter(c => c.enrollment_status === 'active').length;
+    const totalReplied = contacts.filter(c => c.enrollment_status === 'replied').length;
+    const totalCompleted = contacts.filter(c => c.enrollment_status === 'completed').length;
+    const stuckContacts = contacts.filter(c => isStuckContact(c));
+    const stuckCount = stuckContacts.length;
+
+    // Group by sequence_name, then by current_step
+    // Contacts without enrollment go into a special group
+    const seqMap = {};
     contacts.forEach(c => {
-      const stage = getPipelineStage(c);
-      if (!stageMap[stage]) stageMap[stage] = [];
-      stageMap[stage].push(c);
+      const seqName = c.sequence_name || '__none__';
+      if (!seqMap[seqName]) seqMap[seqName] = {};
+      const step = c.enrollment_status === 'active' ? (c.current_step || 0)
+                 : c.enrollment_status === 'completed' ? '__completed__'
+                 : c.enrollment_status === 'replied' ? '__replied__'
+                 : c.enrollment_status === 'stopped' ? '__stopped__'
+                 : '__none__';
+      if (!seqMap[seqName][step]) seqMap[seqName][step] = [];
+      seqMap[seqName][step].push(c);
     });
 
-    // Sort stages in logical pipeline order
-    const sortedStages = [...new Set([...PIPELINE_STAGE_ORDER, ...Object.keys(stageMap)])].filter(s => stageMap[s]);
-
-    // Summary cards
-    let html = '<div class="pipeline-summary">';
-    sortedStages.forEach(stage => {
-      const count = stageMap[stage].length;
-      const cls = PIPELINE_STAGE_CLASSES[stage] || 'stage-active';
-      const stageId = stageSlug(stage);
-      html += `
-        <div class="pipeline-summary-card ${cls}" onclick="scrollToStage('${stageId}')" title="Jump to ${stage}">
-          <div class="pipeline-summary-count">${count}</div>
-          <div class="pipeline-summary-label">${stage}</div>
-        </div>`;
+    // Sort sequence names: put __none__ last
+    const seqNames = Object.keys(seqMap).sort((a, b) => {
+      if (a === '__none__') return 1;
+      if (b === '__none__') return -1;
+      return a.localeCompare(b);
     });
-    html += '</div>';
 
-    // Stage sections
-    sortedStages.forEach(stage => {
-      const stageContacts = stageMap[stage];
-      const cls = PIPELINE_STAGE_CLASSES[stage] || 'stage-active';
+    let html = '';
+
+    // Summary stats bar
+    html += `
+      <div class="pipeline-summary" style="margin-bottom:16px">
+        <div class="pipeline-summary-card stage-active">
+          <div class="pipeline-summary-count">${totalActive}</div>
+          <div class="pipeline-summary-label">Active</div>
+        </div>
+        <div class="pipeline-summary-card stage-complete">
+          <div class="pipeline-summary-count">${totalReplied}</div>
+          <div class="pipeline-summary-label">Replied</div>
+        </div>
+        <div class="pipeline-summary-card stage-complete">
+          <div class="pipeline-summary-count">${totalCompleted}</div>
+          <div class="pipeline-summary-label">Completed</div>
+        </div>
+        ${stuckCount > 0 ? `
+        <div class="pipeline-summary-card" style="border-color:var(--danger);cursor:default">
+          <div class="pipeline-summary-count" style="color:var(--danger)">${stuckCount}</div>
+          <div class="pipeline-summary-label" style="color:var(--danger)">Stuck</div>
+        </div>` : ''}
+      </div>
+    `;
+
+    // Stuck alert banner
+    if (stuckCount > 0) {
       html += `
-        <div class="pipeline-stage-section" id="stage-${stageSlug(stage)}">
-          <div class="pipeline-stage-header ${cls}">
-            <span class="pipeline-stage-label">${stage}</span>
-            <span class="pipeline-stage-count">${stageContacts.length} contact${stageContacts.length !== 1 ? 's' : ''}</span>
+        <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:10px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px;font-size:13px;color:#856404">
+          <span style="font-size:16px">⚠</span>
+          <strong>${stuckCount} contact${stuckCount !== 1 ? 's' : ''} haven't been contacted in 2+ weeks.</strong>
+          <span style="color:#6c757d;font-size:12px">Scroll down to see contacts with a red ⚠ Stuck badge.</span>
+        </div>
+      `;
+    }
+
+    // Build sequence sections
+    for (const seqName of seqNames) {
+      const stepMap = seqMap[seqName];
+      const displaySeqName = seqName === '__none__' ? 'No Sequence' : seqName;
+
+      // Get all steps, sorted numerically, with special statuses last
+      const stepKeys = Object.keys(stepMap).sort((a, b) => {
+        const specialOrder = { '__completed__': 900, '__replied__': 901, '__stopped__': 902, '__none__': 999 };
+        const aVal = specialOrder[a] !== undefined ? specialOrder[a] : parseInt(a);
+        const bVal = specialOrder[b] !== undefined ? specialOrder[b] : parseInt(b);
+        return aVal - bVal;
+      });
+
+      html += `<div class="pipeline-stage-section" style="margin-bottom:24px">`;
+
+      for (const stepKey of stepKeys) {
+        const stepContacts = stepMap[stepKey];
+        let stepLabel;
+        let headerClass = 'stage-active';
+
+        if (stepKey === '__completed__') {
+          stepLabel = 'Completed';
+          headerClass = 'stage-complete';
+        } else if (stepKey === '__replied__') {
+          stepLabel = 'Replied';
+          headerClass = 'stage-complete';
+        } else if (stepKey === '__stopped__') {
+          stepLabel = 'Stopped';
+          headerClass = 'stage-none';
+        } else if (stepKey === '__none__') {
+          stepLabel = 'Not Enrolled';
+          headerClass = 'stage-none';
+        } else {
+          const totalSteps = stepContacts[0]?.total_steps || '?';
+          stepLabel = `Step ${stepKey} of ${totalSteps}`;
+        }
+
+        html += `
+          <div class="pipeline-stage-header ${headerClass}" style="margin-top:0;border-radius:8px 8px 0 0">
+            <span class="pipeline-stage-label">
+              ${seqName !== '__none__' ? `<span style="font-size:11px;opacity:.75;font-weight:400;margin-right:6px">&#128231; ${esc(displaySeqName)} —</span>` : ''}
+              ${esc(stepLabel)}
+            </span>
+            <span class="pipeline-stage-count">${stepContacts.length} contact${stepContacts.length !== 1 ? 's' : ''}</span>
           </div>
-          <table class="data-table pipeline-table">
+          <table class="data-table pipeline-table" style="border-radius:0 0 8px 8px;margin-bottom:2px">
             <thead>
               <tr>
                 <th>Contact</th>
                 <th>Company</th>
-                <th>Sequence</th>
+                <th>Status</th>
                 <th>Emails Sent</th>
                 <th>Last Contact</th>
               </tr>
             </thead>
             <tbody>
-              ${stageContacts.map(c => `
-                <tr>
-                  <td>
-                    <div style="display:flex;align-items:center;gap:6px">
-                      ${c.is_primary ? '<span class="primary-badge" title="Primary contact">★</span>' : ''}
-                      <strong>${esc(c.first_name)} ${esc(c.last_name || '')}</strong>
-                    </div>
-                    ${c.title ? `<div style="font-size:11px;color:var(--text-muted)">${esc(c.title)}</div>` : ''}
-                    ${c.email ? `<div style="font-size:11px;color:var(--text-muted)">${esc(c.email)}</div>` : '<div style="font-size:11px;color:var(--danger)">⚠ No email</div>'}
-                  </td>
-                  <td>
-                    ${c.company_id ? `<a href="#" onclick="event.preventDefault();openCompanyDetail(${c.company_id})">${esc(c.company_name || '—')}</a>` : '<span style="color:var(--text-muted)">—</span>'}
-                    ${c.company_status ? `<div style="font-size:11px;margin-top:2px"><span class="status-pill status-${(c.company_status||'').replace(/\s/g,'-')}">${esc(c.company_status)}</span></div>` : ''}
-                  </td>
-                  <td>
-                    ${c.sequence_name ? `<span style="font-size:12px">${esc(c.sequence_name)}</span>` : '<span style="color:var(--text-muted)">—</span>'}
-                    ${c.enrollment_status === 'active' && c.total_steps ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px">Next: Step ${c.current_step} of ${c.total_steps}</div>` : ''}
-                    ${c.enrollment_status === 'completed' ? '<div style="font-size:11px;color:var(--success);margin-top:2px">✓ Complete</div>' : ''}
-                  </td>
-                  <td>
-                    <span class="pipeline-email-count">${c.emails_sent || 0}</span>
-                  </td>
-                  <td style="color:var(--text-muted)">${fmtDate(c.last_contact_at)}</td>
-                </tr>
-              `).join('')}
+              ${stepContacts.map(c => {
+                const stuck = isStuckContact(c);
+                return `
+                  <tr${stuck ? ' style="background:#fff8f8"' : ''}>
+                    <td>
+                      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                        ${c.is_primary ? '<span class="primary-badge" title="Primary contact">★</span>' : ''}
+                        <a href="#" onclick="event.preventDefault();openContactDetail(${c.id})" style="font-weight:600">${esc(c.first_name)} ${esc(c.last_name || '')}</a>
+                        ${stuck ? '<span style="background:#fee2e2;color:#b91c1c;font-size:10px;padding:1px 6px;border-radius:10px;font-weight:600">⚠ Stuck</span>' : ''}
+                      </div>
+                      ${c.title ? `<div style="font-size:11px;color:var(--text-muted)">${esc(c.title)}</div>` : ''}
+                      ${c.email ? `<div style="font-size:11px;color:var(--text-muted)">${esc(c.email)}</div>` : '<div style="font-size:11px;color:var(--danger)">⚠ No email</div>'}
+                    </td>
+                    <td>
+                      ${c.company_id ? `<a href="#" onclick="event.preventDefault();openCompanyDetail(${c.company_id})">${esc(c.company_name || '—')}</a>` : '<span style="color:var(--text-muted)">—</span>'}
+                      ${c.company_status ? `<div style="font-size:11px;margin-top:2px"><span class="status-pill status-${(c.company_status||'').replace(/\s/g,'-')}">${esc(c.company_status)}</span></div>` : ''}
+                    </td>
+                    <td>
+                      ${c.enrollment_status === 'active'
+                        ? `<span style="color:var(--primary);font-size:12px;font-weight:600">Active</span>`
+                        : c.enrollment_status === 'completed'
+                        ? `<span style="color:var(--success);font-size:12px;font-weight:600">✓ Completed</span>`
+                        : c.enrollment_status === 'replied'
+                        ? `<span style="color:var(--success);font-size:12px;font-weight:600">↩ Replied</span>`
+                        : c.enrollment_status === 'stopped'
+                        ? `<span style="color:var(--text-muted);font-size:12px">Stopped</span>`
+                        : `<span style="color:var(--text-muted);font-size:12px">—</span>`
+                      }
+                    </td>
+                    <td>
+                      <span class="pipeline-email-count">${c.emails_sent || 0}</span>
+                    </td>
+                    <td style="color:var(--text-muted)">${fmtDate(c.last_contact_at)}</td>
+                  </tr>
+                `;
+              }).join('')}
             </tbody>
           </table>
-        </div>`;
-    });
+        `;
+      }
+      html += `</div>`;
+    }
 
     el.innerHTML = html;
   } catch(e) { toast(e.message, 'error'); }

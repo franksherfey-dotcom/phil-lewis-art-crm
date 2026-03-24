@@ -322,6 +322,13 @@ app.delete('/api/enrollments/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
+app.patch('/api/enrollments/:id/reply', async (req, res) => {
+  try {
+    await run("UPDATE enrollments SET status='replied', completed_at=NOW() WHERE id=$1", [req.params.id])
+    res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
 // ─── OUTREACH QUEUE ───────────────────────────────────────────────────────────
 
 async function getQueueItems() {
@@ -633,6 +640,7 @@ app.post('/api/inbox/sync', async (req, res) => {
     const received = await syncInbox(settings, knownEmails)
 
     let imported = 0
+    let autoStopped = 0
     for (const msg of received) {
       const contactId = emailToContactId[msg.from_email]
       if (!contactId) continue
@@ -648,8 +656,20 @@ app.post('/api/inbox/sync', async (req, res) => {
         [contactId, msg.subject, msg.body, msg.received_at]
       )
       imported++
+      // Auto-remove from active sequences when a reply is received
+      const activeEnrollments = await all(
+        `SELECT id FROM enrollments WHERE contact_id=$1 AND status='active'`,
+        [contactId]
+      )
+      for (const enr of activeEnrollments) {
+        await run(
+          `UPDATE enrollments SET status='replied', completed_at=NOW() WHERE id=$1`,
+          [enr.id]
+        )
+        autoStopped++
+      }
     }
-    res.json({ ok: true, found: received.length, imported })
+    res.json({ ok: true, found: received.length, imported, autoStopped })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
@@ -824,6 +844,26 @@ app.get('/api/news', async (req, res) => {
     }
     res.json(results)
   } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+// ─── STUCK COUNT ─────────────────────────────────────────────────────────────
+
+app.get('/api/pipeline/stuck-count', async (req, res) => {
+  try {
+    const result = await one(`
+      SELECT COUNT(*)::int AS count
+      FROM enrollments e
+      WHERE e.status = 'active'
+        AND (
+          (SELECT MAX(sent_at) FROM activities WHERE contact_id = e.contact_id) < NOW() - INTERVAL '14 days'
+          OR (
+            (SELECT MAX(sent_at) FROM activities WHERE contact_id = e.contact_id) IS NULL
+            AND e.started_at < NOW() - INTERVAL '14 days'
+          )
+        )
+    `)
+    res.json({ count: result.count })
+  } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
 // ─── CATCH ALL (SPA) ─────────────────────────────────────────────────────────
