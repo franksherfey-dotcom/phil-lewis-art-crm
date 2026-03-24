@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Phil Lewis Art — Prospecting CRM</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- SIDEBAR -->
+    <nav id="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-art-bg">
+          <div class="sidebar-art-overlay">
+            <div class="logo">
+              <div>
+                <div class="logo-title">Phil Lewis Art</div>
+                <div class="logo-sub">Licensing CRM</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <ul class="nav-list">
+        <li class="nav-item active" data-page="dashboard">
+          <span class="nav-icon">◈</span> Dashboard
+        </li>
+        <li class="nav-item" data-page="prospects">
+          <span class="nav-icon">◎</span> Companies
+          <span class="nav-badge" id="badge-prospects"></span>
+        </li>
+        <li class="nav-item" data-page="contacts">
+          <span class="nav-icon">◉</span> Contacts
+        </li>
+        <li class="nav-item" data-page="pipeline">
+          <span class="nav-icon">◈</span> Pipeline
+        </li>
+        <li class="nav-item" data-page="sequences">
+          <span class="nav-icon">◈</span> Sequences
+        </li>
+        <li class="nav-item" data-page="queue">
+          <span class="nav-icon">▸</span> Outreach Queue
+          <span class="nav-badge queue-badge" id="badge-queue"></span>
+        </li>
+        <li class="nav-item" data-page="reports">
+          <span class="nav-icon">📊</span> Reports
+        </li>
+        <li class="nav-item" data-page="news">
+          <span class="nav-icon">◉</span> Industry News
+        </li>
+        <li class="nav-item" data-page="activity">
+          <span class="nav-icon">◷</span> Activity Log
+        </li>
+        <li class="nav-item" data-page="settings">
+          <span class="nav-icon">⚙</span> Settings
+        </li>
+      </ul>
+    </nav>
+
+    <!-- MAIN CONTENT -->
+    <main id="main">
+
+      <!-- ART FILMSTRIP HEADER -->
+      <div class="art-filmstrip" id="art-filmstrip">
+        <div class="art-filmstrip-panel" style="background-image:url('https://phillewisart.com/cdn/shop/files/Blue-Ridge-1500_600x.jpg?v=1743801077')"></div>
+        <div class="art-filmstrip-panel" style="background-image:url('https://phillewisart.com/cdn/shop/files/Dolphins-1500_600x.jpg?v=1729699109')"></div>
+        <div class="art-filmstrip-panel" style="background-image:url('https://phillewisart.com/cdn/shop/files/Whales-1500_600x.jpg?v=1729698825')"></div>
+        <div class="art-filmstrip-panel" style="background-image:url('https://phillewisart.com/cdn/shop/files/Octopus-1500_600x.jpg?v=1729698917')"></div>
+        <div class="art-filmstrip-panel" style="background-image:url('https://phillewisart.com/cdn/shop/files/Sea-Horses-1500_600x.jpg?v=1729699010')"></div>
+        <div class="art-filmstrip-title">
+          <span class="art-filmstrip-name">Phil Lewis Art</span>
+          <span class="art-filmstrip-dot">·</span>
+          <span class="art-filmstrip-sub">Visionary Landscapes &amp; Nature</span>
+        </div>
+      </div>
+
+      <!-- DASHBOARD -->
+      <section id="page-dashboard" class="page active">
+        <div class="page-header">
+          <h1>Dashboard</h1>
+          <div class="page-actions">
+            <button class="btn btn-primary" onclick="showPage('queue')">View Outreach Queue</button>
+          </div>
+        </div>
+        <div class="stats-grid" id="stats-grid"></div>
+        <div class="section-title">Recent Activity</div>
+        <div id="recent-activity"></div>
+      </section>
+
+      <!-- PROSPECTS -->
+      <section id="page-prospects" class="page">
+        <div class="page-header">
+          <h1>Prospects</h1>
+          <div class="page-actions">
+            <button class="btn btn-outline" onclick="openImportModal('companies')">Import CSV</button>
+            <button class="btn btn-primary" onclick="openCompanyModal()">+ Add Company</button>
+          </div>
+        </div>
+        <div class="filters-bar">
+          <input type="text" id="search-companies" placeholder="Search companies..." oninput="loadCompanies()" class="filter-input">
+          <select id="filter-type" onchange="loadCompanies()" class="filter-select">
+            <option value="">All Types</option>
+            <option value="manufacturer">Manufacturer</option>
+            <option value="retailer">Retailer</option>
+            <option value="publisher">Publisher</option>
+            <option value="agent">Agent/Rep</option>
+            <option value="other">Other</option>
+          </select>
+          <select id="filter-status" onchange="loadCompanies()" class="filter-select">
+            <option value="">All Statuses</option>
+            <option value="prospect">Prospect</option>
+            <option value="contacted">Contacted</option>
+            <option value="interested">Interested</option>
+            <option value="licensed">Licensed</option>
+            <option value="not-interested">Not Interested</option>
+          </select>
+          <select id="filter-tag" onchange="loadCompanies()" class="filter-select">
+            <option value="">All Tags</option>
+          </select>
+        </div>
+        <div id="tag-filter-chips" class="tag-filter-chips"></div>
+        <div id="companies-list" class="card-grid"></div>
+      </section>
+
+      <!-- CONTACTS -->
+      <section id="page-contacts" class="page">
+        <div class="page-header">
+          <h1>Contacts</h1>
+          <div class="page-actions">
+            <button class="btn btn-outline" onclick="openImportModal('contacts')">Import CSV</button>
+            <button class="btn btn-primary" onclick="openContactModal()">+ Add Contact</button>
+          </div>
+        </div>
+        <div class="filters-bar">
+          <input type="text" id="search-contacts" placeholder="Search contacts..." oninput="loadContacts()" class="filter-input">
+        </div>
+        <div id="contacts-table-wrap">
+          <table class="data-table" id="contacts-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Title</th>
+                <th>Company</th>
+                <th>Email</th>
+                <th>Phone</th>
+                <th>LinkedIn</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="contacts-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- PIPELINE -->
+      <section id="page-pipeline" class="page">
+        <div class="page-header">
+          <div>
+            <h1>Contact Pipeline</h1>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:3px">All contacts grouped by outreach stage</div>
+          </div>
+          <div class="page-actions">
+            <button class="btn btn-outline" onclick="showPage('contacts')">View Contacts List</button>
+          </div>
+        </div>
+        <div id="pipeline-content"></div>
+      </section>
+
+      <!-- SEQUENCES -->
+      <section id="page-sequences" class="page">
+        <div class="page-header">
+          <h1>Email Sequences</h1>
+          <div class="page-actions">
+            <button class="btn btn-primary" onclick="openSequenceModal()">+ New Sequence</button>
+          </div>
+        </div>
+        <div id="sequences-list" class="card-grid"></div>
+      </section>
+
+      <!-- OUTREACH QUEUE -->
+      <section id="page-queue" class="page">
+        <div class="page-header">
+          <h1>Outreach Queue</h1>
+          <div class="page-actions">
+            <button class="btn btn-primary" id="send-all-btn" onclick="sendAll()">Send All</button>
+          </div>
+        </div>
+        <div class="queue-info" id="queue-info"></div>
+        <div id="queue-list"></div>
+      </section>
+
+      <!-- INDUSTRY NEWS -->
+      <section id="page-news" class="page">
+        <div class="page-header">
+          <div>
+            <h1>Industry News</h1>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:3px">Art licensing, brand collabs &amp; prospect company news — updated every 45 min</div>
+          </div>
+          <div class="page-actions" style="display:flex;gap:8px;align-items:center">
+            <input type="text" id="news-company-search" placeholder="Search by company name…" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;width:220px">
+            <button class="btn btn-outline" onclick="loadNews()">↺ Refresh</button>
+          </div>
+        </div>
+        <div id="news-feed"></div>
+      </section>
+
+      <!-- REPORTS -->
+      <section id="page-reports" class="page">
+        <div class="page-header">
+          <div>
+            <h1>Reports</h1>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:3px">Pipeline health, weekly activity &amp; deal tracking</div>
+          </div>
+          <div class="page-actions" style="display:flex;gap:8px;align-items:center">
+            <label style="font-size:12px;color:var(--text-muted)">Stalled threshold:
+              <input type="number" id="stalled-days" value="30" min="1" max="180" style="width:56px;padding:4px 6px;border:1px solid var(--border);border-radius:6px;font-size:12px;margin-left:4px">
+              <span style="font-size:12px;color:var(--text-muted)"> days</span>
+            </label>
+            <button class="btn btn-outline" onclick="loadReports()">↺ Refresh</button>
+          </div>
+        </div>
+        <div id="reports-content">
+          <div class="empty-state">Loading reports…</div>
+        </div>
+      </section>
+
+      <!-- ACTIVITY LOG -->
+      <section id="page-activity" class="page">
+        <div class="page-header">
+          <h1>Activity Log</h1>
+        </div>
+        <div id="activity-table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Contact</th>
+                <th>Company</th>
+                <th>Subject</th>
+                <th>Type</th>
+              </tr>
+            </thead>
+            <tbody id="activity-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- SETTINGS -->
+      <section id="page-settings" class="page">
+        <div class="page-header">
+          <h1>Settings</h1>
+        </div>
+        <div class="settings-card">
+          <h2>Email (SMTP) Configuration</h2>
+          <p class="settings-help">Connect your business email to send outreach from the app. Contact your email host for SMTP details.</p>
+          <form id="settings-form" onsubmit="saveSettings(event)">
+            <div class="form-row">
+              <div class="form-group">
+                <label>From Name</label>
+                <input type="text" name="smtp_from_name" placeholder="Phil Lewis Art">
+              </div>
+              <div class="form-group">
+                <label>Email Address (Username)</label>
+                <input type="email" name="smtp_user" placeholder="you@yourdomain.com">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>SMTP Host</label>
+                <input type="text" name="smtp_host" placeholder="mail.yourdomain.com">
+              </div>
+              <div class="form-group">
+                <label>SMTP Port</label>
+                <input type="number" name="smtp_port" placeholder="587">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Password</label>
+                <input type="password" name="smtp_pass" placeholder="Your email password or app password">
+              </div>
+              <div class="form-group">
+                <label>Use SSL/TLS (port 465)</label>
+                <select name="smtp_secure">
+                  <option value="false">No — Use STARTTLS (port 587, recommended)</option>
+                  <option value="true">Yes — Use SSL (port 465)</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-actions">
+              <button type="button" class="btn btn-outline" onclick="testEmail()">Test Connection</button>
+              <button type="submit" class="btn btn-primary">Save Settings</button>
+            </div>
+            <div id="settings-msg" class="settings-msg"></div>
+          </form>
+          <div class="smtp-help-box">
+            <strong>Common SMTP settings:</strong>
+            <ul>
+              <li><strong>Gmail Workspace:</strong> smtp.gmail.com, port 587</li>
+              <li><strong>Microsoft 365:</strong> smtp.office365.com, port 587</li>
+              <li><strong>GoDaddy:</strong> smtpout.secureserver.net, port 465 (SSL)</li>
+              <li><strong>cPanel hosts:</strong> mail.yourdomain.com, port 587</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ── MODALS ── -->
+
+  <!-- Company Modal -->
+  <div id="modal-company" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="company-modal-title">Add Company</h2>
+        <button class="modal-close" onclick="closeModal('modal-company')">✕</button>
+      </div>
+      <form id="company-form" onsubmit="saveCompany(event)">
+        <input type="hidden" name="id">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Company Name *</label>
+            <input type="text" name="name" required>
+          </div>
+          <div class="form-group">
+            <label>Type</label>
+            <select name="type">
+              <option value="manufacturer">Manufacturer</option>
+              <option value="retailer">Retailer</option>
+              <option value="publisher">Publisher / Greeting Cards</option>
+              <option value="agent">Agent / Rep</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Website</label>
+            <input type="text" name="website" placeholder="www.company.com">
+          </div>
+          <div class="form-group">
+            <label>Phone</label>
+            <input type="text" name="phone">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Category / Product Lines</label>
+            <input type="text" name="category" placeholder="e.g. Home Decor, Stationery, Apparel">
+          </div>
+          <div class="form-group">
+            <label>Status</label>
+            <select name="status">
+              <option value="prospect">Prospect</option>
+              <option value="contacted">Contacted</option>
+              <option value="interested">Interested</option>
+              <option value="licensed">Licensed</option>
+              <option value="not-interested">Not Interested</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>City</label>
+            <input type="text" name="city">
+          </div>
+          <div class="form-group">
+            <label>State</label>
+            <input type="text" name="state">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Tags <span style="font-weight:400;text-transform:none;letter-spacing:0">(click to toggle, or type custom)</span></label>
+          <div id="tag-picker" class="tag-picker"></div>
+          <input type="hidden" name="tags">
+        </div>
+        <div class="form-group">
+          <label>Notes</label>
+          <textarea name="notes" rows="3"></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="closeModal('modal-company')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Contact Modal -->
+  <div id="modal-contact" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="contact-modal-title">Add Contact</h2>
+        <button class="modal-close" onclick="closeModal('modal-contact')">✕</button>
+      </div>
+      <form id="contact-form" onsubmit="saveContact(event)">
+        <input type="hidden" name="id">
+        <input type="hidden" name="company_id">
+        <div class="form-row">
+          <div class="form-group">
+            <label>First Name *</label>
+            <input type="text" name="first_name" required>
+          </div>
+          <div class="form-group">
+            <label>Last Name</label>
+            <input type="text" name="last_name">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Email</label>
+            <input type="email" name="email">
+          </div>
+          <div class="form-group">
+            <label>Phone</label>
+            <input type="text" name="phone">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Title / Role</label>
+            <input type="text" name="title" placeholder="e.g. Art Director, Buyer">
+          </div>
+          <div class="form-group">
+            <label>Company</label>
+            <select name="company_id_select" id="contact-company-select">
+              <option value="">— None —</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>LinkedIn URL</label>
+          <input type="text" name="linkedin" placeholder="https://linkedin.com/in/username">
+        </div>
+        <div class="form-group">
+          <label>Notes</label>
+          <textarea name="notes" rows="2"></textarea>
+        </div>
+        <div class="form-group form-check-group">
+          <label class="check-label">
+            <input type="checkbox" name="is_primary">
+            <span>Mark as Primary Contact for this company</span>
+          </label>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="closeModal('modal-contact')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Contact</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Sequence Modal -->
+  <div id="modal-sequence" class="modal-overlay hidden">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <h2 id="sequence-modal-title">New Sequence</h2>
+        <button class="modal-close" onclick="closeModal('modal-sequence')">✕</button>
+      </div>
+      <form id="sequence-form" onsubmit="saveSequence(event)">
+        <input type="hidden" name="id">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Sequence Name *</label>
+            <input type="text" name="name" required placeholder="e.g. Initial Licensing Outreach">
+          </div>
+          <div class="form-group">
+            <label>Description</label>
+            <input type="text" name="description" placeholder="Who is this for?">
+          </div>
+        </div>
+
+        <div class="steps-header">
+          <div class="section-title" style="margin:0">Email Steps</div>
+          <button type="button" class="btn btn-outline btn-sm" onclick="addStep()">+ Add Step</button>
+        </div>
+        <div class="token-help">
+          Available tokens: <code>{{first_name}}</code> <code>{{last_name}}</code> <code>{{full_name}}</code> <code>{{company}}</code> <code>{{title}}</code> <code>{{website}}</code>
+        </div>
+        <div id="steps-container"></div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="closeModal('modal-sequence')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Sequence</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Enroll Modal -->
+  <div id="modal-enroll" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Add to Campaign</h2>
+        <button class="modal-close" onclick="closeModal('modal-enroll')">✕</button>
+      </div>
+      <div id="enroll-content">
+        <div class="form-group">
+          <label>Select Campaign</label>
+          <select id="enroll-sequence-select" class="full-width"></select>
+          <div id="enroll-campaign-desc" style="font-size:11px;color:var(--text-muted);margin-top:6px;font-style:italic"></div>
+        </div>
+        <div id="enroll-contacts-list" class="enroll-contacts"></div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="closeModal('modal-enroll')">Cancel</button>
+          <button type="button" class="btn btn-primary" onclick="confirmEnroll()">Add to Campaign</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Preview Modal -->
+  <div id="modal-preview" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Email Preview</h2>
+        <button class="modal-close" onclick="closeModal('modal-preview')">✕</button>
+      </div>
+      <div id="preview-content" class="preview-email"></div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" onclick="closeModal('modal-preview')">Close</button>
+        <button type="button" class="btn btn-primary" id="preview-send-btn">Send This Email</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Import Modal -->
+  <div id="modal-import" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="import-modal-title">Import CSV</h2>
+        <button class="modal-close" onclick="closeModal('modal-import')">✕</button>
+      </div>
+      <div class="import-content">
+        <div id="import-format-help"></div>
+        <div class="form-group">
+          <label>Select CSV File</label>
+          <input type="file" id="import-file" accept=".csv">
+        </div>
+        <div id="import-msg" class="settings-msg"></div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="closeModal('modal-import')">Cancel</button>
+          <button type="button" class="btn btn-primary" onclick="submitImport()">Import</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Company Detail Modal -->
+  <div id="modal-company-detail" class="modal-overlay hidden">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <h2 id="company-detail-name"></h2>
+        <button class="modal-close" onclick="closeModal('modal-company-detail')">✕</button>
+      </div>
+      <div id="company-detail-content"></div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
