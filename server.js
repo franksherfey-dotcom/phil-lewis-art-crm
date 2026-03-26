@@ -559,12 +559,17 @@ app.get('/api/activities', async (req, res) => {
   try {
     const { contact_id, limit } = req.query
     let sql = `
-      SELECT a.*, c.first_name, c.last_name, c.email,
+      SELECT a.*, c.first_name, c.last_name, c.email, c.title,
              co.name AS company_name, co.id AS company_id,
+             e.id AS enrollment_id, e.current_step, e.status AS enrollment_status,
+             s.name AS sequence_name,
+             (SELECT COUNT(*) FROM sequence_steps ss WHERE ss.sequence_id = e.sequence_id)::int AS sequence_total_steps,
              a.sent_at AS created_at
       FROM activities a
       LEFT JOIN contacts c ON a.contact_id = c.id
       LEFT JOIN companies co ON c.company_id = co.id
+      LEFT JOIN enrollments e ON a.enrollment_id = e.id
+      LEFT JOIN sequences s ON e.sequence_id = s.id
       WHERE 1=1
     `
     const params = []

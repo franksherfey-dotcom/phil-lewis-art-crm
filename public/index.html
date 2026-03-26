@@ -267,6 +267,26 @@
       </section>
 
       <!-- SETTINGS -->
+      <!-- ACTIVITY DETAIL MODAL -->
+      <div class="modal-overlay hidden" id="modal-activity-detail">
+        <div class="modal">
+          <div class="modal-header">
+            <h2 id="actd-title">Activity Detail</h2>
+            <button class="modal-close" onclick="document.getElementById('modal-activity-detail').classList.add('hidden')">✕</button>
+          </div>
+          <!-- Contact card -->
+          <div class="actd-contact-card" id="actd-contact-card"></div>
+          <!-- Sequence progress -->
+          <div class="actd-seq-row" id="actd-seq-row"></div>
+          <!-- Message -->
+          <div class="actd-section-label">Message Sent</div>
+          <div class="actd-body" id="actd-body"></div>
+          <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="document.getElementById('modal-activity-detail').classList.add('hidden')">Close</button>
+          </div>
+        </div>
+      </div>
+
       <section id="page-settings" class="page">
         <div class="page-header">
           <h1>Settings</h1>

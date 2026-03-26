@@ -1025,24 +1025,80 @@ async function updateDashboardBadge() {
 }
 
 // ── ACTIVITY ──────────────────────────────────────────────────────────────
+let _activityCache = [];
+
 async function loadActivity() {
   try {
     const activities = await apiFetch('/api/activities?limit=100');
+    _activityCache = activities;
     const tbody = document.getElementById('activity-tbody');
     if (!activities.length) {
       tbody.innerHTML = `<tr><td colspan="5" class="empty-state">No activity yet.</td></tr>`;
       return;
     }
-    tbody.innerHTML = activities.map(a => `
-      <tr>
-        <td class="text-muted">${fmtDate(a.sent_at)}</td>
-        <td><strong>${esc(a.first_name||'')} ${esc(a.last_name||'')}</strong></td>
+    tbody.innerHTML = activities.map((a, i) => `
+      <tr class="activ-row" onclick="openActivityDetail(${i})" title="Click to view full message">
+        <td class="text-muted" style="white-space:nowrap">${fmtDate(a.sent_at)}</td>
+        <td>
+          <span class="contact-name-link">${esc(a.first_name||'')} ${esc(a.last_name||'')}</span>
+          ${a.title ? `<div style="font-size:11px;color:var(--text-muted)">${esc(a.title)}</div>` : ''}
+        </td>
         <td>${esc(a.company_name||'—')}</td>
-        <td>${esc(a.subject||'—')}</td>
+        <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.subject||'—')}</td>
         <td><span class="status-pill" style="background:var(--primary-pale);color:var(--primary)">${esc(a.type)}</span></td>
       </tr>
     `).join('');
   } catch(e) { toast(e.message, 'error'); }
+}
+
+function openActivityDetail(index) {
+  const a = _activityCache[index];
+  if (!a) return;
+
+  const fullName = [a.first_name, a.last_name].filter(Boolean).join(' ') || '—';
+  document.getElementById('actd-title').textContent = a.subject || 'Activity Detail';
+
+  // Contact card
+  document.getElementById('actd-contact-card').innerHTML = `
+    <div class="actd-contact-name">${esc(fullName)}</div>
+    ${a.title       ? `<div class="actd-contact-meta">${esc(a.title)}</div>` : ''}
+    ${a.company_name? `<div class="actd-contact-meta actd-company">${esc(a.company_name)}</div>` : ''}
+    ${a.email       ? `<div class="actd-contact-meta"><a href="mailto:${esc(a.email)}" class="email-link">${esc(a.email)}</a></div>` : ''}
+    <div class="actd-contact-meta text-muted">${fmtDate(a.sent_at)}</div>
+  `;
+
+  // Sequence progress
+  const seqEl = document.getElementById('actd-seq-row');
+  if (a.sequence_name) {
+    const step = a.current_step || 1;
+    const total = a.sequence_total_steps || '?';
+    const pct = total !== '?' ? Math.round((step / total) * 100) : 0;
+    const statusColor = a.enrollment_status === 'active' ? 'var(--primary)'
+      : a.enrollment_status === 'completed' ? 'var(--success)'
+      : a.enrollment_status === 'replied'   ? 'var(--accent)'
+      : 'var(--text-muted)';
+    seqEl.innerHTML = `
+      <div class="actd-seq-label">Sequence</div>
+      <div class="actd-seq-name">${esc(a.sequence_name)}</div>
+      <div class="actd-seq-progress-row">
+        <div class="actd-seq-step-badge" style="color:${statusColor};border-color:${statusColor}">
+          Step ${step} of ${total}
+        </div>
+        <div class="actd-seq-bar-wrap">
+          <div class="actd-seq-bar-fill" style="width:${pct}%;background:${statusColor}"></div>
+        </div>
+        <span class="actd-seq-status" style="color:${statusColor}">${esc(a.enrollment_status || '')}</span>
+      </div>
+    `;
+    seqEl.style.display = 'block';
+  } else {
+    seqEl.style.display = 'none';
+  }
+
+  // Message body
+  document.getElementById('actd-body').textContent = a.body || '(no message body recorded)';
+
+  document.getElementById('modal-activity-detail').classList.remove('hidden');
 }
 
 // ── SETTINGS ──────────────────────────────────────────────────────────────
