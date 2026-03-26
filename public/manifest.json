@@ -1,0 +1,24 @@
+{
+  "name": "Phil Lewis Art — CRM",
+  "short_name": "PL Art CRM",
+  "description": "Licensing outreach CRM for Phil Lewis Art",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0d4a65",
+  "theme_color": "#0d4a65",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
