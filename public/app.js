@@ -1,5 +1,24 @@
 // ── STATE ──────────────────────────────────────────────────────────────────
 const API = '';
+
+// ── MOBILE SIDEBAR ──────────────────────────────────────────────────────────
+(function initMobileSidebar() {
+  const sidebar  = document.getElementById('sidebar');
+  const overlay  = document.getElementById('sidebar-overlay');
+  const hamburger = document.getElementById('hamburger');
+  if (!sidebar || !overlay || !hamburger) return;
+
+  function openSidebar()  { sidebar.classList.add('open'); overlay.classList.add('open'); }
+  function closeSidebar() { sidebar.classList.remove('open'); overlay.classList.remove('open'); }
+
+  hamburger.addEventListener('click', openSidebar);
+  overlay.addEventListener('click', closeSidebar);
+
+  // Close sidebar when a nav item is tapped on mobile
+  sidebar.querySelectorAll('.nav-item').forEach(item => {
+    item.addEventListener('click', () => { if (window.innerWidth <= 768) closeSidebar(); });
+  });
+})();
 let currentEnrollContacts = [];
 let currentEnrollmentIdForPreview = null;
 let allCompanies = [];

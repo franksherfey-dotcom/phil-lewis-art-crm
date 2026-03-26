@@ -751,3 +751,199 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
 }
 .pipeline-field select:focus,
 .pipeline-field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(13,74,101,.12); }
+
+/* ════════════════════════════════════════════════════════════════
+   MOBILE — Hamburger + responsive layout (≤ 768px)
+   ════════════════════════════════════════════════════════════════ */
+
+/* Hamburger button — hidden on desktop */
+.hamburger {
+  display: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  flex-direction: column;
+  gap: 5px;
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 900;
+  background: var(--primary);
+  border-radius: 8px;
+  box-shadow: var(--shadow-md);
+}
+.hamburger span {
+  display: block;
+  width: 20px;
+  height: 2px;
+  background: #fff;
+  border-radius: 2px;
+  transition: transform 0.2s, opacity 0.2s;
+}
+
+/* Sidebar mobile overlay */
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 800;
+}
+
+@media (max-width: 768px) {
+
+  /* ── Hamburger visible ── */
+  .hamburger { display: flex; }
+
+  /* ── Sidebar slides in as overlay ── */
+  #sidebar {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: 260px;
+    z-index: 850;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    box-shadow: var(--shadow-md);
+  }
+  #sidebar.open { transform: translateX(0); }
+  .sidebar-overlay.open { display: block; }
+
+  /* ── Main takes full width ── */
+  #app { flex-direction: column; }
+  #main { width: 100%; overflow-x: hidden; }
+
+  /* ── Filmstrip smaller, add top padding for hamburger ── */
+  .art-filmstrip { height: 64px; padding-top: 0; }
+  .art-filmstrip-title { font-size: 9px; }
+  #main { padding-top: 0; }
+
+  /* ── Pages: tighter padding ── */
+  .page { padding: 16px; }
+
+  /* ── Page header stacks ── */
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .page-header h1 { font-size: 18px; }
+  .page-actions { flex-wrap: wrap; }
+  .page-actions .btn { font-size: 12px; padding: 7px 12px; }
+
+  /* ── Stats grid: 2 columns on mobile ── */
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .stat-value { font-size: 22px; }
+
+  /* ── Recent activity: truncate overflow ── */
+  .activity-row {
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 12px;
+  }
+  .activity-name { min-width: 0; font-size: 12px; }
+  .activity-co { min-width: 0; display: none; } /* hide company col on mobile */
+  .activity-subj { width: 100%; flex: none; }
+
+  /* ── Filters bar: stack vertically ── */
+  .filters-bar {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .filter-input { max-width: 100%; }
+  .filter-select { width: 100%; }
+
+  /* ── Card grid: single column ── */
+  .card-grid { grid-template-columns: 1fr; gap: 10px; }
+
+  /* ── Data tables: horizontal scroll ── */
+  .table-scroll-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: var(--radius);
+  }
+  .data-table th, .data-table td { padding: 8px 10px; font-size: 12px; white-space: nowrap; }
+
+  /* ── Queue items: stack layout ── */
+  .queue-item {
+    flex-direction: column;
+    gap: 12px;
+  }
+  .queue-actions {
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+  }
+
+  /* ── Modals: full-screen on mobile ── */
+  .modal-overlay { padding: 0; align-items: flex-end; }
+  .modal {
+    border-radius: 16px 16px 0 0;
+    max-width: 100%;
+    max-height: 92vh;
+    padding: 20px 16px;
+  }
+  .modal-wide { max-width: 100%; }
+  .modal-footer { gap: 8px; }
+  .modal-footer .btn { flex: 1; justify-content: center; }
+
+  /* ── Forms: single column ── */
+  .form-row {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  /* ── Pipeline fields: single column ── */
+  .pipeline-fields-grid { grid-template-columns: 1fr; }
+
+  /* ── Report grid: single column ── */
+  .report-grid { grid-template-columns: 1fr; }
+  .report-card-wide { grid-column: 1; }
+  .report-kpi { flex: 1 1 calc(50% - 6px); }
+
+  /* ── News grid: single column ── */
+  .news-grid { grid-template-columns: 1fr; }
+
+  /* ── Sequence cards grid ── */
+  .seq-cards { grid-template-columns: 1fr; }
+
+  /* ── Settings: full width ── */
+  .settings-card { max-width: 100%; padding: 16px; }
+
+  /* ── Larger touch targets ── */
+  .btn { min-height: 40px; }
+  .nav-item { padding: 14px 16px; min-height: 48px; }
+  .filter-input, .filter-select { min-height: 40px; }
+  .form-group input, .form-group select, .form-group textarea { min-height: 40px; font-size: 16px; } /* 16px prevents iOS zoom */
+
+  /* ── Contact detail actions: wrap ── */
+  .contact-detail-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  /* ── Tag filter chips: wrap ── */
+  .tag-filter-chips { flex-wrap: wrap; }
+
+  /* ── Pipeline summary cards ── */
+  .pipeline-summary { flex-wrap: wrap; }
+  .pipeline-summary-card { flex: 1 1 calc(50% - 8px); }
+
+  /* ── Page-specific: company detail modal contacts section ── */
+  .contact-detail-row {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .contact-detail-actions { flex-direction: row; }
+}
+
+/* Very small phones */
+@media (max-width: 380px) {
+  .stats-grid { grid-template-columns: 1fr; }
+  .stat-value { font-size: 20px; }
+}
