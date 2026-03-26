@@ -1,4 +1,5 @@
 const nodemailer = require('nodemailer')
+const MailComposer = require('nodemailer/lib/mail-composer')
 const { ImapFlow } = require('imapflow')
 const pool = require('./lib/db')
 
@@ -32,6 +33,17 @@ function interpolate(template, contact, company) {
     .replace(/\{\{title\}\}/gi, contact.title || '')
     .replace(/\{\{website\}\}/gi, company ? (company.website || '') : '')
     .replace(/\{\{city\}\}/gi, company ? (company.city || '') : '')
+}
+
+// Build raw RFC 2822 message from mail options (needed for IMAP append)
+function buildRawMessage(mailOptions) {
+  return new Promise((resolve, reject) => {
+    const mail = new MailComposer(mailOptions)
+    mail.compile().build((err, message) => {
+      if (err) reject(err)
+      else resolve(message)
+    })
+  })
 }
 
 // Append a sent message to the IMAP Sent folder so it shows up in RoundCube
@@ -81,17 +93,22 @@ async function sendEmail({ toEmail, toName, subject, body, contact, company }) {
     html: resolvedBody.replace(/\n/g, '<br>'),
   }
 
-  // Send the email and capture the raw message for IMAP append
+  // Build raw message BEFORE sending — needed for IMAP append
+  // (nodemailer dryRun doesn't expose raw message in v8+, MailComposer does)
+  let rawMessage = null
+  try {
+    rawMessage = await buildRawMessage(mailOptions)
+  } catch (e) {
+    console.warn('Could not build raw message for IMAP append:', e.message)
+  }
+
+  // Send the email
   const info = await transport.sendMail(mailOptions)
 
   // Append to IMAP Sent folder so it appears in RoundCube
-  if (info.envelope) {
+  if (rawMessage) {
     try {
-      // Build raw message for IMAP append
-      const builtMessage = await transport.sendMail({ ...mailOptions, dryRun: true }).catch(() => null)
-      if (builtMessage?.message) {
-        await appendToSentFolder(settings, builtMessage.message)
-      }
+      await appendToSentFolder(settings, rawMessage)
     } catch (e) {
       console.warn('Could not append to Sent folder:', e.message)
     }
