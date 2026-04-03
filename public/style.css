@@ -1006,54 +1006,74 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
 .inbox-messages { display: flex; flex-direction: column; gap: 1px; background: var(--border); border-radius: 10px; overflow: hidden; }
 .inbox-row {
   display: flex; justify-content: space-between; align-items: flex-start;
-  padding: 14px 18px; background: #fff; cursor: pointer; gap: 16px;
-  transition: background .15s;
+  padding: 16px 20px; background: #fff; cursor: pointer; gap: 16px;
+  transition: background .15s; min-height: 48px;
 }
 .inbox-row:hover { background: #f8fafc; }
-.inbox-unread { background: #f0f7ff; }
+.inbox-unread { background: #f0f7ff; border-left: 3px solid var(--primary); }
 .inbox-unread:hover { background: #e8f0fe; }
-.inbox-read { opacity: 0.85; }
+.inbox-read { border-left: 3px solid transparent; }
 .inbox-row-left { flex: 1; min-width: 0; }
 .inbox-row-right { flex-shrink: 0; text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
-.inbox-sender { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+.inbox-sender { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; }
 .inbox-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--primary); flex-shrink: 0; }
-.inbox-company { font-size: 12px; color: var(--text-muted); }
-.inbox-subject { font-size: 13px; font-weight: 600; margin-top: 3px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.inbox-company { font-size: 12px; color: var(--text-muted); background: #f1f5f9; padding: 1px 8px; border-radius: 999px; }
+.inbox-subject { font-size: 14px; font-weight: 600; margin-top: 4px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .inbox-unread .inbox-subject { color: var(--primary-dark, #0a3060); }
-.inbox-preview { font-size: 12px; color: var(--text-muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.inbox-date { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+.inbox-preview { font-size: 13px; color: var(--text-muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.4; }
+.inbox-date { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
 .inbox-opp-badge {
-  font-size: 11px; font-weight: 700; background: #dbeafe; color: var(--primary);
-  padding: 2px 8px; border-radius: 999px;
+  font-size: 12px; font-weight: 700; background: #dbeafe; color: var(--primary);
+  padding: 3px 10px; border-radius: 999px;
 }
 
 /* Inbox Detail Modal */
 .inbox-detail-contact {
   background: var(--bg-card, #f8fafc); border: 1px solid var(--border); border-radius: 10px;
-  padding: 14px 18px; margin-bottom: 16px;
+  padding: 16px 20px; margin-bottom: 16px;
 }
-.inbox-detail-from { font-size: 15px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.inbox-detail-role { font-size: 12px; color: var(--text-muted); }
-.inbox-detail-meta { font-size: 12px; color: var(--text-muted); margin-top: 6px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.inbox-detail-from { font-size: 16px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.inbox-detail-role { font-size: 13px; color: var(--text-muted); }
+.inbox-detail-meta { font-size: 13px; color: var(--text-muted); margin-top: 8px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .inbox-detail-co a { color: var(--primary); font-weight: 600; text-decoration: none; }
 
 .inbox-detail-opp {
   background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px;
-  padding: 14px 18px; margin-bottom: 16px;
+  padding: 16px 20px; margin-bottom: 16px;
 }
-.inbox-opp-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.inbox-opp-label { font-size: 13px; font-weight: 700; color: #92400e; }
-.inbox-opp-edit { display: flex; align-items: center; gap: 6px; }
-.inbox-opp-dollar { font-size: 18px; font-weight: 700; color: #92400e; }
+.inbox-opp-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.inbox-opp-label { font-size: 14px; font-weight: 700; color: #92400e; }
+.inbox-opp-edit { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.inbox-opp-dollar { font-size: 20px; font-weight: 700; color: #92400e; }
 .inbox-opp-input {
-  width: 120px; font-size: 16px; font-weight: 700; padding: 6px 10px;
+  width: 120px; font-size: 16px; font-weight: 700; padding: 8px 12px;
   border: 1px solid #fde68a; border-radius: 8px; background: #fff; color: #92400e;
 }
-.inbox-opp-hint { font-size: 11px; color: #b45309; margin-top: 6px; }
+.inbox-opp-hint { font-size: 12px; color: #b45309; margin-top: 8px; }
 
-.inbox-detail-body-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 6px; }
+.inbox-detail-body-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 8px; }
 .inbox-detail-body {
   background: var(--bg-card, #f8fafc); border: 1px solid var(--border); border-radius: 10px;
-  padding: 14px 18px; font-size: 13px; line-height: 1.65; white-space: pre-wrap;
-  color: var(--text); max-height: 350px; overflow-y: auto; margin-bottom: 16px;
+  padding: 16px 20px; font-size: 14px; line-height: 1.7; white-space: pre-wrap;
+  color: var(--text); max-height: 400px; overflow-y: auto; margin-bottom: 16px;
+}
+.inbox-detail-actions {
+  display: flex; gap: 8px; flex-wrap: wrap; padding: 12px 0;
+}
+.inbox-detail-actions .btn { min-height: 44px; font-size: 14px; }
+
+/* ── Inbox mobile ── */
+@media (max-width: 768px) {
+  .inbox-row { padding: 14px 14px; gap: 10px; flex-wrap: wrap; }
+  .inbox-row-right { flex-direction: row; align-items: center; gap: 8px; width: 100%; justify-content: space-between; margin-top: 4px; }
+  .inbox-sender { font-size: 14px; }
+  .inbox-subject { font-size: 14px; white-space: normal; -webkit-line-clamp: 2; display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
+  .inbox-preview { display: none; }
+  .inbox-date { font-size: 12px; }
+  .inbox-detail-opp { padding: 14px; }
+  .inbox-opp-edit { width: 100%; }
+  .inbox-opp-input { flex: 1; min-width: 0; }
+  .inbox-detail-body { font-size: 14px; padding: 14px; max-height: 300px; }
+  .inbox-detail-actions { flex-direction: column; }
+  .inbox-detail-actions .btn { width: 100%; text-align: center; }
 }

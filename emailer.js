@@ -152,13 +152,29 @@ async function syncInbox(settings, knownEmails) {
         const fromAddr = msg.envelope?.from?.[0]?.address?.toLowerCase()
         if (!fromAddr) continue
         if (!knownEmails.has(fromAddr)) continue
-        // Extract plain text body
+        // Extract plain text body — strip MIME boundaries and headers
         let bodyText = ''
         try {
           const src = msg.source.toString('utf8')
-          // Simple extraction — grab text after headers
-          const split = src.split(/\r?\n\r?\n/)
-          bodyText = split.slice(1).join('\n\n').replace(/<[^>]+>/g, '').trim().slice(0, 2000)
+          // Try to extract the text/plain MIME part first
+          const plainMatch = src.match(/Content-Type:\s*text\/plain[^\r\n]*\r?\n(?:Content-Transfer-Encoding:[^\r\n]*\r?\n)?(?:[^\r\n]*\r?\n)*?\r?\n([\s\S]*?)(?:\r?\n--|\s*$)/)
+          if (plainMatch) {
+            bodyText = plainMatch[1]
+          } else {
+            // Fallback: grab text after main headers
+            const split = src.split(/\r?\n\r?\n/)
+            bodyText = split.slice(1).join('\n\n')
+          }
+          // Clean up: strip HTML tags, MIME boundaries, content headers, and quoted-printable artifacts
+          bodyText = bodyText
+            .replace(/<[^>]+>/g, '')
+            .replace(/^--.*$/gm, '')
+            .replace(/^Content-(?:Type|Transfer-Encoding|Disposition):[^\r\n]*/gm, '')
+            .replace(/=\r?\n/g, '')       // quoted-printable soft line breaks
+            .replace(/=([0-9A-Fa-f]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+            .replace(/\n{3,}/g, '\n\n')
+            .trim()
+            .slice(0, 2000)
         } catch {}
         received.push({
           from_email: fromAddr,

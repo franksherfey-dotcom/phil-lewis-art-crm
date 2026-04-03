@@ -1138,7 +1138,7 @@ async function loadInbox() {
               ${m.company_name ? `<span class="inbox-company">${esc(m.company_name)}</span>` : ''}
             </div>
             <div class="inbox-subject">${esc(m.subject || '(no subject)')}</div>
-            <div class="inbox-preview">${esc((m.body || '').slice(0, 120))}${(m.body||'').length > 120 ? '…' : ''}</div>
+            <div class="inbox-preview">${esc(cleanEmailBody(m.body).slice(0, 120))}${cleanEmailBody(m.body).length > 120 ? '…' : ''}</div>
           </div>
           <div class="inbox-row-right">
             <div class="inbox-date">${fmtDate(m.sent_at)}</div>
@@ -1201,14 +1201,12 @@ async function openInboxDetail(index) {
 
     <!-- Message body -->
     <div class="inbox-detail-body-label">Message</div>
-    <div class="inbox-detail-body">${esc(m.body || '(no message body)')}</div>
+    <div class="inbox-detail-body">${esc(cleanEmailBody(m.body) || '(no message body)')}</div>
 
-    <div class="modal-footer" style="justify-content:space-between">
-      <div>
-        ${m.contact_id ? `<button class="btn btn-outline btn-sm" onclick="closeModal('modal-inbox-detail');openContactDetail(${m.contact_id})">View Contact</button>` : ''}
-        ${m.company_id ? `<button class="btn btn-outline btn-sm" onclick="closeModal('modal-inbox-detail');openCompanyDetail(${m.company_id})">View Company</button>` : ''}
-      </div>
-      <button class="btn btn-ghost" onclick="closeModal('modal-inbox-detail')">Close</button>
+    <div class="inbox-detail-actions">
+      ${m.email ? `<a href="mailto:${esc(m.email)}?subject=Re: ${esc(m.subject || '')}" class="btn btn-primary">Reply via Email</a>` : ''}
+      ${m.contact_id ? `<button class="btn btn-outline" onclick="closeModal('modal-inbox-detail');openContactDetail(${m.contact_id})">View Contact</button>` : ''}
+      ${m.company_id ? `<button class="btn btn-outline" onclick="closeModal('modal-inbox-detail');openCompanyDetail(${m.company_id})">View Company</button>` : ''}
     </div>
   `;
   openModal('modal-inbox-detail');
@@ -1402,6 +1400,18 @@ async function submitImport() {
 function esc(str) {
   if (str === null || str === undefined) return '';
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function cleanEmailBody(text) {
+  if (!text) return '';
+  return text
+    .replace(/^--[-_a-zA-Z0-9.]+$/gm, '')
+    .replace(/^Content-(?:Type|Transfer-Encoding|Disposition):[^\r\n]*/gmi, '')
+    .replace(/charset="[^"]*"/gi, '')
+    .replace(/=\r?\n/g, '')
+    .replace(/=([0-9A-Fa-f]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 function fmtDate(dt) {
