@@ -55,6 +55,10 @@
           <span class="nav-icon">▸</span> Outreach Queue
           <span class="nav-badge queue-badge" id="badge-queue"></span>
         </li>
+        <li class="nav-item" data-page="inbox">
+          <span class="nav-icon">✉</span> Inbox
+          <span class="nav-badge inbox-badge" id="badge-inbox"></span>
+        </li>
         <li class="nav-item" data-page="reports">
           <span class="nav-icon">📊</span> Reports
         </li>
@@ -209,6 +213,34 @@
         <div class="queue-info" id="queue-info"></div>
         <div id="queue-list"></div>
       </section>
+
+      <!-- INBOX -->
+      <section id="page-inbox" class="page">
+        <div class="page-header">
+          <div>
+            <h1>Inbox</h1>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:3px">Replies from contacts — new replies auto-create $5k opportunities</div>
+          </div>
+          <div class="page-actions" style="display:flex;gap:8px;align-items:center">
+            <button class="btn btn-outline" onclick="syncInboxFromInbox()">↓ Sync Now</button>
+          </div>
+        </div>
+        <div class="filters-bar">
+          <input type="text" id="search-inbox" placeholder="Search inbox..." oninput="loadInbox()" class="filter-input">
+        </div>
+        <div id="inbox-list"></div>
+      </section>
+
+      <!-- INBOX DETAIL MODAL -->
+      <div class="modal-overlay hidden" id="modal-inbox-detail">
+        <div class="modal modal-wide">
+          <div class="modal-header">
+            <h2 id="inbox-detail-title">Message</h2>
+            <button class="modal-close" onclick="closeModal('modal-inbox-detail')">✕</button>
+          </div>
+          <div id="inbox-detail-content"></div>
+        </div>
+      </div>
 
       <!-- INDUSTRY NEWS -->
       <section id="page-news" class="page">

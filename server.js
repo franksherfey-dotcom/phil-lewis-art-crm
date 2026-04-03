@@ -628,7 +628,42 @@ app.post('/api/settings', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
-// ─── INBOX SYNC ───────────────────────────────────────────────────────────────
+// ─── INBOX ───────────────────────────────────────────────────────────────────
+
+app.get('/api/inbox', async (req, res) => {
+  try {
+    const { search, limit } = req.query
+    let sql = `
+      SELECT a.id, a.contact_id, a.subject, a.body, a.status, a.sent_at, a.notes,
+             c.first_name, c.last_name, c.email, c.title,
+             co.id AS company_id, co.name AS company_name, co.type AS company_type,
+             co.opportunity_value, co.pipeline_stage, co.status AS company_status
+      FROM activities a
+      LEFT JOIN contacts c ON a.contact_id = c.id
+      LEFT JOIN companies co ON c.company_id = co.id
+      WHERE a.type = 'received_email'
+    `
+    const params = []
+    let i = 1
+    if (search) {
+      const s = `%${search}%`
+      sql += ` AND (a.subject ILIKE $${i} OR c.first_name ILIKE $${i+1} OR c.last_name ILIKE $${i+2} OR co.name ILIKE $${i+3})`
+      params.push(s, s, s, s); i += 4
+    }
+    sql += ' ORDER BY a.sent_at DESC'
+    if (limit) { sql += ` LIMIT $${i}`; params.push(parseInt(limit)); i++ }
+    const messages = await all(sql, params)
+    const unread = await one("SELECT COUNT(*)::int AS n FROM activities WHERE type='received_email' AND (notes IS NULL OR notes != 'read')")
+    res.json({ messages, unreadCount: unread.n })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.patch('/api/inbox/:id/read', async (req, res) => {
+  try {
+    await run("UPDATE activities SET notes='read' WHERE id=$1", [req.params.id])
+    res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
 
 app.post('/api/inbox/sync', async (req, res) => {
   try {
@@ -637,18 +672,20 @@ app.post('/api/inbox/sync', async (req, res) => {
     rows.forEach(r => { settings[r.key] = r.value })
 
     // Build set of known contact emails for matching
-    const contacts = await all('SELECT id, email FROM contacts WHERE email IS NOT NULL AND email != \'\'')
-    const emailToContactId = {}
-    contacts.forEach(c => { emailToContactId[c.email.toLowerCase()] = c.id })
-    const knownEmails = new Set(Object.keys(emailToContactId))
+    const contacts = await all('SELECT id, email, company_id FROM contacts WHERE email IS NOT NULL AND email != \'\'')
+    const emailToContact = {}
+    contacts.forEach(c => { emailToContact[c.email.toLowerCase()] = c })
+    const knownEmails = new Set(Object.keys(emailToContact))
 
     const received = await syncInbox(settings, knownEmails)
 
     let imported = 0
     let autoStopped = 0
+    let opportunitiesCreated = 0
     for (const msg of received) {
-      const contactId = emailToContactId[msg.from_email]
-      if (!contactId) continue
+      const contact = emailToContact[msg.from_email]
+      if (!contact) continue
+      const contactId = contact.id
       // Avoid duplicates — check if this subject+sent_at already logged
       const existing = await one(
         `SELECT id FROM activities WHERE contact_id=$1 AND type='received_email' AND subject=$2 AND sent_at=$3`,
@@ -673,8 +710,21 @@ app.post('/api/inbox/sync', async (req, res) => {
         )
         autoStopped++
       }
+      // Auto-create opportunity on reply — $5k placeholder if company has no opp value
+      if (contact.company_id) {
+        const co = await one('SELECT opportunity_value, status FROM companies WHERE id=$1', [contact.company_id])
+        if (co && (!co.opportunity_value || parseFloat(co.opportunity_value) === 0)) {
+          await run(
+            `UPDATE companies SET opportunity_value=5000, pipeline_stage='Interested', status='interested', last_activity_at=NOW(), updated_at=NOW() WHERE id=$1`,
+            [contact.company_id]
+          )
+          opportunitiesCreated++
+        } else if (co && co.status !== 'licensed' && co.status !== 'interested') {
+          await run("UPDATE companies SET status='interested', last_activity_at=NOW(), updated_at=NOW() WHERE id=$1", [contact.company_id])
+        }
+      }
     }
-    res.json({ ok: true, found: received.length, imported, autoStopped })
+    res.json({ ok: true, found: received.length, imported, autoStopped, opportunitiesCreated })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 

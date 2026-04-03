@@ -90,6 +90,7 @@ function showPage(page) {
   if (page === 'pipeline') loadPipeline();
   if (page === 'sequences') loadSequences();
   if (page === 'queue') loadQueue();
+  if (page === 'inbox') loadInbox();
   if (page === 'activity') loadActivity();
   if (page === 'settings') loadSettings();
   if (page === 'reports') loadReports();
@@ -135,10 +136,12 @@ document.querySelectorAll('.modal-overlay').forEach(overlay => {
 // ── DASHBOARD ─────────────────────────────────────────────────────────────
 async function loadDashboard() {
   try {
-    const [d, stuckData] = await Promise.all([
+    const [d, stuckData, inboxData] = await Promise.all([
       apiFetch('/api/dashboard'),
       apiFetch('/api/pipeline/stuck-count').catch(() => ({ count: 0 })),
+      apiFetch('/api/inbox?limit=0').catch(() => ({ unreadCount: 0 })),
     ]);
+    updateBadge('badge-inbox', inboxData.unreadCount || 0);
     const stuckCount = stuckData.count || 0;
     const stuckClass = stuckCount > 0 ? 'stat-card stat-stuck stat-clickable' : 'stat-card stat-clickable';
     document.getElementById('stats-grid').innerHTML = `
@@ -1099,6 +1102,141 @@ function openActivityDetail(index) {
   document.getElementById('actd-body').textContent = a.body || '(no message body recorded)';
 
   document.getElementById('modal-activity-detail').classList.remove('hidden');
+}
+
+// ── INBOX ─────────────────────────────────────────────────────────────────
+let _inboxCache = [];
+
+async function loadInbox() {
+  try {
+    const search = document.getElementById('search-inbox')?.value || '';
+    const params = search ? `?search=${encodeURIComponent(search)}&limit=200` : '?limit=200';
+    const data = await apiFetch(`/api/inbox${params}`);
+    _inboxCache = data.messages || [];
+    updateBadge('badge-inbox', data.unreadCount || 0);
+
+    const el = document.getElementById('inbox-list');
+    if (!_inboxCache.length) {
+      el.innerHTML = `<div class="empty-state">
+        <div style="font-size:32px;margin-bottom:8px">✉</div>
+        <p>No replies yet. Sync your inbox to pull in responses from contacts.</p>
+        <button class="btn btn-primary" onclick="syncInboxFromInbox()" style="margin-top:12px">↓ Sync Inbox Now</button>
+      </div>`;
+      return;
+    }
+
+    el.innerHTML = `<div class="inbox-messages">${_inboxCache.map((m, i) => {
+      const isRead = m.notes === 'read';
+      const fullName = [m.first_name, m.last_name].filter(Boolean).join(' ') || 'Unknown';
+      const oppValue = parseFloat(m.opportunity_value) || 0;
+      return `
+        <div class="inbox-row ${isRead ? 'inbox-read' : 'inbox-unread'}" onclick="openInboxDetail(${i})">
+          <div class="inbox-row-left">
+            <div class="inbox-sender">
+              ${!isRead ? '<span class="inbox-dot"></span>' : ''}
+              <strong>${esc(fullName)}</strong>
+              ${m.company_name ? `<span class="inbox-company">${esc(m.company_name)}</span>` : ''}
+            </div>
+            <div class="inbox-subject">${esc(m.subject || '(no subject)')}</div>
+            <div class="inbox-preview">${esc((m.body || '').slice(0, 120))}${(m.body||'').length > 120 ? '…' : ''}</div>
+          </div>
+          <div class="inbox-row-right">
+            <div class="inbox-date">${fmtDate(m.sent_at)}</div>
+            ${oppValue > 0 ? `<div class="inbox-opp-badge">$${oppValue.toLocaleString()}</div>` : ''}
+          </div>
+        </div>`;
+    }).join('')}</div>`;
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function openInboxDetail(index) {
+  const m = _inboxCache[index];
+  if (!m) return;
+
+  // Mark as read
+  if (m.notes !== 'read') {
+    try {
+      await apiFetch(`/api/inbox/${m.id}/read`, { method: 'PATCH' });
+      m.notes = 'read';
+      // Refresh badge
+      const data = await apiFetch('/api/inbox?limit=0');
+      updateBadge('badge-inbox', data.unreadCount || 0);
+    } catch(e) {}
+  }
+
+  const fullName = [m.first_name, m.last_name].filter(Boolean).join(' ') || 'Unknown';
+  const oppValue = parseFloat(m.opportunity_value) || 0;
+
+  document.getElementById('inbox-detail-title').textContent = m.subject || 'Message';
+  document.getElementById('inbox-detail-content').innerHTML = `
+    <div class="inbox-detail-contact">
+      <div class="inbox-detail-from">
+        <strong>${esc(fullName)}</strong>
+        ${m.title ? `<span class="inbox-detail-role">${esc(m.title)}</span>` : ''}
+      </div>
+      <div class="inbox-detail-meta">
+        ${m.email ? `<a href="mailto:${esc(m.email)}" class="email-link">${esc(m.email)}</a>` : ''}
+        ${m.company_name ? `<span class="inbox-detail-co">
+          <a href="#" onclick="event.preventDefault();closeModal('modal-inbox-detail');openCompanyDetail(${m.company_id})">${esc(m.company_name)}</a>
+          <span class="status-pill status-${(m.company_status||'').replace(/\\s/g,'-')}">${esc(m.company_status||'')}</span>
+        </span>` : ''}
+        <span class="text-muted">${fmtDate(m.sent_at)}</span>
+      </div>
+    </div>
+
+    <!-- Opportunity -->
+    <div class="inbox-detail-opp">
+      <div class="inbox-opp-header">
+        <span class="inbox-opp-label">Opportunity Value</span>
+        ${m.pipeline_stage ? `<span class="status-pill status-${(m.pipeline_stage||'').toLowerCase().replace(/\\s/g,'-')}">${esc(m.pipeline_stage)}</span>` : ''}
+      </div>
+      <div class="inbox-opp-edit">
+        <span class="inbox-opp-dollar">$</span>
+        <input type="number" id="inbox-opp-input" value="${oppValue || 5000}" min="0" step="500"
+          class="inbox-opp-input" placeholder="5000">
+        <button class="btn btn-primary btn-sm" onclick="saveInboxOpp(${m.company_id}, ${index})">Save</button>
+      </div>
+      ${oppValue === 0 ? '<div class="inbox-opp-hint">Default $5k placeholder — edit to actual deal value</div>' : ''}
+    </div>
+
+    <!-- Message body -->
+    <div class="inbox-detail-body-label">Message</div>
+    <div class="inbox-detail-body">${esc(m.body || '(no message body)')}</div>
+
+    <div class="modal-footer" style="justify-content:space-between">
+      <div>
+        ${m.contact_id ? `<button class="btn btn-outline btn-sm" onclick="closeModal('modal-inbox-detail');openContactDetail(${m.contact_id})">View Contact</button>` : ''}
+        ${m.company_id ? `<button class="btn btn-outline btn-sm" onclick="closeModal('modal-inbox-detail');openCompanyDetail(${m.company_id})">View Company</button>` : ''}
+      </div>
+      <button class="btn btn-ghost" onclick="closeModal('modal-inbox-detail')">Close</button>
+    </div>
+  `;
+  openModal('modal-inbox-detail');
+}
+
+async function saveInboxOpp(companyId, index) {
+  if (!companyId) { toast('No company linked to this contact', 'error'); return; }
+  const val = document.getElementById('inbox-opp-input').value;
+  try {
+    await apiFetch(`/api/companies/${companyId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ opportunity_value: parseFloat(val) || 0 }),
+    });
+    toast('Opportunity value saved');
+    if (_inboxCache[index]) _inboxCache[index].opportunity_value = val;
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function syncInboxFromInbox() {
+  toast('Syncing inbox…');
+  try {
+    const r = await apiFetch('/api/inbox/sync', { method: 'POST' });
+    const parts = [`${r.imported} new repl${r.imported !== 1 ? 'ies' : 'y'}`];
+    if (r.autoStopped > 0) parts.push(`${r.autoStopped} sequence${r.autoStopped !== 1 ? 's' : ''} stopped`);
+    if (r.opportunitiesCreated > 0) parts.push(`${r.opportunitiesCreated} new opportunit${r.opportunitiesCreated !== 1 ? 'ies' : 'y'} created`);
+    toast(`Inbox synced: ${parts.join(', ')}`, 'success');
+    loadInbox();
+  } catch(e) { toast(`Sync failed: ${e.message}`, 'error'); }
 }
 
 // ── SETTINGS ──────────────────────────────────────────────────────────────
