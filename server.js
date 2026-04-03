@@ -372,6 +372,7 @@ async function getQueueItems() {
         last_name: row.last_name,
         email: row.email,
         title: row.title,
+        company_id: row.company_id,
         company_name: row.company_name,
         company_type: row.company_type,
         website: row.website,
@@ -632,7 +633,8 @@ app.post('/api/settings', async (req, res) => {
 
 app.get('/api/inbox', async (req, res) => {
   try {
-    const { search, limit } = req.query
+    const { search, limit, tab } = req.query
+    const activityType = tab === 'sent' ? 'email' : 'received_email'
     let sql = `
       SELECT a.id, a.contact_id, a.subject, a.body, a.status, a.sent_at, a.notes,
              c.first_name, c.last_name, c.email, c.title,
@@ -641,7 +643,7 @@ app.get('/api/inbox', async (req, res) => {
       FROM activities a
       LEFT JOIN contacts c ON a.contact_id = c.id
       LEFT JOIN companies co ON c.company_id = co.id
-      WHERE a.type = 'received_email'
+      WHERE a.type = '${activityType}'
     `
     const params = []
     let i = 1
@@ -662,6 +664,34 @@ app.patch('/api/inbox/:id/read', async (req, res) => {
   try {
     await run("UPDATE activities SET notes='read' WHERE id=$1", [req.params.id])
     res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.get('/api/inbox/not-in-sequence', async (req, res) => {
+  try {
+    const { search, limit } = req.query
+    let sql = `
+      SELECT c.id, c.first_name, c.last_name, c.email, c.title,
+             co.id AS company_id, co.name AS company_name, co.type AS company_type,
+             co.status AS company_status, co.pipeline_stage,
+             (SELECT MAX(a.sent_at) FROM activities a WHERE a.contact_id = c.id) AS last_activity_at
+      FROM contacts c
+      LEFT JOIN companies co ON c.company_id = co.id
+      WHERE NOT EXISTS (
+        SELECT 1 FROM enrollments e WHERE e.contact_id = c.id AND e.status = 'active'
+      )
+    `
+    const params = []
+    let i = 1
+    if (search) {
+      const s = `%${search}%`
+      sql += ` AND (c.first_name ILIKE $${i} OR c.last_name ILIKE $${i+1} OR c.email ILIKE $${i+2} OR co.name ILIKE $${i+3})`
+      params.push(s, s, s, s); i += 4
+    }
+    sql += ' ORDER BY last_activity_at DESC NULLS LAST'
+    if (limit) { sql += ` LIMIT $${i}`; params.push(parseInt(limit)); i++ }
+    const contacts = await all(sql, params)
+    res.json({ contacts })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 

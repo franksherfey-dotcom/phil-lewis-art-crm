@@ -939,9 +939,12 @@ async function confirmEnroll() {
 }
 
 // ── QUEUE ─────────────────────────────────────────────────────────────────
+let _queueCache = [];
+
 async function loadQueue() {
   try {
     const queue = await apiFetch('/api/queue');
+    _queueCache = queue;
     updateBadge('badge-queue', queue.length);
     const btn = document.getElementById('send-all-btn');
     const infoEl = document.getElementById('queue-info');
@@ -962,8 +965,8 @@ async function loadQueue() {
 
     if (btn) btn.disabled = false;
     infoEl.textContent = `${queue.length} email${queue.length!==1?'s':''} ready to send`;
-    listEl.innerHTML = `<div class="queue-list">${queue.map(item => `
-      <div class="queue-item">
+    listEl.innerHTML = `<div class="queue-list">${queue.map((item, i) => `
+      <div class="queue-item queue-item-clickable" onclick="openQueueDetail(${i})">
         <div class="queue-item-info">
           <div class="queue-contact">${esc(item.first_name)} ${esc(item.last_name||'')}</div>
           <div class="queue-company">${esc(item.company_name||'No company')} ${item.company_type ? `· ${typeName(item.company_type)}` : ''}</div>
@@ -972,12 +975,86 @@ async function loadQueue() {
           <span class="queue-step-badge">Step ${item.current_step} of ${item.total_steps}</span>
           <div class="queue-subject">"${esc(item.step_subject)}"</div>
         </div>
-        <div class="queue-actions">
+        <div class="queue-actions" onclick="event.stopPropagation()">
           <button class="btn btn-ghost btn-sm" onclick="previewEmail(${item.enrollment_id})">Preview</button>
           <button class="btn btn-primary btn-sm" onclick="sendOne(${item.enrollment_id})">Send</button>
         </div>
       </div>
     `).join('')}</div>`;
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function openQueueDetail(index) {
+  const item = _queueCache[index];
+  if (!item) return;
+
+  // Fetch the interpolated preview
+  let preview = { subject: item.step_subject, body: item.step_body || '' };
+  try {
+    preview = await apiFetch(`/api/queue/preview/${item.enrollment_id}`);
+  } catch(e) {}
+
+  const fullName = [item.first_name, item.last_name].filter(Boolean).join(' ') || 'Unknown';
+
+  document.getElementById('queue-detail-title').textContent = `Email to ${fullName}`;
+  document.getElementById('queue-detail-content').innerHTML = `
+    <!-- CRM Context -->
+    <div class="queue-detail-crm">
+      <div class="queue-detail-contact-card">
+        <div class="queue-detail-name">${esc(fullName)}</div>
+        ${item.title ? `<div class="queue-detail-role">${esc(item.title)}</div>` : ''}
+        ${item.email ? `<div class="queue-detail-email">${esc(item.email)}</div>` : ''}
+      </div>
+      <div class="queue-detail-links">
+        ${item.contact_id ? `<button class="btn btn-outline btn-sm" onclick="closeModal('modal-queue-detail');openContactDetail(${item.contact_id})">View Contact</button>` : ''}
+        ${item.company_id ? `<button class="btn btn-outline btn-sm" onclick="closeModal('modal-queue-detail');openCompanyDetail(${item.company_id})">View Company</button>` : ''}
+      </div>
+    </div>
+
+    ${item.company_name ? `
+    <div class="queue-detail-company-bar">
+      <span class="queue-detail-co-name">${esc(item.company_name)}</span>
+      ${item.company_type ? `<span class="queue-detail-co-type">${typeName(item.company_type)}</span>` : ''}
+      ${item.website ? `<a href="${esc(item.website)}" target="_blank" class="queue-detail-co-link">${esc(item.website)}</a>` : ''}
+    </div>` : ''}
+
+    <div class="queue-detail-seq-info">
+      <span class="queue-seq-name">${esc(item.sequence_name)}</span>
+      <span class="queue-step-badge">Step ${item.current_step} of ${item.total_steps}</span>
+    </div>
+
+    <!-- Editable Subject -->
+    <div class="queue-detail-field">
+      <label class="queue-detail-label">Subject</label>
+      <input type="text" id="queue-edit-subject" class="queue-detail-input" value="${esc(preview.subject)}">
+    </div>
+
+    <!-- Editable Body -->
+    <div class="queue-detail-field">
+      <label class="queue-detail-label">Message Body</label>
+      <textarea id="queue-edit-body" class="queue-detail-textarea" rows="12">${esc(preview.body)}</textarea>
+    </div>
+
+    <div class="queue-detail-actions">
+      <button class="btn btn-primary" onclick="sendFromQueueDetail(${item.enrollment_id})">Send Email</button>
+      <button class="btn btn-outline" onclick="closeModal('modal-queue-detail')">Cancel</button>
+    </div>
+  `;
+  openModal('modal-queue-detail');
+}
+
+async function sendFromQueueDetail(enrollmentId) {
+  const subject = document.getElementById('queue-edit-subject').value;
+  const body = document.getElementById('queue-edit-body').value;
+  try {
+    const r = await apiFetch('/api/queue/send', {
+      method: 'POST',
+      body: JSON.stringify({ enrollment_id: enrollmentId, custom_subject: subject, custom_body: body }),
+    });
+    toast(`Sent: "${r.subject}"`, 'success');
+    closeModal('modal-queue-detail');
+    loadQueue();
+    updateDashboardBadge();
   } catch(e) { toast(e.message, 'error'); }
 }
 
@@ -1105,134 +1182,172 @@ function openActivityDetail(index) {
 }
 
 // ── INBOX ─────────────────────────────────────────────────────────────────
+let _inboxTab = 'inbox';
 let _inboxCache = [];
+
+function switchInboxTab(tab) {
+  _inboxTab = tab;
+  document.querySelectorAll('.inbox-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.inbox-tab[data-tab="${tab}"]`).classList.add('active');
+  const searchEl = document.getElementById('search-inbox');
+  const placeholders = { inbox: 'Search inbox...', sent: 'Search sent...', not_in_sequence: 'Search contacts not in a sequence...' };
+  searchEl.placeholder = placeholders[tab] || 'Search...';
+  searchEl.value = '';
+  loadInbox();
+}
 
 async function loadInbox() {
   try {
     const search = document.getElementById('search-inbox')?.value || '';
-    const params = search ? `?search=${encodeURIComponent(search)}&limit=200` : '?limit=200';
-    const data = await apiFetch(`/api/inbox${params}`);
+    const el = document.getElementById('inbox-list');
+
+    if (_inboxTab === 'not_in_sequence') {
+      const params = search ? `?search=${encodeURIComponent(search)}&limit=200` : '?limit=200';
+      const data = await apiFetch(`/api/inbox/not-in-sequence${params}`);
+      const contacts = data.contacts || [];
+      const inboxData = await apiFetch('/api/inbox?limit=0');
+      updateBadge('badge-inbox', inboxData.unreadCount || 0);
+      const countEl = document.getElementById('inbox-tab-count');
+      if (countEl) countEl.textContent = inboxData.unreadCount > 0 ? inboxData.unreadCount : '';
+
+      if (!contacts.length) {
+        el.innerHTML = `<div class="empty-state">
+          <div style="font-size:32px;margin-bottom:8px">&#128203;</div>
+          <p>All contacts are currently enrolled in a sequence.</p>
+        </div>`;
+        return;
+      }
+
+      el.innerHTML = `<div class="inbox-messages">${contacts.map(c => {
+        const fullName = [c.first_name, c.last_name].filter(Boolean).join(' ') || 'Unknown';
+        return `
+          <div class="inbox-row" onclick="openContactDetail(${c.id})">
+            <div class="inbox-row-left">
+              <div class="inbox-sender">
+                <a href="#" onclick="event.stopPropagation();openContactDetail(${c.id})" style="color:inherit;text-decoration:none"><strong>${esc(fullName)}</strong></a>
+                ${c.company_name ? `<span class="inbox-company-pill">${esc(c.company_name)}</span>` : ''}
+              </div>
+              <div class="inbox-preview">${esc(c.email || '')}</div>
+            </div>
+            <div class="inbox-row-right">
+              <div class="inbox-date">${c.last_activity_at ? fmtDate(c.last_activity_at) : 'No activity'}</div>
+            </div>
+          </div>`;
+      }).join('')}</div>`;
+      return;
+    }
+
+    // Inbox or Sent tab
+    const params = new URLSearchParams({ tab: _inboxTab, limit: '200' });
+    if (search) params.set('search', search);
+    const data = await apiFetch(`/api/inbox?${params}`);
     _inboxCache = data.messages || [];
     updateBadge('badge-inbox', data.unreadCount || 0);
+    const countEl = document.getElementById('inbox-tab-count');
+    if (countEl) countEl.textContent = data.unreadCount > 0 ? data.unreadCount : '';
 
-    const el = document.getElementById('inbox-list');
     if (!_inboxCache.length) {
+      const emptyMsg = _inboxTab === 'sent'
+        ? 'No sent messages yet.'
+        : 'No replies yet. Sync your inbox to pull in responses from contacts.';
       el.innerHTML = `<div class="empty-state">
-        <div style="font-size:32px;margin-bottom:8px">✉</div>
-        <p>No replies yet. Sync your inbox to pull in responses from contacts.</p>
-        <button class="btn btn-primary" onclick="syncInboxFromInbox()" style="margin-top:12px">↓ Sync Inbox Now</button>
+        <div style="font-size:32px;margin-bottom:8px">&#9993;</div>
+        <p>${emptyMsg}</p>
+        ${_inboxTab === 'inbox' ? '<button class="btn btn-primary" onclick="syncInboxFromInbox()" style="margin-top:12px">Sync Inbox Now</button>' : ''}
       </div>`;
       return;
     }
 
     el.innerHTML = `<div class="inbox-messages">${_inboxCache.map((m, i) => {
-      const isRead = m.notes === 'read';
+      const isRead = _inboxTab === 'sent' ? true : m.notes === 'read';
       const fullName = [m.first_name, m.last_name].filter(Boolean).join(' ') || 'Unknown';
-      const oppValue = parseFloat(m.opportunity_value) || 0;
+      const label = _inboxTab === 'sent' ? `To: ${fullName}` : fullName;
+      const preview = cleanEmailBody(m.body || '').slice(0, 140);
       return `
-        <div class="inbox-row ${isRead ? 'inbox-read' : 'inbox-unread'}" onclick="openInboxDetail(${i})">
+        <div class="inbox-row ${isRead ? 'inbox-read' : 'inbox-unread'}" onclick="openInboxMessage(${i})">
           <div class="inbox-row-left">
             <div class="inbox-sender">
-              ${!isRead ? '<span class="inbox-dot"></span>' : ''}
-              <strong>${esc(fullName)}</strong>
-              ${m.company_name ? `<span class="inbox-company">${esc(m.company_name)}</span>` : ''}
+              <a href="#" onclick="event.stopPropagation();openContactDetail(${m.contact_id})" style="color:inherit;text-decoration:none">${esc(label)}</a>
+              ${m.company_name ? `<span class="inbox-company-pill">${esc(m.company_name)}</span>` : ''}
             </div>
             <div class="inbox-subject">${esc(m.subject || '(no subject)')}</div>
-            <div class="inbox-preview">${esc(cleanEmailBody(m.body).slice(0, 120))}${cleanEmailBody(m.body).length > 120 ? '…' : ''}</div>
+            <div class="inbox-preview">${esc(preview)}${preview.length >= 140 ? '...' : ''}</div>
           </div>
           <div class="inbox-row-right">
             <div class="inbox-date">${fmtDate(m.sent_at)}</div>
-            ${oppValue > 0 ? `<div class="inbox-opp-badge">$${oppValue.toLocaleString()}</div>` : ''}
           </div>
         </div>`;
     }).join('')}</div>`;
   } catch(e) { toast(e.message, 'error'); }
 }
 
-async function openInboxDetail(index) {
+async function openInboxMessage(index) {
   const m = _inboxCache[index];
   if (!m) return;
 
-  // Mark as read
-  if (m.notes !== 'read') {
+  // Mark as read if unread inbox message
+  if (_inboxTab === 'inbox' && m.notes !== 'read') {
     try {
       await apiFetch(`/api/inbox/${m.id}/read`, { method: 'PATCH' });
       m.notes = 'read';
-      // Refresh badge
       const data = await apiFetch('/api/inbox?limit=0');
       updateBadge('badge-inbox', data.unreadCount || 0);
+      const countEl = document.getElementById('inbox-tab-count');
+      if (countEl) countEl.textContent = data.unreadCount > 0 ? data.unreadCount : '';
+      // Update the row to show as read
+      const rows = document.querySelectorAll('.inbox-row');
+      if (rows[index]) { rows[index].classList.remove('inbox-unread'); rows[index].classList.add('inbox-read'); }
     } catch(e) {}
   }
 
   const fullName = [m.first_name, m.last_name].filter(Boolean).join(' ') || 'Unknown';
-  const oppValue = parseFloat(m.opportunity_value) || 0;
 
-  document.getElementById('inbox-detail-title').textContent = m.subject || 'Message';
-  document.getElementById('inbox-detail-content').innerHTML = `
-    <div class="inbox-detail-contact">
-      <div class="inbox-detail-from">
-        <strong>${esc(fullName)}</strong>
-        ${m.title ? `<span class="inbox-detail-role">${esc(m.title)}</span>` : ''}
+  // Insert reading pane above the message list
+  let pane = document.getElementById('inbox-reading-pane');
+  if (!pane) {
+    pane = document.createElement('div');
+    pane.id = 'inbox-reading-pane';
+    pane.className = 'inbox-reading-pane';
+    const list = document.getElementById('inbox-list');
+    list.parentNode.insertBefore(pane, list);
+  }
+
+  pane.innerHTML = `
+    <div class="inbox-rp-header">
+      <div>
+        <div class="inbox-rp-subject">${esc(m.subject || '(no subject)')}</div>
+        <div class="inbox-rp-meta">
+          <span>${_inboxTab === 'sent' ? 'To:' : 'From:'} <a href="#" onclick="event.preventDefault();openContactDetail(${m.contact_id})">${esc(fullName)}</a></span>
+          ${m.company_name ? `<span><a href="#" onclick="event.preventDefault();openCompanyDetail(${m.company_id})">${esc(m.company_name)}</a></span>` : ''}
+          <span>${fmtDate(m.sent_at)}</span>
+        </div>
       </div>
-      <div class="inbox-detail-meta">
-        ${m.email ? `<a href="mailto:${esc(m.email)}" class="email-link">${esc(m.email)}</a>` : ''}
-        ${m.company_name ? `<span class="inbox-detail-co">
-          <a href="#" onclick="event.preventDefault();closeModal('modal-inbox-detail');openCompanyDetail(${m.company_id})">${esc(m.company_name)}</a>
-          <span class="status-pill status-${(m.company_status||'').replace(/\\s/g,'-')}">${esc(m.company_status||'')}</span>
-        </span>` : ''}
-        <span class="text-muted">${fmtDate(m.sent_at)}</span>
-      </div>
+      <button class="inbox-rp-close" onclick="closeInboxPane()">&#10005;</button>
     </div>
-
-    <!-- Opportunity -->
-    <div class="inbox-detail-opp">
-      <div class="inbox-opp-header">
-        <span class="inbox-opp-label">Opportunity Value</span>
-        ${m.pipeline_stage ? `<span class="status-pill status-${(m.pipeline_stage||'').toLowerCase().replace(/\\s/g,'-')}">${esc(m.pipeline_stage)}</span>` : ''}
-      </div>
-      <div class="inbox-opp-edit">
-        <span class="inbox-opp-dollar">$</span>
-        <input type="number" id="inbox-opp-input" value="${oppValue || 5000}" min="0" step="500"
-          class="inbox-opp-input" placeholder="5000">
-        <button class="btn btn-primary btn-sm" onclick="saveInboxOpp(${m.company_id}, ${index})">Save</button>
-      </div>
-      ${oppValue === 0 ? '<div class="inbox-opp-hint">Default $5k placeholder — edit to actual deal value</div>' : ''}
-    </div>
-
-    <!-- Message body -->
-    <div class="inbox-detail-body-label">Message</div>
-    <div class="inbox-detail-body">${esc(cleanEmailBody(m.body) || '(no message body)')}</div>
-
-    <div class="inbox-detail-actions">
-      ${m.email ? `<a href="mailto:${esc(m.email)}?subject=Re: ${esc(m.subject || '')}" class="btn btn-primary">Reply via Email</a>` : ''}
-      ${m.contact_id ? `<button class="btn btn-outline" onclick="closeModal('modal-inbox-detail');openContactDetail(${m.contact_id})">View Contact</button>` : ''}
-      ${m.company_id ? `<button class="btn btn-outline" onclick="closeModal('modal-inbox-detail');openCompanyDetail(${m.company_id})">View Company</button>` : ''}
+    <div class="inbox-rp-body">${esc(cleanEmailBody(m.body) || '(no message body)')}</div>
+    <div class="inbox-rp-actions">
+      ${m.email ? `<a href="mailto:${esc(m.email)}?subject=Re: ${encodeURIComponent(m.subject || '')}" class="btn btn-primary">Reply via Email</a>` : ''}
+      ${m.contact_id ? `<button class="btn btn-outline" onclick="openContactDetail(${m.contact_id})">View Contact</button>` : ''}
+      ${m.company_id ? `<button class="btn btn-outline" onclick="openCompanyDetail(${m.company_id})">View Company</button>` : ''}
     </div>
   `;
-  openModal('modal-inbox-detail');
+  pane.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-async function saveInboxOpp(companyId, index) {
-  if (!companyId) { toast('No company linked to this contact', 'error'); return; }
-  const val = document.getElementById('inbox-opp-input').value;
-  try {
-    await apiFetch(`/api/companies/${companyId}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ opportunity_value: parseFloat(val) || 0 }),
-    });
-    toast('Opportunity value saved');
-    if (_inboxCache[index]) _inboxCache[index].opportunity_value = val;
-  } catch(e) { toast(e.message, 'error'); }
+function closeInboxPane() {
+  const pane = document.getElementById('inbox-reading-pane');
+  if (pane) pane.remove();
 }
 
 async function syncInboxFromInbox() {
-  toast('Syncing inbox…');
+  toast('Syncing inbox...');
   try {
     const r = await apiFetch('/api/inbox/sync', { method: 'POST' });
     const parts = [`${r.imported} new repl${r.imported !== 1 ? 'ies' : 'y'}`];
     if (r.autoStopped > 0) parts.push(`${r.autoStopped} sequence${r.autoStopped !== 1 ? 's' : ''} stopped`);
     if (r.opportunitiesCreated > 0) parts.push(`${r.opportunitiesCreated} new opportunit${r.opportunitiesCreated !== 1 ? 'ies' : 'y'} created`);
     toast(`Inbox synced: ${parts.join(', ')}`, 'success');
+    closeInboxPane();
     loadInbox();
   } catch(e) { toast(`Sync failed: ${e.message}`, 'error'); }
 }

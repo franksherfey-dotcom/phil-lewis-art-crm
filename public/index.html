@@ -222,25 +222,21 @@
             <div style="font-size:12px;color:var(--text-muted);margin-top:3px">Replies from contacts — new replies auto-create $5k opportunities</div>
           </div>
           <div class="page-actions" style="display:flex;gap:8px;align-items:center">
-            <button class="btn btn-outline" onclick="syncInboxFromInbox()">↓ Sync Now</button>
+            <button class="btn btn-outline" onclick="syncInboxFromInbox()">Sync Now</button>
           </div>
+        </div>
+        <div class="inbox-tabs">
+          <button class="inbox-tab active" data-tab="inbox" onclick="switchInboxTab('inbox')">
+            Inbox <span class="inbox-tab-badge" id="inbox-tab-count"></span>
+          </button>
+          <button class="inbox-tab" data-tab="sent" onclick="switchInboxTab('sent')">Sent</button>
+          <button class="inbox-tab" data-tab="not_in_sequence" onclick="switchInboxTab('not_in_sequence')">Not in Sequence</button>
         </div>
         <div class="filters-bar">
           <input type="text" id="search-inbox" placeholder="Search inbox..." oninput="loadInbox()" class="filter-input">
         </div>
         <div id="inbox-list"></div>
       </section>
-
-      <!-- INBOX DETAIL MODAL -->
-      <div class="modal-overlay hidden" id="modal-inbox-detail">
-        <div class="modal modal-wide">
-          <div class="modal-header">
-            <h2 id="inbox-detail-title">Message</h2>
-            <button class="modal-close" onclick="closeModal('modal-inbox-detail')">✕</button>
-          </div>
-          <div id="inbox-detail-content"></div>
-        </div>
-      </div>
 
       <!-- INDUSTRY NEWS -->
       <section id="page-news" class="page">
@@ -640,6 +636,17 @@
         <button type="button" class="btn btn-outline" onclick="closeModal('modal-preview')">Close</button>
         <button type="button" class="btn btn-primary" id="preview-send-btn">Send This Email</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Queue Detail Modal -->
+  <div id="modal-queue-detail" class="modal-overlay hidden">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <h2 id="queue-detail-title">Queue Item</h2>
+        <button class="modal-close" onclick="closeModal('modal-queue-detail')">✕</button>
+      </div>
+      <div id="queue-detail-content"></div>
     </div>
   </div>
 
