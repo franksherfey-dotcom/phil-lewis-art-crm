@@ -758,6 +758,60 @@ app.post('/api/inbox/sync', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
+// Send a reply (or forward) directly from the CRM inbox
+// Body: { toEmail, toName, subject, body, contactId, companyId, inReplyTo, references }
+app.post('/api/inbox/reply', async (req, res) => {
+  try {
+    const { toEmail, toName, subject, body, contactId, companyId, inReplyTo, references } = req.body
+    if (!toEmail || !subject || !body) {
+      return res.status(400).json({ error: 'toEmail, subject, and body are required.' })
+    }
+
+    // Fetch contact + company for interpolation (optional — gracefully handles missing)
+    let contact = {}
+    let company = null
+    if (contactId) {
+      const row = await one('SELECT * FROM contacts WHERE id=$1', [contactId])
+      if (row) contact = row
+    }
+    if (companyId) {
+      const row = await one('SELECT * FROM companies WHERE id=$1', [companyId])
+      if (row) company = row
+    }
+
+    const { resolvedSubject, resolvedBody } = await sendEmail({
+      toEmail,
+      toName: toName || null,
+      subject,
+      body,
+      contact,
+      company,
+      inReplyTo: inReplyTo || null,
+      references: references || null,
+    })
+
+    // Log the outbound reply as an activity so it appears in the CRM timeline
+    await run(
+      `INSERT INTO activities (contact_id, type, subject, body, status, sent_at)
+       VALUES ($1, 'email', $2, $3, 'sent', NOW())`,
+      [contactId || null, resolvedSubject, resolvedBody]
+    )
+
+    // Update contact's last_activity_at
+    if (contactId) {
+      await run(
+        `UPDATE contacts SET last_activity_at=NOW(), updated_at=NOW() WHERE id=$1`,
+        [contactId]
+      )
+    }
+
+    res.json({ ok: true, subject: resolvedSubject })
+  } catch (err) {
+    console.error('inbox/reply error:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
 app.post('/api/settings/test-email', async (req, res) => {
   try {
     await testConnection()

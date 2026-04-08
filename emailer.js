@@ -71,7 +71,7 @@ async function appendToSentFolder(settings, rawMessage) {
   }
 }
 
-async function sendEmail({ toEmail, toName, subject, body, contact, company }) {
+async function sendEmail({ toEmail, toName, subject, body, contact, company, inReplyTo, references }) {
   const settings = await getSettings()
   if (!settings.smtp_host || !settings.smtp_user) {
     throw new Error('SMTP not configured. Go to Settings to set up your email.')
@@ -92,6 +92,10 @@ async function sendEmail({ toEmail, toName, subject, body, contact, company }) {
     text: resolvedBody,
     html: resolvedBody.replace(/\n/g, '<br>'),
   }
+
+  // Threading headers — keeps replies grouped in email clients and RoundCube
+  if (inReplyTo) mailOptions.inReplyTo = inReplyTo
+  if (references) mailOptions.references = references
 
   // Build raw message BEFORE sending — needed for IMAP append
   // (nodemailer dryRun doesn't expose raw message in v8+, MailComposer does)

@@ -1326,12 +1326,103 @@ async function openInboxMessage(index) {
     </div>
     <div class="inbox-rp-body">${esc(cleanEmailBody(m.body) || '(no message body)')}</div>
     <div class="inbox-rp-actions">
-      ${m.email ? `<a href="mailto:${esc(m.email)}?subject=Re: ${encodeURIComponent(m.subject || '')}" class="btn btn-primary">Reply via Email</a>` : ''}
+      ${m.email ? `<button class="btn btn-primary" onclick="openReplyCompose(${index}, false)">&#9166; Reply</button>` : ''}
+      ${m.email ? `<button class="btn btn-outline" onclick="openReplyCompose(${index}, true)">&#8627; Forward</button>` : ''}
       ${m.contact_id ? `<button class="btn btn-outline" onclick="openContactDetail(${m.contact_id})">View Contact</button>` : ''}
       ${m.company_id ? `<button class="btn btn-outline" onclick="openCompanyDetail(${m.company_id})">View Company</button>` : ''}
     </div>
+    <div id="inbox-compose-area" style="display:none"></div>
   `;
   pane.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function openReplyCompose(index, isForward) {
+  const m = _inboxCache[index];
+  if (!m) return;
+  const area = document.getElementById('inbox-compose-area');
+  if (!area) return;
+
+  const reSubject = isForward
+    ? `Fwd: ${m.subject || ''}`
+    : (m.subject && !/^re:/i.test(m.subject) ? `Re: ${m.subject}` : (m.subject || ''));
+  const toEmail  = isForward ? '' : (m.email || '');
+  const toName   = isForward ? '' : ([m.first_name, m.last_name].filter(Boolean).join(' ') || '');
+  const fullName = [m.first_name, m.last_name].filter(Boolean).join(' ') || m.email || '';
+  const quoteDate = m.sent_at ? new Date(m.sent_at).toLocaleString() : '';
+  const quotedBody = `\n\n\n---\nOn ${quoteDate}, ${esc(fullName)} wrote:\n${(m.body || '').split('\n').map(l => '> ' + l).join('\n')}`;
+
+  area.style.display = 'block';
+  area.innerHTML = `
+    <div class="inbox-compose-box">
+      <div class="inbox-compose-row">
+        <label class="inbox-compose-label">To</label>
+        <input id="ic-to" class="inbox-compose-input" type="email" value="${esc(toEmail)}" placeholder="recipient@example.com" ${!isForward ? 'readonly' : ''}>
+      </div>
+      <div class="inbox-compose-row">
+        <label class="inbox-compose-label">Subject</label>
+        <input id="ic-subject" class="inbox-compose-input" type="text" value="${esc(reSubject)}">
+      </div>
+      <div class="inbox-compose-row">
+        <label class="inbox-compose-label">Message</label>
+        <textarea id="ic-body" class="inbox-compose-textarea" rows="8">${esc(quotedBody)}</textarea>
+      </div>
+      <div class="inbox-compose-actions">
+        <button class="btn btn-primary" onclick="sendInboxReply(${index}, ${isForward})">Send</button>
+        <button class="btn btn-outline" onclick="closeReplyCompose()">Cancel</button>
+        <span id="ic-status" style="margin-left:12px;font-size:13px;color:#666"></span>
+      </div>
+    </div>`;
+
+  // Place cursor at start of textarea (before quoted text)
+  const ta = document.getElementById('ic-body');
+  if (ta) { ta.focus(); ta.setSelectionRange(0, 0); ta.scrollTop = 0; }
+}
+
+function closeReplyCompose() {
+  const area = document.getElementById('inbox-compose-area');
+  if (area) { area.style.display = 'none'; area.innerHTML = ''; }
+}
+
+async function sendInboxReply(index, isForward) {
+  const m = _inboxCache[index];
+  if (!m) return;
+  const toEmail  = document.getElementById('ic-to')?.value?.trim();
+  const subject  = document.getElementById('ic-subject')?.value?.trim();
+  const body     = document.getElementById('ic-body')?.value?.trim();
+  const statusEl = document.getElementById('ic-status');
+
+  if (!toEmail || !subject || !body) {
+    toast('To, Subject, and Message are all required.', 'error'); return;
+  }
+
+  const btn = document.querySelector('#inbox-compose-area .btn-primary');
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+  if (statusEl) statusEl.textContent = '';
+
+  try {
+    await apiFetch('/api/inbox/reply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        toEmail,
+        toName: isForward ? '' : ([m.first_name, m.last_name].filter(Boolean).join(' ') || ''),
+        subject,
+        body,
+        contactId:  m.contact_id  || null,
+        companyId:  m.company_id  || null,
+        inReplyTo:  isForward ? null : (m.message_id || null),
+        references: isForward ? null : (m.message_id || null),
+      }),
+    });
+    toast(isForward ? 'Forwarded successfully.' : 'Reply sent!', 'success');
+    closeReplyCompose();
+    // Refresh the sent tab count badge
+    loadInbox();
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Send'; }
+    if (statusEl) statusEl.textContent = '✗ ' + e.message;
+    toast('Send failed: ' + e.message, 'error');
+  }
 }
 
 function closeInboxPane() {

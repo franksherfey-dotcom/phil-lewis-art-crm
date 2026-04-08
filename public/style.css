@@ -1152,6 +1152,36 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
   display: flex; gap: 8px; flex-wrap: wrap; background: var(--bg);
 }
 
+/* ── Inline compose box ── */
+.inbox-compose-box {
+  border-top: 2px solid var(--primary);
+  padding: 20px 24px;
+  background: var(--bg);
+}
+.inbox-compose-row {
+  display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px;
+}
+.inbox-compose-label {
+  width: 60px; flex-shrink: 0; font-size: 13px; font-weight: 600;
+  color: var(--text-light); padding-top: 8px;
+}
+.inbox-compose-input {
+  flex: 1; padding: 7px 10px; font-size: 14px; border: 1px solid var(--border);
+  border-radius: 6px; background: var(--surface); color: var(--text);
+  font-family: inherit;
+}
+.inbox-compose-input[readonly] {
+  background: var(--bg); color: var(--text-light); cursor: default;
+}
+.inbox-compose-textarea {
+  flex: 1; padding: 8px 10px; font-size: 13px; border: 1px solid var(--border);
+  border-radius: 6px; background: var(--surface); color: var(--text);
+  font-family: inherit; resize: vertical; min-height: 140px; line-height: 1.5;
+}
+.inbox-compose-actions {
+  display: flex; align-items: center; gap: 8px; margin-top: 4px;
+}
+
 /* ── Inbox mobile ── */
 @media (max-width: 768px) {
   .inbox-tabs { overflow-x: auto; }
