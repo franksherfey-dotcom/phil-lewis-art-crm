@@ -830,12 +830,114 @@ async function loadSequences() {
           `).join('')}
         </div>
         <div class="seq-footer">
-          <span class="enrolled-count">${s.enrollment_count} contact${s.enrollment_count!==1?'s':''} enrolled</span>
+          <button class="enrolled-count enrolled-count-btn" onclick="openSequenceRoster(${s.id}, ${JSON.stringify(esc(s.name))})">${s.enrollment_count} contact${s.enrollment_count!==1?'s':''} enrolled</button>
           <button class="btn btn-primary btn-sm" onclick="openEnrollModalForSeq(${s.id})">Enroll Contacts</button>
         </div>
       </div>
     `).join('');
   } catch(e) { toast(e.message, 'error'); }
+}
+
+// ── Sequence Roster Panel ─────────────────────────────────────────────────────
+async function openSequenceRoster(seqId, seqName) {
+  const existing = document.getElementById('seq-roster-panel');
+  if (existing) existing.remove();
+
+  const panel = document.createElement('div');
+  panel.id = 'seq-roster-panel';
+  panel.className = 'seq-roster-panel';
+  panel.innerHTML = `<div class="seq-roster-loading">Loading roster…</div>`;
+  // Insert after sequences-list
+  const seqList = document.getElementById('sequences-list');
+  seqList.parentNode.insertBefore(panel, seqList.nextSibling);
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  try {
+    const { enrolled, suggestions } = await apiFetch(`/api/sequences/${seqId}/roster`);
+
+    const statusBadge = s =>
+      s === 'active'    ? `<span class="seq-badge seq-active">● Active</span>` :
+      s === 'replied'   ? `<span class="seq-badge seq-replied">✓ Replied</span>` :
+      s === 'completed' ? `<span class="seq-badge seq-completed">✓ Done</span>` :
+      s === 'paused'    ? `<span class="seq-badge seq-completed">⏸ Paused</span>` :
+                          `<span class="seq-badge seq-completed">Stopped</span>`;
+
+    const enrolledRows = enrolled.length
+      ? enrolled.map(c => `
+          <tr>
+            <td><strong>${esc(c.first_name)} ${esc(c.last_name||'')}</strong></td>
+            <td>${esc(c.title||'—')}</td>
+            <td>${c.company_name ? esc(c.company_name) : '—'}</td>
+            <td>${esc(c.email||'—')}</td>
+            <td>${statusBadge(c.enrollment_status)}</td>
+            <td><button class="btn btn-ghost btn-sm" onclick="unenrollFromRoster(${c.enrollment_id}, ${seqId}, '${esc(seqName)}')">Remove</button></td>
+          </tr>`).join('')
+      : `<tr><td colspan="6" class="empty-state" style="padding:16px">No contacts enrolled yet.</td></tr>`;
+
+    const suggestRows = suggestions.length
+      ? suggestions.map(c => `
+          <tr>
+            <td><strong>${esc(c.first_name)} ${esc(c.last_name||'')}</strong></td>
+            <td>${esc(c.title||'—')}</td>
+            <td>${c.company_name ? esc(c.company_name) : '—'}</td>
+            <td>${esc(c.email||'—')}</td>
+            <td>${c.other_enrollment_status === 'active'
+              ? `<span class="seq-badge seq-completed" title="In another sequence">In sequence</span>`
+              : `<span style="color:var(--success,#16a34a);font-size:12px;font-weight:600">● Available</span>`}</td>
+            <td><button class="btn btn-primary btn-sm" onclick="enrollFromRoster(${c.id}, ${seqId}, '${esc(seqName)}')">Add</button></td>
+          </tr>`).join('')
+      : `<tr><td colspan="6" class="empty-state" style="padding:16px">All contacts with emails are already enrolled.</td></tr>`;
+
+    panel.innerHTML = `
+      <div class="seq-roster-header">
+        <div>
+          <div class="seq-roster-title">${esc(seqName)} — Roster</div>
+          <div class="seq-roster-sub">${enrolled.length} enrolled · ${suggestions.filter(s=>s.other_enrollment_status!=='active').length} available to add</div>
+        </div>
+        <button class="inbox-rp-close" onclick="document.getElementById('seq-roster-panel').remove()">✕</button>
+      </div>
+
+      <div class="seq-roster-section-title">Currently Enrolled (${enrolled.length})</div>
+      <div class="table-scroll-wrapper" style="margin-bottom:24px">
+        <table class="data-table">
+          <thead><tr><th>Name</th><th>Title</th><th>Company</th><th>Email</th><th>Status</th><th></th></tr></thead>
+          <tbody>${enrolledRows}</tbody>
+        </table>
+      </div>
+
+      <div class="seq-roster-section-title">Suggested Contacts to Add (${suggestions.length})</div>
+      <div class="seq-roster-hint">● Available = not in any active sequence. Sorted by availability first.</div>
+      <div class="table-scroll-wrapper">
+        <table class="data-table">
+          <thead><tr><th>Name</th><th>Title</th><th>Company</th><th>Email</th><th>Status</th><th></th></tr></thead>
+          <tbody>${suggestRows}</tbody>
+        </table>
+      </div>`;
+  } catch(e) {
+    panel.innerHTML = `<div style="padding:20px;color:red">Failed to load roster: ${e.message}</div>`;
+  }
+}
+
+async function enrollFromRoster(contactId, seqId, seqName) {
+  try {
+    const r = await apiFetch('/api/enrollments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contact_ids: [contactId], sequence_id: seqId }),
+    });
+    toast(`Added to "${seqName}"`, 'success');
+    openSequenceRoster(seqId, seqName);
+    loadSequences();
+  } catch(e) { toast('Failed: ' + e.message, 'error'); }
+}
+
+async function unenrollFromRoster(enrollmentId, seqId, seqName) {
+  try {
+    await apiFetch(`/api/enrollments/${enrollmentId}`, { method: 'DELETE' });
+    toast('Contact removed from sequence.', 'success');
+    openSequenceRoster(seqId, seqName);
+    loadSequences();
+  } catch(e) { toast('Failed: ' + e.message, 'error'); }
 }
 
 let stepCount = 0;

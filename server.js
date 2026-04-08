@@ -278,6 +278,47 @@ app.get('/api/sequences/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
+// Sequence roster: enrolled contacts + suggested contacts not yet in this sequence
+app.get('/api/sequences/:id/roster', async (req, res) => {
+  try {
+    const seqId = req.params.id
+
+    // Enrolled contacts with their status
+    const enrolled = await all(`
+      SELECT ct.id, ct.first_name, ct.last_name, ct.email, ct.title,
+             co.name AS company_name, co.category AS company_category,
+             e.id AS enrollment_id, e.status AS enrollment_status,
+             e.current_step, e.started_at
+      FROM enrollments e
+      JOIN contacts ct ON ct.id = e.contact_id
+      LEFT JOIN companies co ON co.id = ct.company_id
+      WHERE e.sequence_id = $1
+      ORDER BY CASE e.status WHEN 'active' THEN 0 WHEN 'paused' THEN 1 WHEN 'replied' THEN 2 WHEN 'completed' THEN 3 ELSE 4 END,
+               e.started_at DESC
+    `, [seqId])
+
+    // Suggested: contacts NOT in this sequence, have email, prioritise those not in any active sequence
+    const suggestions = await all(`
+      SELECT ct.id, ct.first_name, ct.last_name, ct.email, ct.title,
+             co.name AS company_name, co.category AS company_category,
+             (SELECT status FROM enrollments WHERE contact_id=ct.id ORDER BY
+               CASE status WHEN 'active' THEN 0 ELSE 1 END LIMIT 1) AS other_enrollment_status
+      FROM contacts ct
+      LEFT JOIN companies co ON co.id = ct.company_id
+      WHERE ct.email IS NOT NULL AND ct.email != ''
+        AND NOT EXISTS (
+          SELECT 1 FROM enrollments WHERE contact_id=ct.id AND sequence_id=$1
+        )
+      ORDER BY
+        CASE WHEN NOT EXISTS (SELECT 1 FROM enrollments WHERE contact_id=ct.id AND status='active') THEN 0 ELSE 1 END,
+        co.name ASC, ct.first_name ASC
+      LIMIT 50
+    `, [seqId])
+
+    res.json({ enrolled, suggestions })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
 app.post('/api/sequences', async (req, res) => {
   try {
     const { name, description, steps } = req.body
