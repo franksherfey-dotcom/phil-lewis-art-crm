@@ -25,16 +25,20 @@ app.use(express.static(path.join(__dirname, 'public')))
 // ─── USERS TABLE MIGRATION ───────────────────────────────────────────────────
 ;(async () => {
   try {
-    // If users table exists but is missing the 'username' column, drop and recreate it
+    // If public.users exists but is missing the 'username' column, drop and recreate it
+    // NOTE: must filter table_schema='public' to avoid matching Supabase's auth.users table
     await pool.query(`
       DO $$
       BEGIN
-        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='users')
+        IF EXISTS (
+          SELECT 1 FROM information_schema.tables
+          WHERE table_name='users' AND table_schema='public'
+        )
         AND NOT EXISTS (
           SELECT 1 FROM information_schema.columns
-          WHERE table_name='users' AND column_name='username'
+          WHERE table_name='users' AND column_name='username' AND table_schema='public'
         ) THEN
-          DROP TABLE users CASCADE;
+          DROP TABLE public.users CASCADE;
         END IF;
       END $$
     `)
