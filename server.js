@@ -4,12 +4,16 @@ const cors = require('cors')
 const path = require('path')
 const multer = require('multer')
 const { parse } = require('csv-parse/sync')
+const jwt = require('jsonwebtoken')
+const bcrypt = require('bcryptjs')
 
 const pool = require('./lib/db')
 const { sendEmail, syncInbox, testConnection, interpolate } = require('./emailer')
 
 const app = express()
 const PORT = process.env.PORT || 3000
+const JWT_SECRET = process.env.JWT_SECRET || 'pla-crm-secret-please-set-JWT_SECRET-env-var'
+const JWT_EXPIRES = '30d'
 
 // Store CSV files in memory — no disk writes (required for Vercel)
 const upload = multer({ storage: multer.memoryStorage() })
@@ -17,6 +21,168 @@ const upload = multer({ storage: multer.memoryStorage() })
 app.use(cors())
 app.use(express.json())
 app.use(express.static(path.join(__dirname, 'public')))
+
+// ─── USERS TABLE MIGRATION ───────────────────────────────────────────────────
+;(async () => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+        username TEXT NOT NULL UNIQUE,
+        display_name TEXT,
+        email TEXT,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('admin','user','readonly')),
+        force_password_change BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        last_login_at TIMESTAMPTZ
+      )
+    `)
+    // Seed first admin if no users exist
+    const { rows } = await pool.query('SELECT COUNT(*)::int AS n FROM users')
+    if (rows[0].n === 0) {
+      const hash = await bcrypt.hash('ChangeMe123!', 10)
+      await pool.query(
+        `INSERT INTO users (username, display_name, role, password_hash, force_password_change)
+         VALUES ('frank', 'Frank Sherfey', 'admin', $1, TRUE)`,
+        [hash]
+      )
+      console.log('✅ Seeded initial admin user: frank / ChangeMe123!')
+    }
+  } catch (e) { console.error('Users migration error:', e.message) }
+})()
+
+// ─── AUTH HELPERS ─────────────────────────────────────────────────────────────
+function requireAuth(req, res, next) {
+  const header = req.headers.authorization
+  if (!header?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' })
+  try {
+    req.user = jwt.verify(header.slice(7), JWT_SECRET)
+    next()
+  } catch { res.status(401).json({ error: 'Session expired — please log in again.' }) }
+}
+
+function requireAdmin(req, res, next) {
+  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Admin access required.' })
+  next()
+}
+
+function blockReadonly(req, res, next) {
+  if (req.user?.role === 'readonly' && req.method !== 'GET')
+    return res.status(403).json({ error: 'Your account is read-only.' })
+  next()
+}
+
+// Protect all /api/* routes except /api/auth/*
+app.use('/api', (req, res, next) => {
+  if (req.path.startsWith('/auth/')) return next()
+  requireAuth(req, res, next)
+})
+app.use('/api', (req, res, next) => {
+  if (req.path.startsWith('/auth/')) return next()
+  blockReadonly(req, res, next)
+})
+
+// ─── AUTH ROUTES ─────────────────────────────────────────────────────────────
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { username, password } = req.body
+    if (!username || !password) return res.status(400).json({ error: 'Username and password required.' })
+    const { rows } = await pool.query('SELECT * FROM users WHERE LOWER(username)=LOWER($1)', [username])
+    const user = rows[0]
+    if (!user) return res.status(401).json({ error: 'Invalid username or password.' })
+    const valid = await bcrypt.compare(password, user.password_hash)
+    if (!valid) return res.status(401).json({ error: 'Invalid username or password.' })
+    await pool.query('UPDATE users SET last_login_at=NOW() WHERE id=$1', [user.id])
+    const token = jwt.sign(
+      { userId: user.id, username: user.username, displayName: user.display_name, role: user.role, forcePasswordChange: user.force_password_change },
+      JWT_SECRET, { expiresIn: JWT_EXPIRES }
+    )
+    res.json({ token, user: { id: user.id, username: user.username, displayName: user.display_name, role: user.role, forcePasswordChange: user.force_password_change } })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.get('/api/auth/me', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT id,username,display_name,email,role,force_password_change,last_login_at FROM users WHERE id=$1', [req.user.userId])
+    if (!rows[0]) return res.status(404).json({ error: 'User not found.' })
+    res.json(rows[0])
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.post('/api/auth/change-password', requireAuth, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body
+    if (!newPassword || newPassword.length < 8) return res.status(400).json({ error: 'New password must be at least 8 characters.' })
+    const { rows } = await pool.query('SELECT password_hash FROM users WHERE id=$1', [req.user.userId])
+    if (!rows[0]) return res.status(404).json({ error: 'User not found.' })
+    // Skip current password check for forced change
+    if (!req.user.forcePasswordChange) {
+      if (!currentPassword) return res.status(400).json({ error: 'Current password required.' })
+      const valid = await bcrypt.compare(currentPassword, rows[0].password_hash)
+      if (!valid) return res.status(401).json({ error: 'Current password is incorrect.' })
+    }
+    const hash = await bcrypt.hash(newPassword, 10)
+    await pool.query('UPDATE users SET password_hash=$1, force_password_change=FALSE, updated_at=NOW() WHERE id=$2', [hash, req.user.userId])
+    // Re-issue token with forcePasswordChange=false
+    const { rows: updated } = await pool.query('SELECT * FROM users WHERE id=$1', [req.user.userId])
+    const token = jwt.sign(
+      { userId: updated[0].id, username: updated[0].username, displayName: updated[0].display_name, role: updated[0].role, forcePasswordChange: false },
+      JWT_SECRET, { expiresIn: JWT_EXPIRES }
+    )
+    res.json({ ok: true, token })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ─── USER MANAGEMENT (admin only) ────────────────────────────────────────────
+app.get('/api/users', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT id,username,display_name,email,role,force_password_change,created_at,last_login_at FROM users ORDER BY id ASC')
+    res.json(rows)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.post('/api/users', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { username, displayName, email, role, password } = req.body
+    if (!username || !password) return res.status(400).json({ error: 'Username and password required.' })
+    if (!['admin','user','readonly'].includes(role)) return res.status(400).json({ error: 'Invalid role.' })
+    const hash = await bcrypt.hash(password, 10)
+    const { rows } = await pool.query(
+      `INSERT INTO users (username, display_name, email, role, password_hash, force_password_change)
+       VALUES ($1,$2,$3,$4,$5,TRUE) RETURNING id`,
+      [username, displayName||username, email||null, role, hash]
+    )
+    res.json({ id: rows[0].id })
+  } catch (err) {
+    if (err.code === '23505') return res.status(400).json({ error: 'Username already exists.' })
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.put('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { displayName, email, role, password, forcePasswordChange } = req.body
+    if (role && !['admin','user','readonly'].includes(role)) return res.status(400).json({ error: 'Invalid role.' })
+    const existing = (await pool.query('SELECT * FROM users WHERE id=$1', [req.params.id])).rows[0]
+    if (!existing) return res.status(404).json({ error: 'User not found.' })
+    const hash = password ? await bcrypt.hash(password, 10) : existing.password_hash
+    await pool.query(
+      `UPDATE users SET display_name=$1, email=$2, role=$3, password_hash=$4, force_password_change=$5, updated_at=NOW() WHERE id=$6`,
+      [displayName||existing.display_name, email||existing.email, role||existing.role, hash, forcePasswordChange ?? existing.force_password_change, req.params.id]
+    )
+    res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.delete('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    if (parseInt(req.params.id) === req.user.userId) return res.status(400).json({ error: 'Cannot delete your own account.' })
+    await pool.query('DELETE FROM users WHERE id=$1', [req.params.id])
+    res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
 
 // ─── Query helpers ────────────────────────────────────────────────────────────
 const run  = (sql, p = []) => pool.query(sql, p)

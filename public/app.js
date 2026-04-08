@@ -95,14 +95,282 @@ function showPage(page) {
   if (page === 'settings') loadSettings();
   if (page === 'reports') loadReports();
   if (page === 'news') loadNews();
+  if (page === 'users') loadUsers();
+}
+
+// ── AUTH ───────────────────────────────────────────────────────────────────
+let currentUser = null; // { id, username, display_name, role, force_password_change }
+
+function getToken() { return localStorage.getItem('pla_token'); }
+function setToken(t) { if (t) localStorage.setItem('pla_token', t); else localStorage.removeItem('pla_token'); }
+
+// Helper: show/hide an error element by id
+function showFormError(id, msg) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = msg;
+  el.style.display = msg ? '' : 'none';
+}
+
+async function handleLogin(e) {
+  e.preventDefault();
+  const username = document.getElementById('login-username').value.trim();
+  const password = document.getElementById('login-password').value;
+  showFormError('login-error', '');
+  try {
+    const data = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    }).then(async r => { const d = await r.json(); if (!r.ok) throw new Error(d.error || 'Login failed'); return d; });
+    setToken(data.token);
+    currentUser = data.user;
+    if (data.user.force_password_change) {
+      showForcePasswordChange();
+    } else {
+      showApp();
+    }
+  } catch(err) {
+    showFormError('login-error', err.message);
+  }
+}
+
+function showForcePasswordChange() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('change-password-screen').style.display = 'flex';
+  showFormError('force-pw-error', '');
+  document.getElementById('force-pw-new').value = '';
+  document.getElementById('force-pw-confirm').value = '';
+}
+
+async function handleForcePasswordChange(e) {
+  e.preventDefault();
+  const newPw = document.getElementById('force-pw-new').value;
+  const confirmPw = document.getElementById('force-pw-confirm').value;
+  showFormError('force-pw-error', '');
+  if (newPw !== confirmPw) { showFormError('force-pw-error', 'Passwords do not match.'); return; }
+  if (newPw.length < 8) { showFormError('force-pw-error', 'Password must be at least 8 characters.'); return; }
+  try {
+    const data = await fetch('/api/auth/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+      body: JSON.stringify({ newPassword: newPw }),
+    }).then(async r => { const d = await r.json(); if (!r.ok) throw new Error(d.error || 'Error'); return d; });
+    if (data.token) setToken(data.token);
+    currentUser = { ...currentUser, force_password_change: false };
+    document.getElementById('change-password-screen').style.display = 'none';
+    showApp();
+  } catch(err) {
+    showFormError('force-pw-error', err.message);
+  }
+}
+
+async function handleChangePassword(e) {
+  e.preventDefault();
+  const current = document.getElementById('cpw-current').value;
+  const newPw   = document.getElementById('cpw-new').value;
+  const confirm = document.getElementById('cpw-confirm').value;
+  showFormError('cpw-error', '');
+  if (newPw !== confirm) { showFormError('cpw-error', 'Passwords do not match.'); return; }
+  if (newPw.length < 8)  { showFormError('cpw-error', 'Password must be at least 8 characters.'); return; }
+  try {
+    const data = await apiFetch('/api/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword: current, newPassword: newPw }),
+    });
+    if (data.token) setToken(data.token);
+    closeModal('modal-change-password');
+    toast('Password updated successfully.', 'success');
+    document.getElementById('change-pw-form').reset();
+  } catch(err) {
+    showFormError('cpw-error', err.message);
+  }
+}
+
+function handleLogout() {
+  setToken(null);
+  currentUser = null;
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('login-password').value = '';
+  showFormError('login-error', '');
+}
+
+function showApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('change-password-screen').style.display = 'none';
+  document.getElementById('app').style.display = '';
+
+  // Populate sidebar user info
+  const nameEl = document.getElementById('sidebar-user-name');
+  const roleEl = document.getElementById('sidebar-user-role');
+  if (nameEl) nameEl.textContent = currentUser.display_name || currentUser.username;
+  if (roleEl) roleEl.textContent = currentUser.role;
+
+  // Role-based UI adjustments
+  applyRoleUI(currentUser.role);
+
+  // Load initial page
+  showPage('dashboard');
+}
+
+function applyRoleUI(role) {
+  // Users nav: admin only
+  document.querySelectorAll('.nav-item[data-page="users"]').forEach(el => {
+    el.style.display = role === 'admin' ? '' : 'none';
+  });
+  // Settings nav: admin only
+  document.querySelectorAll('.nav-item[data-page="settings"]').forEach(el => {
+    el.style.display = role === 'admin' ? '' : 'none';
+  });
+  // Write actions: hidden for readonly
+  if (role === 'readonly') {
+    document.querySelectorAll('.btn-add, .btn-primary, .btn-save, [data-requires-write]').forEach(el => {
+      el.style.display = 'none';
+    });
+  }
+}
+
+async function initAuth() {
+  const token = getToken();
+  if (!token) {
+    document.getElementById('login-screen').style.display = 'flex';
+    return;
+  }
+  try {
+    const data = await fetch('/api/auth/me', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    }).then(async r => { const d = await r.json(); if (!r.ok) throw new Error(d.error || 'Auth failed'); return d; });
+    currentUser = data;
+    if (data.force_password_change) {
+      showForcePasswordChange();
+    } else {
+      showApp();
+    }
+  } catch(err) {
+    // Token invalid/expired — show login
+    setToken(null);
+    document.getElementById('login-screen').style.display = 'flex';
+  }
+}
+
+// ── USERS PAGE ─────────────────────────────────────────────────────────────
+async function loadUsers() {
+  const el = document.getElementById('users-tbody');
+  if (!el) return;
+  el.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-light)">Loading…</td></tr>';
+  try {
+    const users = await apiFetch('/api/users');
+    if (!users.length) {
+      el.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-light)">No users found.</td></tr>';
+      return;
+    }
+    el.innerHTML = users.map(u => `
+      <tr>
+        <td>${esc(u.display_name || '—')}</td>
+        <td>${esc(u.username)}</td>
+        <td>${esc(u.email || '—')}</td>
+        <td><span class="role-badge role-${u.role}">${esc(u.role)}</span></td>
+        <td>${u.last_login ? fmtDate(u.last_login) : '<span style="color:var(--text-light)">Never</span>'}</td>
+        <td>
+          <button class="btn btn-sm" onclick="openUserModal(${u.id})">Edit</button>
+          ${u.id !== currentUser.id ? `<button class="btn btn-sm btn-danger" onclick="deleteUser(${u.id}, '${esc(u.username)}')">Delete</button>` : ''}
+        </td>
+      </tr>`).join('');
+  } catch(e) {
+    el.innerHTML = `<tr><td colspan="6" style="color:var(--danger)">${esc(e.message)}</td></tr>`;
+  }
+}
+
+let editingUserId = null;
+async function openUserModal(userId) {
+  editingUserId = userId || null;
+  const form = document.getElementById('user-form');
+  const title = document.getElementById('user-modal-title');
+  const pwInput = document.getElementById('user-pw-input');
+  const pwHint  = document.getElementById('user-pw-hint');
+  showFormError('user-form-error', '');
+  form.reset();
+
+  if (userId) {
+    title.textContent = 'Edit User';
+    if (pwHint) pwHint.style.display = '';
+    if (pwInput) pwInput.required = false;
+    try {
+      const users = await apiFetch('/api/users');
+      const u = users.find(x => x.id === userId);
+      if (u) {
+        form.elements['displayName'].value = u.display_name || '';
+        form.elements['username'].value    = u.username;
+        form.elements['email'].value       = u.email || '';
+        form.elements['role'].value        = u.role;
+      }
+    } catch(e) { showFormError('user-form-error', e.message); }
+  } else {
+    title.textContent = 'Add User';
+    if (pwHint) pwHint.style.display = 'none';
+    if (pwInput) pwInput.required = true;
+  }
+  openModal('modal-user');
+}
+
+async function saveUser(e) {
+  e.preventDefault();
+  showFormError('user-form-error', '');
+  const form = e.target;
+  const body = {
+    display_name: form.elements['displayName'].value.trim(),
+    username:     form.elements['username'].value.trim(),
+    email:        form.elements['email'].value.trim() || null,
+    role:         form.elements['role'].value,
+  };
+  const pw = form.elements['password'].value;
+  if (pw) body.password = pw;
+
+  try {
+    if (editingUserId) {
+      await apiFetch(`/api/users/${editingUserId}`, { method: 'PUT', body: JSON.stringify(body) });
+      toast('User updated.', 'success');
+    } else {
+      await apiFetch('/api/users', { method: 'POST', body: JSON.stringify(body) });
+      toast('User created.', 'success');
+    }
+    closeModal('modal-user');
+    loadUsers();
+  } catch(err) {
+    showFormError('user-form-error', err.message);
+  }
+}
+
+async function deleteUser(userId, username) {
+  if (!confirm(`Delete user "${username}"? This cannot be undone.`)) return;
+  try {
+    await apiFetch(`/api/users/${userId}`, { method: 'DELETE' });
+    toast('User deleted.', 'success');
+    loadUsers();
+  } catch(e) {
+    toast(e.message, 'error');
+  }
 }
 
 // ── API HELPERS ────────────────────────────────────────────────────────────
 async function apiFetch(url, opts = {}) {
+  const token = getToken();
   const res = await fetch(API + url, {
-    headers: { 'Content-Type': 'application/json', ...opts.headers },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      ...opts.headers,
+    },
     ...opts,
   });
+  if (res.status === 401) {
+    // Token expired or invalid
+    setToken(null);
+    document.getElementById('app').style.display = 'none';
+    document.getElementById('login-screen').style.display = 'flex';
+    throw new Error('Session expired. Please log in again.');
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
   return data;
@@ -2332,5 +2600,5 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ── INIT ──────────────────────────────────────────────────────────────────
-loadDashboard();
+initAuth();
 loadAllTags();
