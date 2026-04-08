@@ -144,7 +144,7 @@ app.post('/api/auth/change-password', requireAuth, async (req, res) => {
     const { rows } = await pool.query('SELECT password_hash FROM users WHERE id=$1', [req.user.userId])
     if (!rows[0]) return res.status(404).json({ error: 'User not found.' })
     // Skip current password check for forced change
-    if (!req.user.forcePasswordChange) {
+    if (!req.user.force_password_change) {
       if (!currentPassword) return res.status(400).json({ error: 'Current password required.' })
       const valid = await bcrypt.compare(currentPassword, rows[0].password_hash)
       if (!valid) return res.status(401).json({ error: 'Current password is incorrect.' })
@@ -154,7 +154,7 @@ app.post('/api/auth/change-password', requireAuth, async (req, res) => {
     // Re-issue token with forcePasswordChange=false
     const { rows: updated } = await pool.query('SELECT * FROM users WHERE id=$1', [req.user.userId])
     const token = jwt.sign(
-      { userId: updated[0].id, username: updated[0].username, displayName: updated[0].display_name, role: updated[0].role, forcePasswordChange: false },
+      { userId: updated[0].id, username: updated[0].username, display_name: updated[0].display_name, role: updated[0].role, force_password_change: false },
       JWT_SECRET, { expiresIn: JWT_EXPIRES }
     )
     res.json({ ok: true, token })
