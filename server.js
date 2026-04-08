@@ -23,10 +23,11 @@ app.use(express.json())
 app.use(express.static(path.join(__dirname, 'public')))
 
 // ─── USERS TABLE MIGRATION ───────────────────────────────────────────────────
-;(async () => {
+// Exposed as a promise so auth routes can await it before querying the users table
+const migrationReady = (async () => {
   try {
-    // If public.users exists but is missing the 'username' column, drop and recreate it
-    // NOTE: must filter table_schema='public' to avoid matching Supabase's auth.users table
+    // If public.users exists but is missing the 'username' column, drop and recreate it.
+    // Filter table_schema='public' to avoid matching Supabase's internal auth.users table.
     await pool.query(`
       DO $$
       BEGIN
@@ -43,9 +44,9 @@ app.use(express.static(path.join(__dirname, 'public')))
       END $$
     `)
 
-    // Create fresh table
+    // Create fresh table (no-op if already correct)
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS users (
+      CREATE TABLE IF NOT EXISTS public.users (
         id BIGSERIAL PRIMARY KEY,
         username TEXT NOT NULL UNIQUE,
         display_name TEXT,
@@ -60,11 +61,11 @@ app.use(express.static(path.join(__dirname, 'public')))
     `)
 
     // Seed admin if none exists
-    const { rows } = await pool.query(`SELECT COUNT(*)::int AS n FROM users WHERE role='admin'`)
+    const { rows } = await pool.query(`SELECT COUNT(*)::int AS n FROM public.users WHERE role='admin'`)
     if (rows[0].n === 0) {
       const hash = await bcrypt.hash('ChangeMe123!', 10)
       await pool.query(
-        `INSERT INTO users (username, display_name, role, password_hash, force_password_change)
+        `INSERT INTO public.users (username, display_name, role, password_hash, force_password_change)
          VALUES ('frank', 'Frank Sherfey', 'admin', $1, TRUE)
          ON CONFLICT (username) DO UPDATE
            SET password_hash = $1, role = 'admin', force_password_change = TRUE`,
@@ -72,6 +73,7 @@ app.use(express.static(path.join(__dirname, 'public')))
       )
       console.log('✅ Seeded initial admin user: frank / ChangeMe123!')
     }
+    console.log('✅ Users table ready.')
   } catch (e) { console.error('Users migration error:', e.message) }
 })()
 
@@ -109,6 +111,7 @@ app.use('/api', (req, res, next) => {
 // ─── AUTH ROUTES ─────────────────────────────────────────────────────────────
 app.post('/api/auth/login', async (req, res) => {
   try {
+    await migrationReady  // ensure table exists before first login attempt
     const { username, password } = req.body
     if (!username || !password) return res.status(400).json({ error: 'Username and password required.' })
     const { rows } = await pool.query('SELECT * FROM users WHERE LOWER(username)=LOWER($1)', [username])
@@ -127,6 +130,7 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.get('/api/auth/me', requireAuth, async (req, res) => {
   try {
+    await migrationReady
     const { rows } = await pool.query('SELECT id,username,display_name,email,role,force_password_change,last_login_at FROM users WHERE id=$1', [req.user.userId])
     if (!rows[0]) return res.status(404).json({ error: 'User not found.' })
     res.json(rows[0])
