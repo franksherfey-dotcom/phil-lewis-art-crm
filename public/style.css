@@ -214,10 +214,34 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
 .activity-date { color: var(--text-muted); font-size: 11px; white-space: nowrap; }
 
 /* ── FILTERS ── */
-.filters-bar { display: flex; gap: 10px; margin-bottom: 20px; }
+.filters-bar { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
 .filter-input { flex: 1; max-width: 340px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; background: var(--surface); }
 .filter-input:focus { outline: none; border-color: var(--primary); }
 .filter-select { padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; background: var(--surface); cursor: pointer; }
+.filter-toggle { border: 1px solid var(--border); }
+.filter-toggle-active { background: var(--primary) !important; color: #fff !important; border-color: var(--primary) !important; }
+
+/* ── Bulk action bar ── */
+.bulk-action-bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 16px; margin-bottom: 10px;
+  background: #EEF4FF; border: 1px solid #C7D9FF;
+  border-radius: var(--radius); font-size: 13px;
+}
+.bulk-count { font-weight: 600; color: var(--primary); white-space: nowrap; }
+.bulk-seq-select { min-width: 200px; }
+
+/* ── Sequence status badges ── */
+.seq-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 20px;
+  font-size: 11px; font-weight: 600; white-space: nowrap;
+}
+.seq-active    { background: #D1FAE5; color: #065F46; }
+.seq-replied   { background: #DBEAFE; color: #1E40AF; }
+.seq-completed { background: #F3F4F6; color: #6B7280; }
+
+/* ── Selected contact row highlight ── */
+.contact-row-selected { background: #F0F5FF !important; }
 
 /* ── CARD GRID ── */
 .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }

@@ -158,11 +158,21 @@ app.delete('/api/companies/:id', async (req, res) => {
 
 app.get('/api/contacts', async (req, res) => {
   try {
-    const { search, company_id } = req.query
+    const { search, company_id, category, tag, not_in_sequence } = req.query
     let sql = `
-      SELECT ct.*, co.name AS company_name, co.type AS company_type
+      SELECT ct.*,
+             co.name AS company_name, co.type AS company_type,
+             co.category AS company_category, co.tags AS company_tags,
+             e.status AS enrollment_status, s.name AS sequence_name, e.id AS enrollment_id
       FROM contacts ct
       LEFT JOIN companies co ON ct.company_id = co.id
+      LEFT JOIN LATERAL (
+        SELECT id, sequence_id, status FROM enrollments
+        WHERE contact_id = ct.id
+        ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'replied' THEN 1 WHEN 'paused' THEN 2 ELSE 3 END
+        LIMIT 1
+      ) e ON true
+      LEFT JOIN sequences s ON s.id = e.sequence_id
       WHERE 1=1
     `
     const params = []
@@ -173,8 +183,21 @@ app.get('/api/contacts', async (req, res) => {
       params.push(s, s, s, s); i += 4
     }
     if (company_id) { sql += ` AND ct.company_id=$${i}`; params.push(company_id); i++ }
+    if (category)   { sql += ` AND co.category ILIKE $${i}`; params.push(category); i++ }
+    if (tag)        { sql += ` AND (',' || co.tags || ',') LIKE $${i}`; params.push(`%,${tag},%`); i++ }
+    if (not_in_sequence === 'true') {
+      sql += ` AND NOT EXISTS (SELECT 1 FROM enrollments WHERE contact_id=ct.id AND status='active')`
+    }
     sql += ' ORDER BY co.name ASC, ct.first_name ASC'
     res.json(await all(sql, params))
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// Distinct categories for filter dropdown
+app.get('/api/contacts/categories', async (req, res) => {
+  try {
+    const rows = await all(`SELECT DISTINCT category FROM companies WHERE category IS NOT NULL AND category != '' ORDER BY category ASC`)
+    res.json(rows.map(r => r.category))
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 

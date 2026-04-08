@@ -158,17 +158,35 @@
         </div>
         <div class="filters-bar">
           <input type="text" id="search-contacts" placeholder="Search contacts..." oninput="loadContacts()" class="filter-input">
+          <select id="filter-category" class="filter-select" onchange="loadContacts()">
+            <option value="">All Verticals</option>
+          </select>
+          <button id="btn-not-in-seq" class="btn btn-outline btn-sm filter-toggle" onclick="toggleNotInSequence()" title="Show only contacts not in an active sequence">Not in Sequence</button>
+          <button class="btn btn-ghost btn-sm" onclick="clearContactFilters()" style="color:var(--text-muted)">Clear filters</button>
         </div>
+
+        <!-- Bulk action bar — shown when contacts are checked -->
+        <div id="bulk-action-bar" class="bulk-action-bar" style="display:none">
+          <span id="bulk-count" class="bulk-count">0 selected</span>
+          <select id="bulk-sequence-select" class="filter-select bulk-seq-select">
+            <option value="">— Choose sequence —</option>
+          </select>
+          <button class="btn btn-primary btn-sm" onclick="bulkEnrollSelected()">Add to Sequence</button>
+          <button class="btn btn-ghost btn-sm" onclick="clearContactSelection()" style="margin-left:auto;color:var(--text-muted)">✕ Clear selection</button>
+        </div>
+
         <div id="contacts-table-wrap" class="table-scroll-wrapper">
           <table class="data-table" id="contacts-table">
             <thead>
               <tr>
+                <th style="width:36px"><input type="checkbox" id="select-all-contacts" onclick="toggleSelectAllContacts()" title="Select all"></th>
                 <th>Name</th>
                 <th>Title</th>
                 <th>Company</th>
                 <th>Email</th>
                 <th>Phone</th>
                 <th>LinkedIn</th>
+                <th>Sequence</th>
                 <th>Actions</th>
               </tr>
             </thead>
