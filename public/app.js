@@ -983,8 +983,12 @@ function addStep(data = null) {
       <input type="text" name="step_subject_${n}" value="${data ? esc(data.subject) : ''}" placeholder="e.g. Art Licensing Inquiry — {{company}}" required>
     </div>
     <div class="step-body form-group">
-      <label>Email Body</label>
-      <textarea name="step_body_${n}" rows="6" placeholder="Hi {{first_name}},\n\nI'm Frank Sherfey, licensing representative for Phil Lewis..." required>${data ? esc(data.body) : ''}</textarea>
+      <div class="step-body-tabs">
+        <button type="button" class="step-tab step-tab-active" onclick="switchStepTab(${n}, 'edit', this)">Edit</button>
+        <button type="button" class="step-tab" onclick="switchStepTab(${n}, 'preview', this)">Preview</button>
+      </div>
+      <textarea id="step-body-textarea-${n}" name="step_body_${n}" rows="10" placeholder="Hi {{first_name}},&#10;&#10;I'm Frank Sherfey, licensing representative for Phil Lewis..." required>${data ? esc(data.body) : ''}</textarea>
+      <div id="step-body-preview-${n}" class="step-body-preview" style="display:none"></div>
     </div>
   `;
   container.appendChild(div);
@@ -993,6 +997,22 @@ function addStep(data = null) {
 function removeStep(n) {
   const el = document.getElementById(`step-block-${n}`);
   if (el) el.remove();
+}
+
+function switchStepTab(n, tab, btn) {
+  const textarea = document.getElementById(`step-body-textarea-${n}`);
+  const preview  = document.getElementById(`step-body-preview-${n}`);
+  const tabs     = btn.closest('.step-body-tabs').querySelectorAll('.step-tab');
+  tabs.forEach(t => t.classList.remove('step-tab-active'));
+  btn.classList.add('step-tab-active');
+  if (tab === 'preview') {
+    preview.innerHTML = renderEmailBody(textarea.value);
+    textarea.style.display = 'none';
+    preview.style.display  = 'block';
+  } else {
+    textarea.style.display = 'block';
+    preview.style.display  = 'none';
+  }
 }
 
 async function saveSequence(e) {

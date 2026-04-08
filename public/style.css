@@ -427,7 +427,22 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
 .step-delay-row { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 10px; }
 .step-delay-row input { width: 70px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 5px; text-align: center; }
 .step-subject input { width: 100%; padding: 7px 10px; border: 1px solid var(--border); border-radius: 5px; font-size: 13px; }
-.step-body textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 5px; font-size: 13px; font-family: inherit; resize: vertical; min-height: 100px; }
+.step-body textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 0 0 5px 5px; font-size: 13px; font-family: inherit; resize: vertical; min-height: 180px; box-sizing: border-box; }
+.step-body-tabs { display: flex; gap: 0; margin-bottom: 0; }
+.step-tab {
+  padding: 5px 14px; font-size: 12px; font-weight: 600; cursor: pointer;
+  border: 1px solid var(--border); background: var(--bg); color: var(--text-muted);
+  border-bottom: none; border-radius: 5px 5px 0 0; margin-right: 3px;
+}
+.step-tab-active { background: var(--surface); color: var(--primary); border-color: var(--border); }
+.step-tab:hover:not(.step-tab-active) { background: var(--surface); color: var(--text); }
+.step-body-preview {
+  width: 100%; min-height: 180px; padding: 12px 14px; box-sizing: border-box;
+  border: 1px solid var(--border); border-radius: 0 0 5px 5px;
+  background: var(--surface); font-size: 13px; line-height: 1.6;
+  overflow-y: auto;
+}
+.step-body-preview img { max-width: 100%; height: auto; border-radius: 6px; margin: 4px 0; }
 
 /* ── QUEUE ── */
 .queue-info { font-size: 13px; color: var(--text-muted); margin-bottom: 16px; }
