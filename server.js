@@ -189,14 +189,16 @@ app.post('/api/users', requireAuth, requireAdmin, async (req, res) => {
 
 app.put('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
   try {
-    const { displayName, email, role, password, forcePasswordChange } = req.body
+    const { display_name, displayName, email, role, password } = req.body
+    const name = display_name || displayName  // accept both casings
     if (role && !['admin','user','readonly'].includes(role)) return res.status(400).json({ error: 'Invalid role.' })
     const existing = (await pool.query('SELECT * FROM users WHERE id=$1', [req.params.id])).rows[0]
     if (!existing) return res.status(404).json({ error: 'User not found.' })
     const hash = password ? await bcrypt.hash(password, 10) : existing.password_hash
+    const forcePwChange = password ? true : existing.force_password_change
     await pool.query(
       `UPDATE users SET display_name=$1, email=$2, role=$3, password_hash=$4, force_password_change=$5, updated_at=NOW() WHERE id=$6`,
-      [displayName||existing.display_name, email||existing.email, role||existing.role, hash, forcePasswordChange ?? existing.force_password_change, req.params.id]
+      [name||existing.display_name, email||existing.email, role||existing.role, hash, forcePwChange, req.params.id]
     )
     res.json({ ok: true })
   } catch (err) { res.status(500).json({ error: err.message }) }
@@ -206,6 +208,20 @@ app.delete('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
   try {
     if (parseInt(req.params.id) === req.user.userId) return res.status(400).json({ error: 'Cannot delete your own account.' })
     await pool.query('DELETE FROM users WHERE id=$1', [req.params.id])
+    res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.post('/api/users/:id/reset-password', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { password } = req.body
+    if (!password || password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters.' })
+    const hash = await bcrypt.hash(password, 10)
+    const { rowCount } = await pool.query(
+      'UPDATE users SET password_hash=$1, force_password_change=TRUE, updated_at=NOW() WHERE id=$2',
+      [hash, req.params.id]
+    )
+    if (!rowCount) return res.status(404).json({ error: 'User not found.' })
     res.json({ ok: true })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })

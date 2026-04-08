@@ -271,9 +271,10 @@ async function loadUsers() {
         <td>${esc(u.username)}</td>
         <td>${esc(u.email || '—')}</td>
         <td><span class="role-badge role-${u.role}">${esc(u.role)}</span></td>
-        <td>${u.last_login ? fmtDate(u.last_login) : '<span style="color:var(--text-light)">Never</span>'}</td>
+        <td>${u.last_login_at ? fmtDate(u.last_login_at) : '<span style="color:var(--text-light)">Never</span>'}</td>
         <td>
           <button class="btn btn-sm" onclick="openUserModal(${u.id})">Edit</button>
+          <button class="btn btn-sm btn-warning" onclick="adminResetPassword(${u.id}, '${esc(u.username)}')">Reset PW</button>
           ${u.id !== currentUser.id ? `<button class="btn btn-sm btn-danger" onclick="deleteUser(${u.id}, '${esc(u.username)}')">Delete</button>` : ''}
         </td>
       </tr>`).join('');
@@ -283,19 +284,65 @@ async function loadUsers() {
 }
 
 let editingUserId = null;
+
+// Live password strength indicator
+function checkPwRequirements(pw) {
+  const checks = {
+    'req-length': pw.length >= 8,
+    'req-upper':  /[A-Z]/.test(pw),
+    'req-lower':  /[a-z]/.test(pw),
+    'req-number': /[0-9]/.test(pw),
+  };
+  Object.entries(checks).forEach(([id, ok]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.toggle('req-met', ok);
+    el.classList.toggle('req-unmet', !ok);
+  });
+  return Object.values(checks).every(Boolean);
+}
+
+function validatePassword(pw) {
+  if (!pw) return 'Password is required.';
+  if (pw.length < 8) return 'Password must be at least 8 characters.';
+  if (!/[A-Z]/.test(pw)) return 'Password must include at least one uppercase letter.';
+  if (!/[a-z]/.test(pw)) return 'Password must include at least one lowercase letter.';
+  if (!/[0-9]/.test(pw)) return 'Password must include at least one number.';
+  return null;
+}
+
+// Attach live listener once DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+  const pwInput = document.getElementById('user-pw-input');
+  if (pwInput) {
+    pwInput.addEventListener('input', () => checkPwRequirements(pwInput.value));
+  }
+});
+
 async function openUserModal(userId) {
   editingUserId = userId || null;
-  const form = document.getElementById('user-form');
-  const title = document.getElementById('user-modal-title');
+  const form    = document.getElementById('user-form');
+  const title   = document.getElementById('user-modal-title');
   const pwInput = document.getElementById('user-pw-input');
+  const pwConfirm = document.getElementById('user-pw-confirm');
   const pwHint  = document.getElementById('user-pw-hint');
+  const pwReqs  = document.getElementById('user-pw-requirements');
+  const pwConfirmGroup = document.getElementById('user-pw-confirm-group');
   showFormError('user-form-error', '');
   form.reset();
+  // Reset requirement indicators
+  ['req-length','req-upper','req-lower','req-number'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.classList.remove('req-met','req-unmet'); }
+  });
 
   if (userId) {
     title.textContent = 'Edit User';
     if (pwHint) pwHint.style.display = '';
+    if (pwReqs) pwReqs.style.display = 'none';
+    if (pwConfirmGroup) pwConfirmGroup.style.display = 'none';
     if (pwInput) pwInput.required = false;
+    if (pwConfirm) pwConfirm.required = false;
     try {
       const users = await apiFetch('/api/users');
       const u = users.find(x => x.id === userId);
@@ -309,7 +356,10 @@ async function openUserModal(userId) {
   } else {
     title.textContent = 'Add User';
     if (pwHint) pwHint.style.display = 'none';
+    if (pwReqs) pwReqs.style.display = '';
+    if (pwConfirmGroup) pwConfirmGroup.style.display = '';
     if (pwInput) pwInput.required = true;
+    if (pwConfirm) pwConfirm.required = true;
   }
   openModal('modal-user');
 }
@@ -318,13 +368,25 @@ async function saveUser(e) {
   e.preventDefault();
   showFormError('user-form-error', '');
   const form = e.target;
+  const pw      = form.elements['password'].value;
+  const pwConf  = form.elements['passwordConfirm']?.value || '';
+
+  // Validate password when set
+  if (pw) {
+    const pwError = validatePassword(pw);
+    if (pwError) { showFormError('user-form-error', pwError); return; }
+    if (pw !== pwConf) { showFormError('user-form-error', 'Passwords do not match.'); return; }
+  } else if (!editingUserId) {
+    showFormError('user-form-error', 'Password is required for new users.');
+    return;
+  }
+
   const body = {
     display_name: form.elements['displayName'].value.trim(),
     username:     form.elements['username'].value.trim(),
     email:        form.elements['email'].value.trim() || null,
     role:         form.elements['role'].value,
   };
-  const pw = form.elements['password'].value;
   if (pw) body.password = pw;
 
   try {
@@ -339,6 +401,22 @@ async function saveUser(e) {
     loadUsers();
   } catch(err) {
     showFormError('user-form-error', err.message);
+  }
+}
+
+async function adminResetPassword(userId, username) {
+  const newPw = prompt(`Set a new temporary password for "${username}":\n\nMust be 8+ chars, include uppercase, lowercase, and a number.`);
+  if (!newPw) return;
+  const err = validatePassword(newPw);
+  if (err) { alert(err); return; }
+  try {
+    await apiFetch(`/api/users/${userId}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({ password: newPw }),
+    });
+    toast(`Password reset for ${username}. They'll be prompted to change it on next login.`, 'success');
+  } catch(e) {
+    toast(e.message, 'error');
   }
 }
 

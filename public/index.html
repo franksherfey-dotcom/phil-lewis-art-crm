@@ -580,10 +580,20 @@
             <option value="readonly">Read-only — view only, no changes</option>
           </select>
         </div>
-        <div class="form-group">
+        <div class="form-group" id="user-pw-group">
           <label id="user-pw-label">Password</label>
           <input type="password" name="password" id="user-pw-input" minlength="8" placeholder="At least 8 characters" autocomplete="new-password">
           <div class="form-hint" id="user-pw-hint">Leave blank to keep current password (edit mode)</div>
+          <ul class="pw-requirements" id="user-pw-requirements">
+            <li id="req-length">At least 8 characters</li>
+            <li id="req-upper">One uppercase letter (A–Z)</li>
+            <li id="req-lower">One lowercase letter (a–z)</li>
+            <li id="req-number">One number (0–9)</li>
+          </ul>
+        </div>
+        <div class="form-group" id="user-pw-confirm-group">
+          <label>Confirm Password</label>
+          <input type="password" name="passwordConfirm" id="user-pw-confirm" minlength="8" placeholder="Re-enter password" autocomplete="new-password">
         </div>
         <div id="user-form-error" class="login-error" style="display:none"></div>
         <div class="modal-actions">
