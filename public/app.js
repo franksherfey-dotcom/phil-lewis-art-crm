@@ -1296,7 +1296,7 @@ async function previewEmail(enrollmentId) {
     const preview = await apiFetch(`/api/queue/preview/${enrollmentId}`);
     document.getElementById('preview-content').innerHTML = `
       <div class="preview-subject">Subject: ${esc(preview.subject)}</div>
-      <div class="preview-body">${esc(preview.body)}</div>
+      <div class="preview-body">${renderEmailBody(preview.body)}</div>
     `;
     currentEnrollmentIdForPreview = enrollmentId;
     document.getElementById('preview-send-btn').onclick = () => {
@@ -1557,7 +1557,7 @@ async function openInboxMessage(index) {
       </div>
       <button class="inbox-rp-close" onclick="closeInboxPane()">&#10005;</button>
     </div>
-    <div class="inbox-rp-body">${esc(cleanEmailBody(m.body) || '(no message body)')}</div>
+    <div class="inbox-rp-body">${renderEmailBody(m.body)}</div>
     <div class="inbox-rp-actions">
       ${m.email ? `<button class="btn btn-primary" onclick="openReplyCompose(${index}, false)">&#9166; Reply</button>` : ''}
       ${m.email ? `<button class="btn btn-outline" onclick="openReplyCompose(${index}, true)">&#8627; Forward</button>` : ''}
@@ -1851,6 +1851,24 @@ function cleanEmailBody(text) {
     .replace(/=([0-9A-Fa-f]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+}
+
+// Renders email body as HTML — strips scripts/event handlers but allows
+// safe tags like <img>, <a>, <br>, <p>, <strong> so images actually render.
+function renderEmailBody(text) {
+  if (!text) return '<span style="color:var(--text-muted)">(no message body)</span>';
+  const cleaned = cleanEmailBody(text);
+  if (!/<[a-z][\s\S]*>/i.test(cleaned)) {
+    // Plain text — escape and convert newlines to <br>
+    return esc(cleaned).replace(/\n/g, '<br>');
+  }
+  // HTML content — sanitize then render
+  return cleaned
+    .replace(/<script[\s\S]*?<\/script>/gi, '')   // remove script blocks
+    .replace(/<style[\s\S]*?<\/style>/gi, '')      // remove style blocks
+    .replace(/\son\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]*)/gi, '') // strip event handlers
+    .replace(/href\s*=\s*["']?\s*javascript:[^"'\s>]*/gi, 'href="#"') // strip js: hrefs
+    .replace(/\n/g, '<br>');
 }
 
 function fmtDate(dt) {
