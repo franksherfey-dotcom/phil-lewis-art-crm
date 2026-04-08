@@ -121,10 +121,10 @@ app.post('/api/auth/login', async (req, res) => {
     if (!valid) return res.status(401).json({ error: 'Invalid username or password.' })
     await pool.query('UPDATE users SET last_login_at=NOW() WHERE id=$1', [user.id])
     const token = jwt.sign(
-      { userId: user.id, username: user.username, displayName: user.display_name, role: user.role, forcePasswordChange: user.force_password_change },
+      { userId: user.id, username: user.username, display_name: user.display_name, role: user.role, force_password_change: user.force_password_change },
       JWT_SECRET, { expiresIn: JWT_EXPIRES }
     )
-    res.json({ token, user: { id: user.id, username: user.username, displayName: user.display_name, role: user.role, forcePasswordChange: user.force_password_change } })
+    res.json({ token, user: { id: user.id, username: user.username, display_name: user.display_name, role: user.role, force_password_change: user.force_password_change } })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
