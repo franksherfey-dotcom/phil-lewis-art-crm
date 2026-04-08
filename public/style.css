@@ -1245,6 +1245,37 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
   display: flex; align-items: center; gap: 8px; margin-top: 4px;
 }
 
+/* ── Signature editor ── */
+.sig-tabs {
+  display: flex; gap: 0; margin-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.sig-tab {
+  padding: 7px 18px; font-size: 13px; font-weight: 600;
+  background: none; border: none; border-bottom: 2px solid transparent;
+  cursor: pointer; color: var(--text-light); margin-bottom: -1px;
+  transition: color .15s, border-color .15s;
+}
+.sig-tab-active { color: var(--primary); border-bottom-color: var(--primary); }
+.sig-tab:hover:not(.sig-tab-active) { color: var(--text); }
+#sig-editor {
+  width: 100%; box-sizing: border-box; padding: 10px 12px;
+  font-size: 13px; font-family: 'Monaco', 'Menlo', monospace;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg); color: var(--text);
+  resize: vertical; line-height: 1.6;
+}
+#sig-editor:focus { outline: none; border-color: var(--primary); }
+.sig-preview-box {
+  padding: 16px 18px; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--bg);
+  min-height: 80px; font-size: 14px; line-height: 1.6; color: var(--text);
+}
+.inbox-sig-note {
+  font-size: 12px; color: var(--text-light);
+  padding: 6px 0 2px; font-style: italic;
+}
+
 /* ── Inbox mobile ── */
 @media (max-width: 768px) {
   .inbox-tabs { overflow-x: auto; }

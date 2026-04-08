@@ -1935,12 +1935,75 @@ async function openInboxMessage(index) {
   pane.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-function openReplyCompose(index, isForward) {
+// ── EMAIL SIGNATURE ───────────────────────────────────────────────────────
+let _cachedSignature = null;
+
+const DEFAULT_SIGNATURE = `<br><br>Best,<br>
+<b>Frank Sherfey</b><br>
+Licensing @ <a href="https://www.phillewisart.com" target="_blank">Phil Lewis Art</a><br>
+(656) 296-7917<br>
+<a href="https://www.phillewisart.com" target="_blank" style="display:inline-block;margin-top:6px">
+  <img src="https://cdn.shopify.com/s/files/1/0579/0921/4404/files/Phil_Lewis_Art_Logo_Banner.png"
+       onerror="this.style.display='none'"
+       alt="Phil Lewis Art" style="height:40px;max-width:200px;object-fit:contain">
+</a>`;
+
+async function getSignature() {
+  if (_cachedSignature !== null) return _cachedSignature;
+  try {
+    const s = await apiFetch('/api/settings');
+    _cachedSignature = s.email_signature || DEFAULT_SIGNATURE;
+  } catch(e) {
+    _cachedSignature = DEFAULT_SIGNATURE;
+  }
+  return _cachedSignature;
+}
+
+function switchSigTab(tab, btn) {
+  document.querySelectorAll('.sig-tab').forEach(t => t.classList.remove('sig-tab-active'));
+  btn.classList.add('sig-tab-active');
+  const editPane    = document.getElementById('sig-edit-pane');
+  const previewPane = document.getElementById('sig-preview-pane');
+  if (tab === 'edit') {
+    editPane.style.display = ''; previewPane.style.display = 'none';
+  } else {
+    editPane.style.display = 'none'; previewPane.style.display = '';
+    const raw = document.getElementById('sig-editor')?.value || '';
+    const el  = document.getElementById('sig-preview-render');
+    if (el) el.innerHTML = raw;
+  }
+}
+
+async function saveSignature() {
+  const val = document.getElementById('sig-editor')?.value || '';
+  const msgEl = document.getElementById('sig-msg');
+  try {
+    await apiFetch('/api/settings', {
+      method: 'POST',
+      body: JSON.stringify({ email_signature: val }),
+    });
+    _cachedSignature = val;
+    msgEl.textContent = 'Signature saved.';
+    msgEl.className = 'settings-msg success';
+    setTimeout(() => { msgEl.textContent = ''; }, 3000);
+  } catch(e) {
+    msgEl.textContent = e.message;
+    msgEl.className = 'settings-msg error';
+  }
+}
+
+function resetDefaultSignature() {
+  const el = document.getElementById('sig-editor');
+  if (el) el.value = DEFAULT_SIGNATURE;
+}
+
+async function openReplyCompose(index, isForward) {
   const m = _inboxCache[index];
   if (!m) return;
   const area = document.getElementById('inbox-compose-area');
   if (!area) return;
 
+  const sig = await getSignature();
   const reSubject = isForward
     ? `Fwd: ${m.subject || ''}`
     : (m.subject && !/^re:/i.test(m.subject) ? `Re: ${m.subject}` : (m.subject || ''));
@@ -1949,6 +2012,9 @@ function openReplyCompose(index, isForward) {
   const fullName = [m.first_name, m.last_name].filter(Boolean).join(' ') || m.email || '';
   const quoteDate = m.sent_at ? new Date(m.sent_at).toLocaleString() : '';
   const quotedBody = `\n\n\n---\nOn ${quoteDate}, ${esc(fullName)} wrote:\n${(m.body || '').split('\n').map(l => '> ' + l).join('\n')}`;
+  // Strip HTML tags for the textarea preview (signature is injected as HTML at send time)
+  const sigPlain = sig.replace(/<[^>]+>/g, '').replace(/\n{3,}/g, '\n\n').trim();
+  const bodyWithSig = `\n\n${sigPlain}${quotedBody}`;
 
   area.style.display = 'block';
   area.innerHTML = `
@@ -1963,8 +2029,9 @@ function openReplyCompose(index, isForward) {
       </div>
       <div class="inbox-compose-row">
         <label class="inbox-compose-label">Message</label>
-        <textarea id="ic-body" class="inbox-compose-textarea" rows="8">${esc(quotedBody)}</textarea>
+        <textarea id="ic-body" class="inbox-compose-textarea" rows="10">${esc(bodyWithSig)}</textarea>
       </div>
+      <div class="inbox-sig-note">✉ Your email signature will be appended automatically</div>
       <div class="inbox-compose-actions">
         <button class="btn btn-primary" onclick="sendInboxReply(${index}, ${isForward})">Send</button>
         <button class="btn btn-outline" onclick="closeReplyCompose()">Cancel</button>
@@ -1972,7 +2039,7 @@ function openReplyCompose(index, isForward) {
       </div>
     </div>`;
 
-  // Place cursor at start of textarea (before quoted text)
+  // Place cursor at very top (before signature/quote)
   const ta = document.getElementById('ic-body');
   if (ta) { ta.focus(); ta.setSelectionRange(0, 0); ta.scrollTop = 0; }
 }
@@ -1994,6 +2061,10 @@ async function sendInboxReply(index, isForward) {
     toast('To, Subject, and Message are all required.', 'error'); return;
   }
 
+  // Build HTML body: user text + HTML signature
+  const sig = await getSignature();
+  const bodyHtml = body.replace(/\n/g, '<br>') + '<br><br>' + sig;
+
   const btn = document.querySelector('#inbox-compose-area .btn-primary');
   if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
   if (statusEl) statusEl.textContent = '';
@@ -2006,7 +2077,8 @@ async function sendInboxReply(index, isForward) {
         toEmail,
         toName: isForward ? '' : ([m.first_name, m.last_name].filter(Boolean).join(' ') || ''),
         subject,
-        body,
+        body: bodyHtml,
+        isHtml: true,
         contactId:  m.contact_id  || null,
         companyId:  m.company_id  || null,
         inReplyTo:  isForward ? null : (m.message_id || null),
@@ -2060,6 +2132,12 @@ async function loadSettings() {
       imap.querySelector('[name="imap_port"]').value = s.imap_port||'993';
       imap.querySelector('[name="imap_secure"]').value = s.imap_secure||'true';
       imap.querySelector('[name="imap_sent_folder"]').value = s.imap_sent_folder||'Sent';
+    }
+    // Signature
+    const sigEl = document.getElementById('sig-editor');
+    if (sigEl) {
+      sigEl.value = s.email_signature || DEFAULT_SIGNATURE;
+      _cachedSignature = sigEl.value;
     }
   } catch(e) { toast(e.message, 'error'); }
 }

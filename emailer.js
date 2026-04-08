@@ -71,7 +71,7 @@ async function appendToSentFolder(settings, rawMessage) {
   }
 }
 
-async function sendEmail({ toEmail, toName, subject, body, contact, company, inReplyTo, references }) {
+async function sendEmail({ toEmail, toName, subject, body, isHtml, contact, company, inReplyTo, references }) {
   const settings = await getSettings()
   if (!settings.smtp_host || !settings.smtp_user) {
     throw new Error('SMTP not configured. Go to Settings to set up your email.')
@@ -89,8 +89,9 @@ async function sendEmail({ toEmail, toName, subject, body, contact, company, inR
     to: toName ? `"${toName}" <${toEmail}>` : toEmail,
     replyTo: fromEmail,
     subject: resolvedSubject,
-    text: resolvedBody,
-    html: resolvedBody.replace(/\n/g, '<br>'),
+    // If body is already HTML (e.g. includes signature), use as-is; otherwise convert line breaks
+    text: resolvedBody.replace(/<[^>]+>/g, ''),
+    html: isHtml ? resolvedBody : resolvedBody.replace(/\n/g, '<br>'),
   }
 
   // Threading headers — keeps replies grouped in email clients and RoundCube

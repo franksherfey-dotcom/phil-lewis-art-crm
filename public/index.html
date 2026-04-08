@@ -494,6 +494,28 @@
             </ul>
           </div>
         </div>
+
+        <!-- ── EMAIL SIGNATURE ── -->
+        <div class="settings-card">
+          <h2>✉ Email Signature</h2>
+          <p class="settings-help">Automatically appended to every reply and outreach email sent from the CRM.</p>
+          <div class="sig-tabs">
+            <button class="sig-tab sig-tab-active" onclick="switchSigTab('edit',this)">Edit</button>
+            <button class="sig-tab" onclick="switchSigTab('preview',this)">Preview</button>
+          </div>
+          <div id="sig-edit-pane">
+            <textarea id="sig-editor" rows="8" placeholder="Write your signature here. HTML is supported — use <b>, <a href>, <br>, etc."></textarea>
+            <p class="settings-help" style="margin-top:6px">HTML is supported. Use <code>&lt;br&gt;</code> for line breaks, <code>&lt;b&gt;</code> for bold, <code>&lt;a href="..."&gt;</code> for links.</p>
+          </div>
+          <div id="sig-preview-pane" style="display:none">
+            <div id="sig-preview-render" class="sig-preview-box"></div>
+          </div>
+          <div class="form-actions" style="margin-top:16px">
+            <button class="btn btn-primary" onclick="saveSignature()">Save Signature</button>
+            <button class="btn btn-outline" onclick="resetDefaultSignature()">Reset to Default</button>
+          </div>
+          <div id="sig-msg" class="settings-msg"></div>
+        </div>
       </section>
 
       <!-- ── USERS PAGE (admin only) ── -->

@@ -882,6 +882,7 @@ app.post('/api/settings', async (req, res) => {
     const fields = [
       'smtp_host','smtp_port','smtp_user','smtp_from_name','smtp_secure',
       'imap_host','imap_port','imap_secure','imap_sent_folder',
+      'email_signature',
     ]
     await Promise.all(
       fields
@@ -1031,10 +1032,10 @@ app.post('/api/inbox/sync', async (req, res) => {
 })
 
 // Send a reply (or forward) directly from the CRM inbox
-// Body: { toEmail, toName, subject, body, contactId, companyId, inReplyTo, references }
+// Body: { toEmail, toName, subject, body, isHtml, contactId, companyId, inReplyTo, references }
 app.post('/api/inbox/reply', async (req, res) => {
   try {
-    const { toEmail, toName, subject, body, contactId, companyId, inReplyTo, references } = req.body
+    const { toEmail, toName, subject, body, isHtml, contactId, companyId, inReplyTo, references } = req.body
     if (!toEmail || !subject || !body) {
       return res.status(400).json({ error: 'toEmail, subject, and body are required.' })
     }
@@ -1056,6 +1057,7 @@ app.post('/api/inbox/reply', async (req, res) => {
       toName: toName || null,
       subject,
       body,
+      isHtml: !!isHtml,
       contact,
       company,
       inReplyTo: inReplyTo || null,
