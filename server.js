@@ -25,27 +25,57 @@ app.use(express.static(path.join(__dirname, 'public')))
 // ─── USERS TABLE MIGRATION ───────────────────────────────────────────────────
 ;(async () => {
   try {
+    // Create table if it doesn't exist at all
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
-        id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+        id BIGSERIAL PRIMARY KEY,
         username TEXT NOT NULL UNIQUE,
         display_name TEXT,
         email TEXT,
-        password_hash TEXT NOT NULL,
-        role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('admin','user','readonly')),
+        password_hash TEXT NOT NULL DEFAULT '',
+        role TEXT NOT NULL DEFAULT 'user',
         force_password_change BOOLEAN NOT NULL DEFAULT TRUE,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         last_login_at TIMESTAMPTZ
       )
     `)
-    // Seed first admin if no users exist
-    const { rows } = await pool.query('SELECT COUNT(*)::int AS n FROM users')
+    // Additive migrations — safely add any missing columns to existing table
+    const alterations = [
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT NOT NULL DEFAULT ''`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user'`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS force_password_change BOOLEAN NOT NULL DEFAULT TRUE`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ`,
+    ]
+    for (const sql of alterations) {
+      await pool.query(sql).catch(() => {}) // ignore errors (e.g. NOT NULL constraint on existing col)
+    }
+    // Ensure role constraint exists
+    await pool.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'users_role_check'
+        ) THEN
+          ALTER TABLE users ADD CONSTRAINT users_role_check
+            CHECK (role IN ('admin','user','readonly'));
+        END IF;
+      END $$
+    `).catch(() => {})
+
+    // Seed first admin if table is empty or has no admin
+    const { rows } = await pool.query(`SELECT COUNT(*)::int AS n FROM users WHERE role='admin'`)
     if (rows[0].n === 0) {
       const hash = await bcrypt.hash('ChangeMe123!', 10)
       await pool.query(
         `INSERT INTO users (username, display_name, role, password_hash, force_password_change)
-         VALUES ('frank', 'Frank Sherfey', 'admin', $1, TRUE)`,
+         VALUES ('frank', 'Frank Sherfey', 'admin', $1, TRUE)
+         ON CONFLICT (username) DO UPDATE
+           SET password_hash = $1, role = 'admin', force_password_change = TRUE`,
         [hash]
       )
       console.log('✅ Seeded initial admin user: frank / ChangeMe123!')
