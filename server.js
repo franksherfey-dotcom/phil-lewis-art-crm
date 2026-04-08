@@ -25,7 +25,21 @@ app.use(express.static(path.join(__dirname, 'public')))
 // ─── USERS TABLE MIGRATION ───────────────────────────────────────────────────
 ;(async () => {
   try {
-    // Create table if it doesn't exist at all
+    // If users table exists but is missing the 'username' column, drop and recreate it
+    await pool.query(`
+      DO $$
+      BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='users')
+        AND NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name='users' AND column_name='username'
+        ) THEN
+          DROP TABLE users CASCADE;
+        END IF;
+      END $$
+    `)
+
+    // Create fresh table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
         id BIGSERIAL PRIMARY KEY,
@@ -33,41 +47,15 @@ app.use(express.static(path.join(__dirname, 'public')))
         display_name TEXT,
         email TEXT,
         password_hash TEXT NOT NULL DEFAULT '',
-        role TEXT NOT NULL DEFAULT 'user',
+        role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('admin','user','readonly')),
         force_password_change BOOLEAN NOT NULL DEFAULT TRUE,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         last_login_at TIMESTAMPTZ
       )
     `)
-    // Additive migrations — safely add any missing columns to existing table
-    const alterations = [
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT`,
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT`,
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT`,
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT NOT NULL DEFAULT ''`,
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user'`,
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS force_password_change BOOLEAN NOT NULL DEFAULT TRUE`,
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`,
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`,
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ`,
-    ]
-    for (const sql of alterations) {
-      await pool.query(sql).catch(() => {}) // ignore errors (e.g. NOT NULL constraint on existing col)
-    }
-    // Ensure role constraint exists
-    await pool.query(`
-      DO $$ BEGIN
-        IF NOT EXISTS (
-          SELECT 1 FROM pg_constraint WHERE conname = 'users_role_check'
-        ) THEN
-          ALTER TABLE users ADD CONSTRAINT users_role_check
-            CHECK (role IN ('admin','user','readonly'));
-        END IF;
-      END $$
-    `).catch(() => {})
 
-    // Seed first admin if table is empty or has no admin
+    // Seed admin if none exists
     const { rows } = await pool.query(`SELECT COUNT(*)::int AS n FROM users WHERE role='admin'`)
     if (rows[0].n === 0) {
       const hash = await bcrypt.hash('ChangeMe123!', 10)
