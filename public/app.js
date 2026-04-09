@@ -94,7 +94,7 @@ function showPage(page) {
   if (page === 'activity') loadActivity();
   if (page === 'settings') loadSettings();
   if (page === 'reports') loadReports();
-  if (page === 'news') loadNews();
+  if (page === 'news') loadNews(null);
   if (page === 'users') loadUsers();
 }
 
@@ -2718,28 +2718,102 @@ async function loadReports() {
 }
 
 // ── NEWS ───────────────────────────────────────────────────────────────────
+// ── INDUSTRY NEWS ─────────────────────────────────────────────────────────
+let _newsCache = null;         // raw items from API
+let _newsTag   = '';           // active tag filter
 let newsSearchTimeout;
-async function loadNews(company) {
+
+async function loadNews(company, forceRefresh) {
   const el = document.getElementById('news-feed');
   if (!el) return;
-  el.innerHTML = '<div class="empty-state">Loading news…</div>';
-  try {
-    const url = company ? `/api/news?company=${encodeURIComponent(company)}` : '/api/news';
-    const items = await apiFetch(url);
-    if (!items || items.length === 0) {
-      el.innerHTML = '<div class="empty-state">No news found. Try a company name search.</div>';
+
+  if (company) {
+    // Company-specific search — bypass cache
+    el.innerHTML = '<div class="empty-state">Searching…</div>';
+    try {
+      const items = await apiFetch(`/api/news?company=${encodeURIComponent(company)}`);
+      _newsCache = items;
+      renderNews(items);
+    } catch(e) {
+      el.innerHTML = `<div class="empty-state">Could not load news: ${esc(e.message)}</div>`;
+    }
+    return;
+  }
+
+  if (!_newsCache || forceRefresh) {
+    el.innerHTML = '<div class="empty-state">Loading news…</div>';
+    try {
+      _newsCache = await apiFetch('/api/news');
+    } catch(e) {
+      el.innerHTML = `<div class="empty-state">Could not load news: ${esc(e.message)}</div>`;
       return;
     }
-    el.innerHTML = `<div class="news-grid">${items.map(item => `
-      <div class="news-card">
-        <div class="news-source">${esc(item.source||'')}</div>
-        <a class="news-title" href="${esc(item.link||'#')}" target="_blank" rel="noopener">${esc(item.title||'')}</a>
-        <div class="news-date">${item.date ? fmtDate(item.date) : ''}</div>
-      </div>`).join('')}
-    </div>`;
-  } catch(e) {
-    el.innerHTML = `<div class="empty-state">Could not load news: ${esc(e.message)}</div>`;
   }
+  applyNewsFilters();
+}
+
+function setNewsTag(tag, btn) {
+  _newsTag = tag;
+  document.querySelectorAll('.news-tag-chip').forEach(c => c.classList.remove('news-tag-active'));
+  if (btn) btn.classList.add('news-tag-active');
+  applyNewsFilters();
+}
+
+function applyNewsFilters() {
+  if (!_newsCache) return;
+  const days     = parseInt(document.getElementById('news-date-filter')?.value || '0') || 0;
+  const cutoff   = days ? Date.now() - days * 86400000 : 0;
+  const company  = document.getElementById('news-company-search')?.value?.trim().toLowerCase() || '';
+
+  let items = _newsCache.filter(item => {
+    // Tag filter
+    if (_newsTag && !(item.tags || []).includes(_newsTag)) return false;
+    // Date filter
+    if (cutoff && new Date(item.date).getTime() < cutoff) return false;
+    // Company text search
+    if (company && !(item.title||'').toLowerCase().includes(company) &&
+                   !(item.source||'').toLowerCase().includes(company)) return false;
+    return true;
+  });
+
+  const infoEl = document.getElementById('news-results-info');
+  if (infoEl) {
+    const filters = [
+      _newsTag ? `#${_newsTag}` : '',
+      days ? `last ${days} days` : '',
+      company ? `"${company}"` : '',
+    ].filter(Boolean).join(' · ');
+    infoEl.textContent = filters
+      ? `${items.length} article${items.length !== 1 ? 's' : ''} · ${filters}`
+      : `${items.length} articles`;
+  }
+
+  renderNews(items);
+}
+
+function renderNews(items) {
+  const el = document.getElementById('news-feed');
+  if (!el) return;
+  if (!items || items.length === 0) {
+    el.innerHTML = '<div class="empty-state">No articles match your filters. Try broadening your search.</div>';
+    return;
+  }
+  el.innerHTML = `<div class="news-grid">${items.map(item => {
+    const tags = (item.tags || []);
+    const tagChips = tags.map(t =>
+      `<span class="tag-chip ${tagClass(t)}">${esc(t)}</span>`
+    ).join('');
+    const dateStr = item.date ? new Date(item.date).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : '';
+    return `
+      <div class="news-card">
+        <div class="news-card-meta">
+          <span class="news-source">${esc(item.source||'')}</span>
+          <span class="news-date">${dateStr}</span>
+        </div>
+        <a class="news-title" href="${esc(item.link||'#')}" target="_blank" rel="noopener">${esc(item.title||'')}</a>
+        ${tagChips ? `<div class="news-card-tags">${tagChips}</div>` : ''}
+      </div>`;
+  }).join('')}</div>`;
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -2749,8 +2823,14 @@ document.addEventListener('DOMContentLoaded', () => {
       clearTimeout(newsSearchTimeout);
       newsSearchTimeout = setTimeout(() => {
         const v = inp.value.trim();
-        loadNews(v || null);
-      }, 500);
+        if (v.length > 2) {
+          loadNews(v);
+        } else if (v.length === 0) {
+          loadNews(null);
+        } else {
+          applyNewsFilters();
+        }
+      }, 400);
     });
   }
 });

@@ -1230,6 +1230,34 @@ async function fetchNewsFor(query) {
   } catch(e) { return [] }
 }
 
+// Keyword → CRM tag mappings (used server-side to tag articles)
+const NEWS_TAG_KEYWORDS = {
+  'apparel':    ['apparel','clothing','fashion','wear','garment','t-shirt','hoodie'],
+  'hard-goods': ['hard goods','equipment','gear','accessories','hardware','tools'],
+  'outdoor':    ['outdoor','nature','wildlife','adventure','hiking','mountain','national park'],
+  'skateboard': ['skateboard','skate','skating','skater','street sport'],
+  'snowboard':  ['snowboard','snow sport','ski','winter sport'],
+  'surf':       ['surf','surfing','ocean','wave','beach','coastal'],
+  'fishing':    ['fishing','fish','angler','tackle','bass','fly fishing'],
+  'camping':    ['camping','camp','backpacking','tent','rv','overlanding'],
+  'drinkware':  ['drinkware','beverage','bottle','cup','mug','tumbler','hydration','corkcicle','yeti','stanley'],
+  'footwear':   ['footwear','shoes','boots','sneakers','shoe','sandal'],
+  'puzzles':    ['puzzle','jigsaw','puzzles'],
+  'calendars':  ['calendar','planner','agenda','wall art','desk calendar'],
+  'fabric':     ['fabric','textile','quilt','upholstery','material','sewing','pattern'],
+  'cards':      ['greeting card','stationery','gift wrap','paper goods','card'],
+  'lifestyle':  ['lifestyle','home decor','gift','collectible','housewares','interior','decor'],
+}
+
+function autoTagArticle(item) {
+  const text = (item.title + ' ' + (item.source || '') + ' ' + (item.query || '')).toLowerCase()
+  const tags = []
+  for (const [tag, keywords] of Object.entries(NEWS_TAG_KEYWORDS)) {
+    if (keywords.some(kw => text.includes(kw))) tags.push(tag)
+  }
+  return tags
+}
+
 app.get('/api/news', async (req, res) => {
   try {
     const company = req.query.company || null
@@ -1238,23 +1266,30 @@ app.get('/api/news', async (req, res) => {
       results = await fetchNewsFor(`"${company}" art licensing OR collaboration OR artist`)
     } else {
       const queries = [
-        'art licensing outdoor brands 2025',
-        'artist collaboration skateboard surf snowboard apparel',
-        'art licensing puzzle calendar greeting cards gift',
-        'nature wildlife art brand collaboration limited edition',
-        'outdoor lifestyle drinkware artist collaboration',
+        { q: 'art licensing outdoor brands collaboration',           tags: ['outdoor','lifestyle'] },
+        { q: 'artist collaboration skateboard surf snowboard brand', tags: ['skateboard','surf','snowboard'] },
+        { q: 'art licensing puzzle calendar greeting cards gift',    tags: ['puzzles','calendars','cards'] },
+        { q: 'nature wildlife art brand collaboration',              tags: ['outdoor','lifestyle'] },
+        { q: 'drinkware artist collaboration brand licensing',       tags: ['drinkware'] },
+        { q: 'apparel fashion artist collaboration licensing',       tags: ['apparel'] },
+        { q: 'fishing camping outdoor gear art collaboration',       tags: ['fishing','camping'] },
+        { q: 'footwear shoe brand artist collaboration',             tags: ['footwear'] },
+        { q: 'fabric textile artist print licensing',                tags: ['fabric'] },
+        { q: 'hard goods equipment brand art licensing',             tags: ['hard-goods'] },
       ]
       const allItems = []
-      await Promise.all(queries.map(async qry => {
-        const items = await fetchNewsFor(qry)
-        items.forEach(i => { i.query = qry; allItems.push(i) })
+      await Promise.all(queries.map(async ({ q, tags }) => {
+        const items = await fetchNewsFor(q)
+        items.forEach(i => { i.query = q; i.queryTags = tags; allItems.push(i) })
       }))
       const seen = new Set()
       results = allItems
         .filter(i => { if (seen.has(i.title)) return false; seen.add(i.title); return true })
         .sort((a, b) => new Date(b.date) - new Date(a.date))
-        .slice(0, 40)
+        .slice(0, 80)
     }
+    // Auto-tag each article
+    results = results.map(i => ({ ...i, tags: autoTagArticle(i) }))
     res.json(results)
   } catch(e) { res.status(500).json({ error: e.message }) }
 })

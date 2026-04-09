@@ -794,12 +794,42 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
 .report-badge-warn { background: #fff0e8; color: #e45c00; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 20px; }
 
 /* ── NEWS ── */
+/* News filters */
+.news-search-input {
+  padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px;
+  font-size: 13px; width: 200px; background: var(--surface); color: var(--text);
+  font-family: inherit;
+}
+.news-date-select {
+  padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px;
+  font-size: 13px; background: var(--surface); color: var(--text);
+  font-family: inherit; cursor: pointer;
+}
+.news-tag-filters {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  padding: 12px 0 8px; border-bottom: 1px solid var(--border); margin-bottom: 14px;
+}
+.news-tag-chip {
+  padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text-light);
+  cursor: pointer; transition: all .15s;
+}
+.news-tag-chip:hover { border-color: var(--primary); color: var(--primary); }
+.news-tag-active { background: var(--primary) !important; color: #fff !important; border-color: var(--primary) !important; }
+.news-results-info {
+  font-size: 12px; color: var(--text-light); margin-bottom: 10px; padding: 0 2px;
+}
+/* News cards */
 .news-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; padding-top: 4px; }
-.news-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
-.news-source { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--accent); margin-bottom: 6px; }
-.news-title { display: block; font-size: 13px; font-weight: 600; color: var(--text); text-decoration: none; line-height: 1.4; margin-bottom: 6px; }
+.news-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
+.news-card:hover { border-color: var(--primary); }
+.news-card-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.news-source { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--accent); }
+.news-title { display: block; font-size: 13px; font-weight: 600; color: var(--text); text-decoration: none; line-height: 1.4; }
 .news-title:hover { color: var(--accent); text-decoration: underline; }
-.news-date { font-size: 11px; color: var(--text-muted); }
+.news-date { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+.news-card-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.news-card-tags .tag-chip { font-size: 10px; padding: 1px 7px; }
 
 /* ── PIPELINE FIELDS IN COMPANY DETAIL ── */
 .detail-pipeline-section { border-top: 1px solid var(--border); }

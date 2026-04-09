@@ -322,11 +322,37 @@
             <h1>Industry News</h1>
             <div style="font-size:12px;color:var(--text-muted);margin-top:3px">Art licensing, brand collabs &amp; prospect company news — updated every 45 min</div>
           </div>
-          <div class="page-actions" style="display:flex;gap:8px;align-items:center">
-            <input type="text" id="news-company-search" placeholder="Search by company name…" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;width:220px">
-            <button class="btn btn-outline" onclick="loadNews()">↺ Refresh</button>
+          <div class="page-actions" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <input type="text" id="news-company-search" placeholder="Search by company name…" class="news-search-input">
+            <select id="news-date-filter" class="news-date-select" onchange="applyNewsFilters()">
+              <option value="">All Dates</option>
+              <option value="7">Last 7 days</option>
+              <option value="30">Last 30 days</option>
+              <option value="90">Last 90 days</option>
+            </select>
+            <button class="btn btn-outline btn-sm" onclick="loadNews(null, true)">↺ Refresh</button>
           </div>
         </div>
+        <!-- Tag filter chips -->
+        <div class="news-tag-filters">
+          <button class="news-tag-chip news-tag-active" data-tag="" onclick="setNewsTag('',this)">All</button>
+          <button class="news-tag-chip tag-apparel"    data-tag="apparel"    onclick="setNewsTag('apparel',this)">Apparel</button>
+          <button class="news-tag-chip tag-hard-goods" data-tag="hard-goods" onclick="setNewsTag('hard-goods',this)">Hard Goods</button>
+          <button class="news-tag-chip tag-outdoor"    data-tag="outdoor"    onclick="setNewsTag('outdoor',this)">Outdoor</button>
+          <button class="news-tag-chip tag-skateboard" data-tag="skateboard" onclick="setNewsTag('skateboard',this)">Skateboard</button>
+          <button class="news-tag-chip tag-snowboard"  data-tag="snowboard"  onclick="setNewsTag('snowboard',this)">Snowboard</button>
+          <button class="news-tag-chip tag-surf"       data-tag="surf"       onclick="setNewsTag('surf',this)">Surf</button>
+          <button class="news-tag-chip tag-fishing"    data-tag="fishing"    onclick="setNewsTag('fishing',this)">Fishing</button>
+          <button class="news-tag-chip tag-camping"    data-tag="camping"    onclick="setNewsTag('camping',this)">Camping</button>
+          <button class="news-tag-chip tag-drinkware"  data-tag="drinkware"  onclick="setNewsTag('drinkware',this)">Drinkware</button>
+          <button class="news-tag-chip tag-footwear"   data-tag="footwear"   onclick="setNewsTag('footwear',this)">Footwear</button>
+          <button class="news-tag-chip tag-puzzles"    data-tag="puzzles"    onclick="setNewsTag('puzzles',this)">Puzzles</button>
+          <button class="news-tag-chip tag-calendars"  data-tag="calendars"  onclick="setNewsTag('calendars',this)">Calendars</button>
+          <button class="news-tag-chip tag-fabric"     data-tag="fabric"     onclick="setNewsTag('fabric',this)">Fabric</button>
+          <button class="news-tag-chip tag-cards"      data-tag="cards"      onclick="setNewsTag('cards',this)">Cards</button>
+          <button class="news-tag-chip tag-lifestyle"  data-tag="lifestyle"  onclick="setNewsTag('lifestyle',this)">Lifestyle</button>
+        </div>
+        <div id="news-results-info" class="news-results-info"></div>
         <div id="news-feed"></div>
       </section>
 
