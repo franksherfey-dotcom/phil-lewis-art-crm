@@ -375,7 +375,10 @@ async function saveUser(e) {
   if (pw) {
     const pwError = validatePassword(pw);
     if (pwError) { showFormError('user-form-error', pwError); return; }
-    if (pw !== pwConf) { showFormError('user-form-error', 'Passwords do not match.'); return; }
+    // Only check confirm match when creating new user (confirm field is hidden in edit mode)
+    if (!editingUserId && pw !== pwConf) {
+      showFormError('user-form-error', 'Passwords do not match.'); return;
+    }
   } else if (!editingUserId) {
     showFormError('user-form-error', 'Password is required for new users.');
     return;
