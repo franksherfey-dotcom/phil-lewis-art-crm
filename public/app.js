@@ -3074,14 +3074,22 @@ async function loadLeadHeatmap() {
   }
 }
 
+// Map consolidated chip tags to the granular company tags they cover
+const TAG_GROUP_MAP = {
+  'board-sports': ['skateboard','snowboard','surf','ski'],
+  'outdoor':      ['outdoor','fishing','camping'],
+  'stationery':   ['calendars','cards'],
+};
+
 function applyHeatmapFilter() {
   if (!_heatmapCache) return;
   let leads = _heatmapCache;
   const company = document.getElementById('news-company-search')?.value?.trim().toLowerCase() || '';
   if (_newsTag) {
+    const matchTags = TAG_GROUP_MAP[_newsTag] || [_newsTag];
     leads = leads.filter(l => {
       const tags = (l.tags || '').toLowerCase().split(',').map(t => t.trim());
-      return tags.includes(_newsTag);
+      return matchTags.some(mt => tags.includes(mt));
     });
   }
   if (company) {

@@ -1349,21 +1349,16 @@ async function fetchNewsFor(query) {
 
 // Keyword → CRM tag mappings (used server-side to tag articles)
 const NEWS_TAG_KEYWORDS = {
-  'apparel':    ['apparel','clothing','fashion','wear','garment','t-shirt','hoodie'],
-  'hard-goods': ['hard goods','equipment','gear','accessories','hardware','tools'],
-  'outdoor':    ['outdoor','nature','wildlife','adventure','hiking','mountain','national park'],
-  'skateboard': ['skateboard','skate','skating','skater','street sport'],
-  'snowboard':  ['snowboard','snow sport','ski','winter sport'],
-  'surf':       ['surf','surfing','ocean','wave','beach','coastal'],
-  'fishing':    ['fishing','fish','angler','tackle','bass','fly fishing'],
-  'camping':    ['camping','camp','backpacking','tent','rv','overlanding'],
-  'drinkware':  ['drinkware','beverage','bottle','cup','mug','tumbler','hydration','corkcicle','yeti','stanley'],
-  'footwear':   ['footwear','shoes','boots','sneakers','shoe','sandal'],
-  'puzzles':    ['puzzle','jigsaw','puzzles'],
-  'calendars':  ['calendar','planner','agenda','wall art','desk calendar'],
-  'fabric':     ['fabric','textile','quilt','upholstery','material','sewing','pattern'],
-  'cards':      ['greeting card','stationery','gift wrap','paper goods','card'],
-  'lifestyle':  ['lifestyle','home decor','gift','collectible','housewares','interior','decor'],
+  'apparel':      ['apparel','clothing','fashion','wear','garment','t-shirt','hoodie'],
+  'hard-goods':   ['hard goods','equipment','gear','accessories','hardware','tools'],
+  'outdoor':      ['outdoor','nature','wildlife','adventure','hiking','mountain','national park','fishing','fish','angler','tackle','bass','fly fishing','camping','camp','backpacking','tent','rv','overlanding'],
+  'board-sports': ['skateboard','skate','skating','skater','street sport','snowboard','snow sport','ski','winter sport','surf','surfing','ocean','wave','beach','coastal'],
+  'drinkware':    ['drinkware','beverage','bottle','cup','mug','tumbler','hydration','corkcicle','yeti','stanley'],
+  'footwear':     ['footwear','shoes','boots','sneakers','shoe','sandal'],
+  'puzzles':      ['puzzle','jigsaw','puzzles'],
+  'stationery':   ['calendar','planner','agenda','wall art','desk calendar','greeting card','stationery','gift wrap','paper goods','card','cards'],
+  'fabric':       ['fabric','textile','quilt','upholstery','material','sewing','pattern'],
+  'lifestyle':    ['lifestyle','home decor','gift','collectible','housewares','interior','decor'],
   'licensing-opp': ['seeking artist','looking for artist','artist wanted','call for artists','licensing program','licensing opportunity','open call','artist submission','submit your art','brand collaboration opportunity','looking for illustrator','seeking illustrator','artist partnership','license your art','art licensing program'],
 }
 
