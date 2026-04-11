@@ -1665,6 +1665,8 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
   flex-shrink: 0;
 }
 .sidebar-logout-btn:hover { color: var(--danger); background: rgba(220,38,38,.1); }
+.nav-logout { margin-top: 8px; border-top: 1px solid rgba(255,255,255,.15); padding-top: 8px; opacity: .75; }
+.nav-logout:hover { opacity: 1; color: #f87171 !important; }
 
 /* ── QUEUE GROUPS ── */
 .queue-group {
