@@ -151,15 +151,41 @@ async function bulkDeleteInbox() {
 
 // ── LEAD HEAT MAP ─────────────────────────────────────────────────────────
 
+let _heatmapCache = null;
+
+// Map consolidated chip tags to the granular company tags they cover
+const TAG_GROUP_MAP = {
+  'board-sports': ['skateboard','snowboard','surf','ski'],
+  'outdoor':      ['outdoor','fishing','camping'],
+  'stationery':   ['calendars','cards'],
+};
+
 async function loadLeadHeatmap() {
   const el = document.getElementById('lead-heatmap');
   if (!el) return;
   try {
-    const leads = await apiFetch('/api/leads/heatmap');
-    renderLeadHeatmap(leads);
+    _heatmapCache = await apiFetch('/api/leads/heatmap');
+    applyHeatmapFilter();
   } catch(e) {
     el.innerHTML = `<div class="empty-state">Could not load heat map: ${esc(e.message)}</div>`;
   }
+}
+
+function applyHeatmapFilter() {
+  if (!_heatmapCache) return;
+  let leads = _heatmapCache;
+  const company = document.getElementById('news-company-search')?.value?.trim().toLowerCase() || '';
+  if (_newsTag) {
+    const matchTags = TAG_GROUP_MAP[_newsTag] || [_newsTag];
+    leads = leads.filter(l => {
+      const tags = (l.tags || '').toLowerCase().split(',').map(t => t.trim());
+      return matchTags.some(mt => tags.includes(mt));
+    });
+  }
+  if (company) {
+    leads = leads.filter(l => (l.name || '').toLowerCase().includes(company));
+  }
+  renderLeadHeatmap(leads);
 }
 
 function scoreLeadTemperature(lead) {
@@ -246,7 +272,7 @@ function renderLeadHeatmap(leads) {
         <div class="heatmap-section-title">${title} <span class="heatmap-count">(${items.length})</span></div>
         <div class="heatmap-grid">
           ${items.map(l => `
-            <div class="heatmap-card heatmap-card-${cls}" onclick="openCompanyDetail(${l.id})">
+            <div class="heatmap-card heatmap-card-${cls}" data-tags="${esc((l.tags || '').toLowerCase())}" onclick="openCompanyDetail(${l.id})">
               <div class="heatmap-card-header">
                 <span class="heatmap-dot heatmap-dot-${cls}"></span>
                 <strong>${esc(l.name)}</strong>
