@@ -3061,7 +3061,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ── LEAD HEAT MAP ─────────────────────────────────────────────────────────
 
-let _heatmapCache = null;
+var _heatmapCache = null;
 
 async function loadLeadHeatmap() {
   const el = document.getElementById('lead-heatmap');
@@ -3075,7 +3075,7 @@ async function loadLeadHeatmap() {
 }
 
 // Map consolidated chip tags to the granular company tags they cover
-const TAG_GROUP_MAP = {
+var TAG_GROUP_MAP = {
   'board-sports': ['skateboard','snowboard','surf','ski'],
   'outdoor':      ['outdoor','fishing','camping'],
   'stationery':   ['calendars','cards'],

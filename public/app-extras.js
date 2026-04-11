@@ -151,10 +151,10 @@ async function bulkDeleteInbox() {
 
 // ── LEAD HEAT MAP ─────────────────────────────────────────────────────────
 
-let _heatmapCache = null;
+var _heatmapCache = null;
 
 // Map consolidated chip tags to the granular company tags they cover
-const TAG_GROUP_MAP = {
+var TAG_GROUP_MAP = {
   'board-sports': ['skateboard','snowboard','surf','ski'],
   'outdoor':      ['outdoor','fishing','camping'],
   'stationery':   ['calendars','cards'],
