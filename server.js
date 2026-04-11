@@ -1275,6 +1275,7 @@ const NEWS_TAG_KEYWORDS = {
   'fabric':     ['fabric','textile','quilt','upholstery','material','sewing','pattern'],
   'cards':      ['greeting card','stationery','gift wrap','paper goods','card'],
   'lifestyle':  ['lifestyle','home decor','gift','collectible','housewares','interior','decor'],
+  'licensing-opp': ['seeking artist','looking for artist','artist wanted','call for artists','licensing program','licensing opportunity','open call','artist submission','submit your art','brand collaboration opportunity','looking for illustrator','seeking illustrator','artist partnership','license your art','art licensing program'],
 }
 
 function autoTagArticle(item) {
@@ -1304,6 +1305,7 @@ app.get('/api/news', async (req, res) => {
         { q: 'footwear shoe brand artist collaboration',             tags: ['footwear'] },
         { q: 'fabric textile artist print licensing',                tags: ['fabric'] },
         { q: 'hard goods equipment brand art licensing',             tags: ['hard-goods'] },
+        { q: '"seeking artists" OR "call for artists" OR "artist submissions" licensing program brand', tags: ['licensing-opp'] },
       ]
       const allItems = []
       await Promise.all(queries.map(async ({ q, tags }) => {

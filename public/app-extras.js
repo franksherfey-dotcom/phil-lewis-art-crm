@@ -96,11 +96,26 @@ function scoreLeadTemperature(lead) {
   return { score, temp, cls, reasons };
 }
 
+// Phil's core categories — companies tagged with these are "aligned"
+const ALIGNED_TAGS = ['outdoor','surf','skateboard','snowboard','fishing','camping','drinkware','footwear','apparel','hard-goods','puzzles','calendars','fabric','cards','lifestyle'];
+
+function isAligned(lead) {
+  if (!lead.tags) return false;
+  const t = lead.tags.toLowerCase();
+  return ALIGNED_TAGS.some(tag => t.includes(tag));
+}
+
 function renderLeadHeatmap(leads) {
   const el = document.getElementById('lead-heatmap');
   if (!el) return;
 
-  const scored = leads.map(l => ({ ...l, ...scoreLeadTemperature(l) }))
+  // Separate sleepers first: aligned companies with zero outreach
+  const sleepers = leads.filter(l => isAligned(l) && l.emails_sent === 0 && l.reply_count === 0);
+  const sleeperIds = new Set(sleepers.map(l => l.id));
+
+  // Score the rest
+  const active = leads.filter(l => !sleeperIds.has(l.id));
+  const scored = active.map(l => ({ ...l, ...scoreLeadTemperature(l) }))
     .sort((a, b) => b.score - a.score);
 
   const hot  = scored.filter(l => l.cls === 'hot');
@@ -131,7 +146,32 @@ function renderLeadHeatmap(leads) {
       </div>`;
   }
 
+  function renderSleepers(items) {
+    if (!items.length) return `<div class="heatmap-section heatmap-sleeper"><div class="heatmap-section-title">\uD83D\uDCA4 Sleepers <span class="heatmap-count">(0)</span></div><div class="heatmap-empty">No sleepers — every aligned company has been contacted</div></div>`;
+    return `
+      <div class="heatmap-section heatmap-sleeper">
+        <div class="heatmap-section-title">\uD83D\uDCA4 Sleepers <span class="heatmap-count">(${items.length})</span></div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Aligned companies with zero outreach — potential untapped opportunities</div>
+        <div class="heatmap-grid">
+          ${items.map(l => {
+            const tags = (l.tags || '').split(',').map(t => t.trim()).filter(Boolean);
+            const matchedTags = tags.filter(t => ALIGNED_TAGS.includes(t.toLowerCase()));
+            return `
+            <div class="heatmap-card heatmap-card-sleeper" onclick="openCompanyDetail(${l.id})">
+              <div class="heatmap-card-header">
+                <span class="heatmap-dot heatmap-dot-sleeper"></span>
+                <strong>${esc(l.name)}</strong>
+              </div>
+              <div class="heatmap-card-stage">${esc(l.pipeline_stage || 'Prospect')}${l.contact_count > 0 ? ` · ${l.contact_count} contact${l.contact_count !== 1 ? 's' : ''}` : ' · no contacts yet'}</div>
+              <div class="heatmap-card-reasons">${matchedTags.join(' · ')}</div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+  }
+
   el.innerHTML = renderSection('\uD83D\uDD25 Hot', hot, 'hot')
     + renderSection('\uD83D\uDFE1 Warm', warm, 'warm')
-    + renderSection('\uD83D\uDD35 Cold', cold, 'cold');
+    + renderSection('\uD83D\uDD35 Cold', cold, 'cold')
+    + renderSleepers(sleepers);
 }
