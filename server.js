@@ -1484,6 +1484,10 @@ const ART_SEEDS = [
   { title: 'XL Desk Mat — Let it Flow', url: 'https://phillewisart.com/cdn/shop/files/Let-it-Flow2_fad4d1c7-72b5-42ad-afc7-b6227aec4be8_600x.jpg?v=1767201092', tags: 'tech,desk,accessories', category: 'tech' },
   { title: 'XL Desk Mat — Owl Eyes', url: 'https://phillewisart.com/cdn/shop/files/owl-eyes2_8bbdbdf0-ad30-4573-89c8-fa52b14fe1a0_600x.jpg?v=1767201037', tags: 'tech,desk,accessories', category: 'tech' },
   { title: 'XL Desk Mat — Red Rocks Remix', url: 'https://phillewisart.com/cdn/shop/files/Red-Rocks2_dd97a344-1c71-436b-8086-374f2f368717_600x.jpg?v=1767201062', tags: 'tech,desk,accessories', category: 'tech' },
+  // ── Custom Engraving ──
+  { title: 'Custom Engraving Projects', url: 'https://phillewisart.com/cdn/shop/products/Engravings-custom_items_-_57_of_113_1024x.jpg?v=1573872914', tags: 'engraving,custom,hard-goods,laser', category: 'engraving' },
+  { title: 'Custom Engraving — Sample 1', url: 'https://phillewisart.com/cdn/shop/products/Engravings-custom_items_-_1_of_113_800x.jpg?v=1573872914', tags: 'engraving,custom,hard-goods,laser', category: 'engraving' },
+  { title: 'Custom Engraving — Sample 2', url: 'https://phillewisart.com/cdn/shop/products/Engravings-custom_items_-_3_of_113_800x.jpg?v=1573872914', tags: 'engraving,custom,hard-goods,laser', category: 'engraving' },
 ]
 
 async function seedArtIfEmpty() {
