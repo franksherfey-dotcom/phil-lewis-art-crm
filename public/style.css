@@ -1345,6 +1345,19 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
 .sentiment-neutral  { background: #eab308; }
 .sentiment-negative { background: #ef4444; }
 
+/* ── Inbox Multi-Select ───────────────────────────────────────────────── */
+.inbox-bulk-bar {
+  display: flex; align-items: center; gap: 12px; padding: 8px 16px;
+  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+  margin-bottom: 8px; font-size: 13px;
+}
+.inbox-select-all { display: flex; align-items: center; gap: 6px; cursor: pointer; font-weight: 600; font-size: 13px; }
+.inbox-selected-count { color: var(--text-muted); font-size: 12px; }
+.inbox-checkbox {
+  flex-shrink: 0; display: flex; align-items: center; padding-right: 4px;
+}
+.inbox-checkbox input { width: 16px; height: 16px; cursor: pointer; accent-color: var(--primary); }
+
 /* ── Inbox Row Actions ────────────────────────────────────────────────── */
 .inbox-row-actions {
   display: flex; align-items: center; gap: 6px; margin-top: 6px; justify-content: flex-end;

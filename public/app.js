@@ -1861,7 +1861,13 @@ async function loadInbox() {
       return;
     }
 
-    el.innerHTML = `<div class="inbox-messages">${_inboxCache.map((m, i) => {
+    el.innerHTML = `
+      <div class="inbox-bulk-bar" id="inbox-bulk-bar" style="display:none">
+        <label class="inbox-select-all"><input type="checkbox" id="inbox-select-all" onchange="toggleSelectAllInbox(this)"> Select all</label>
+        <button class="btn btn-danger-outline btn-sm" onclick="bulkDeleteInbox()">&#128465; Delete selected</button>
+        <span id="inbox-selected-count" class="inbox-selected-count"></span>
+      </div>
+      <div class="inbox-messages">${_inboxCache.map((m, i) => {
       const isRead = _inboxTab === 'sent' ? true : m.notes === 'read';
       const fullName = [m.first_name, m.last_name].filter(Boolean).join(' ') || 'Unknown';
       const label = _inboxTab === 'sent' ? `To: ${fullName}` : fullName;
@@ -1869,6 +1875,9 @@ async function loadInbox() {
       const sentimentDot = m.sentiment ? `<span class="sentiment-dot sentiment-${m.sentiment}" title="${m.sentiment}"></span>` : '';
       return `
         <div class="inbox-row ${isRead ? 'inbox-read' : 'inbox-unread'}" onclick="openInboxMessage(${i})">
+          <div class="inbox-checkbox" onclick="event.stopPropagation()">
+            <input type="checkbox" class="inbox-msg-check" data-index="${i}" data-id="${m.id}" onchange="updateInboxSelection()">
+          </div>
           <div class="inbox-row-left">
             <div class="inbox-sender">
               ${sentimentDot}
@@ -2145,6 +2154,39 @@ async function deleteInboxMessage(index) {
   try {
     await apiFetch(`/api/inbox/${m.id}`, { method: 'DELETE' });
     toast('Message deleted.', 'success');
+    closeInboxPane();
+    loadInbox();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+function updateInboxSelection() {
+  const checks = document.querySelectorAll('.inbox-msg-check:checked');
+  const bar = document.getElementById('inbox-bulk-bar');
+  const countEl = document.getElementById('inbox-selected-count');
+  const selectAll = document.getElementById('inbox-select-all');
+  if (bar) bar.style.display = checks.length > 0 ? 'flex' : 'none';
+  if (countEl) countEl.textContent = checks.length > 0 ? `${checks.length} selected` : '';
+  // Update select-all checkbox state
+  const allChecks = document.querySelectorAll('.inbox-msg-check');
+  if (selectAll) selectAll.checked = allChecks.length > 0 && checks.length === allChecks.length;
+}
+
+function toggleSelectAllInbox(el) {
+  document.querySelectorAll('.inbox-msg-check').forEach(cb => { cb.checked = el.checked; });
+  updateInboxSelection();
+}
+
+async function bulkDeleteInbox() {
+  const checks = document.querySelectorAll('.inbox-msg-check:checked');
+  const ids = Array.from(checks).map(cb => parseInt(cb.dataset.id));
+  if (!ids.length) return;
+  if (!confirm(`Delete ${ids.length} message${ids.length !== 1 ? 's' : ''} from the CRM? (Won\u2019t delete from your email server.)`)) return;
+  try {
+    await apiFetch('/api/inbox/bulk-delete', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    });
+    toast(`Deleted ${ids.length} message${ids.length !== 1 ? 's' : ''}.`, 'success');
     closeInboxPane();
     loadInbox();
   } catch(e) { toast(e.message, 'error'); }

@@ -957,6 +957,17 @@ app.patch('/api/inbox/:id/sentiment', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
+// Bulk delete inbox messages
+app.post('/api/inbox/bulk-delete', async (req, res) => {
+  try {
+    const { ids } = req.body
+    if (!ids || !ids.length) return res.status(400).json({ error: 'No message IDs provided.' })
+    const placeholders = ids.map((_, i) => `$${i + 1}`).join(',')
+    await run(`DELETE FROM activities WHERE id IN (${placeholders})`, ids)
+    res.json({ ok: true, deleted: ids.length })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
 app.get('/api/inbox/not-in-sequence', async (req, res) => {
   try {
     const { search, limit } = req.query
