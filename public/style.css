@@ -1666,7 +1666,26 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
 }
 .sidebar-logout-btn:hover { color: var(--danger); background: rgba(220,38,38,.1); }
 
+/* ── ART PREVIEW CARD (sequence editor & queue preview) ── */
+.art-preview-card {
+  margin-top: 20px; padding: 16px; background: #fafafa;
+  border-radius: 8px; border: 1px dashed var(--border, #ddd);
+  text-align: center;
+}
+.art-preview-label {
+  font-size: 12px; color: var(--text-muted, #888); font-style: italic;
+  margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;
+}
+.art-preview-img {
+  max-width: 100%; width: 420px; border-radius: 8px;
+  border: 1px solid #e0e0e0; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+.art-preview-caption {
+  margin-top: 8px; font-size: 11px; color: #999;
+}
+
 @media (max-width: 768px) {
   .login-card { padding: 28px 20px; }
   .users-table th, .users-table td { padding: 9px 10px; font-size: 13px; }
+  .art-preview-img { width: 100%; }
 }

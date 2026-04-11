@@ -22,6 +22,45 @@ app.use(cors())
 app.use(express.json())
 app.use(express.static(path.join(__dirname, 'public')))
 
+// ── PHIL LEWIS ART IMAGE MAP (for embedding in outreach emails) ─────────
+const ART_IMAGES = {
+  skateboard:  { url: 'https://phillewisart.com/cdn/shop/articles/soulcraft-header2_600x.jpg?v=1630337503', alt: 'Phil Lewis Art × Soulcraft Boards' },
+  surf:        { url: 'https://phillewisart.com/cdn/shop/articles/soulcraft-header2_600x.jpg?v=1630337503', alt: 'Phil Lewis Art × Soulcraft Wake Surf Boards' },
+  snowboard:   { url: 'https://phillewisart.com/cdn/shop/articles/Final_3_wood_demo_8041b6df-1fe3-4780-98f7-802164043715_600x.jpg?v=1645204598', alt: 'Phil Lewis Art × Meier Skis' },
+  outdoor:     { url: 'https://phillewisart.com/cdn/shop/articles/Final_3_wood_demo_8041b6df-1fe3-4780-98f7-802164043715_600x.jpg?v=1645204598', alt: 'Phil Lewis Art × Meier Skis' },
+  drinkware:   { url: 'https://phillewisart.com/cdn/shop/articles/epic-hero2_600x.jpg?v=1604016747', alt: 'Phil Lewis Art × Epic Water Filters' },
+  puzzles:     { url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4423WEB_600x.jpg?v=1603909822', alt: 'Phil Lewis Art × Liberty Puzzles' },
+  'hard-goods':{ url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product5843WEB_fadcaa8c-3b21-462c-b8be-26b402bc6f94_600x.jpg?v=1747320948', alt: 'Phil Lewis Art × LogoJET UV Products' },
+  fabric:      { url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4973WEB_768653d3-f5fc-42a1-8a97-c2929961780a_600x.jpg?v=1603909864', alt: 'Phil Lewis Art × Third Eye Tapestries' },
+  apparel:     { url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4389WEB_600x.jpg?v=1603909818', alt: 'Phil Lewis Art × Grassroots California' },
+  footwear:    { url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4389WEB_600x.jpg?v=1603909818', alt: 'Phil Lewis Art × Grassroots California' },
+  camping:     { url: 'https://phillewisart.com/cdn/shop/articles/epic-hero2_600x.jpg?v=1604016747', alt: 'Phil Lewis Art × Epic Water Filters' },
+  fishing:     { url: 'https://phillewisart.com/cdn/shop/articles/epic-hero2_600x.jpg?v=1604016747', alt: 'Phil Lewis Art × Epic Water Filters' },
+  calendars:   { url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4423WEB_600x.jpg?v=1603909822', alt: 'Phil Lewis Art × Liberty Puzzles' },
+  cards:       { url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4423WEB_600x.jpg?v=1603909822', alt: 'Phil Lewis Art × Liberty Puzzles' },
+  lifestyle:   { url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4973WEB_768653d3-f5fc-42a1-8a97-c2929961780a_600x.jpg?v=1603909864', alt: 'Phil Lewis Art × Third Eye Tapestries' },
+}
+const ART_DEFAULT = { url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product5843WEB_fadcaa8c-3b21-462c-b8be-26b402bc6f94_600x.jpg?v=1747320948', alt: 'Phil Lewis Art — Collaboration Products' }
+
+function getArtForCompany(company) {
+  if (!company || !company.tags) return ART_DEFAULT
+  const tags = company.tags.toLowerCase().split(',').map(t => t.trim())
+  for (const tag of tags) {
+    if (ART_IMAGES[tag]) return ART_IMAGES[tag]
+  }
+  return ART_DEFAULT
+}
+
+function buildArtEmailBlock(artImg) {
+  return `
+<div style="margin:24px 0;text-align:center;padding:16px;background:#fafafa;border-radius:8px">
+  <div style="margin-bottom:8px;font-size:13px;color:#666;font-style:italic">Recent Collaboration</div>
+  <img src="${artImg.url}" alt="${artImg.alt}" style="max-width:100%;width:480px;border-radius:8px;border:1px solid #e0e0e0" />
+  <div style="margin-top:8px;font-size:12px;color:#999">${artImg.alt}</div>
+  <div style="margin-top:4px"><a href="https://phillewisart.com/blogs/collaborations" style="font-size:12px;color:#4f46e5;text-decoration:none">View more collaborations →</a></div>
+</div>`
+}
+
 // ─── USERS TABLE MIGRATION ───────────────────────────────────────────────────
 // Exposed as a promise so auth routes can await it before querying the users table
 const migrationReady = (async () => {
@@ -684,11 +723,19 @@ app.post('/api/queue/send', async (req, res) => {
     const company = enr.company_id ? await one('SELECT * FROM companies WHERE id=$1', [enr.company_id]) : null
     const contact = { first_name: enr.first_name, last_name: enr.last_name, email: enr.email, title: enr.title }
 
+    // For step 1 emails, append Phil's art collaboration image matched to company tags
+    let emailBody = custom_body || step.body
+    if (enr.current_step === 1) {
+      const artImg = getArtForCompany(company)
+      emailBody = emailBody + '\n' + buildArtEmailBlock(artImg)
+    }
+
     const { resolvedSubject, resolvedBody } = await sendEmail({
       toEmail: enr.email,
       toName: [enr.first_name, enr.last_name].filter(Boolean).join(' '),
       subject: custom_subject || step.subject,
-      body: custom_body || step.body,
+      body: emailBody,
+      isHtml: enr.current_step === 1,
       contact,
       company,
     })
@@ -735,11 +782,19 @@ app.post('/api/queue/send-all', async (req, res) => {
         const company = enr.company_id ? await one('SELECT * FROM companies WHERE id=$1', [enr.company_id]) : null
         const contact = { first_name: enr.first_name, last_name: enr.last_name, email: enr.email, title: enr.title }
 
+        // For step 1 emails, append Phil's art collaboration image
+        let emailBody = step.body
+        if (enr.current_step === 1) {
+          const artImg = getArtForCompany(company)
+          emailBody = emailBody + '\n' + buildArtEmailBlock(artImg)
+        }
+
         const { resolvedSubject, resolvedBody } = await sendEmail({
           toEmail: enr.email,
           toName: [enr.first_name, enr.last_name].filter(Boolean).join(' '),
           subject: step.subject,
-          body: step.body,
+          body: emailBody,
+          isHtml: enr.current_step === 1,
           contact,
           company,
         })
@@ -793,6 +848,8 @@ app.get('/api/queue/preview/:enrollment_id', async (req, res) => {
     res.json({
       subject: interpolate(step.subject, contact, company),
       body:    interpolate(step.body,    contact, company),
+      step_number: enr.current_step,
+      company_tags: company ? company.tags : null,
     })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })

@@ -1356,7 +1356,22 @@ function switchStepTab(n, tab, btn) {
   tabs.forEach(t => t.classList.remove('step-tab-active'));
   btn.classList.add('step-tab-active');
   if (tab === 'preview') {
-    preview.innerHTML = renderEmailBody(textarea.value);
+    let html = renderEmailBody(textarea.value);
+    // For step 1, show art image preview based on sequence description tags
+    const block = btn.closest('.step-block');
+    const stepNum = block ? parseInt(block.id.replace('step-block-','')) : n;
+    const allBlocks = document.querySelectorAll('.step-block');
+    const isFirstStep = block === allBlocks[0];
+    if (isFirstStep && typeof getArtForTags === 'function') {
+      const descField = document.querySelector('#sequence-form [name="description"]');
+      const desc = descField ? descField.value : '';
+      // Extract tags from description (e.g. "Tags: skateboard, surf, snowboard")
+      const tagMatch = desc.match(/tags?:\s*([^\n]+)/i);
+      const tagsStr = tagMatch ? tagMatch[1] : desc;
+      const artImg = getArtForTags(tagsStr);
+      html += buildArtPreviewCard(artImg);
+    }
+    preview.innerHTML = html;
     textarea.style.display = 'none';
     preview.style.display  = 'block';
   } else {
@@ -1664,9 +1679,15 @@ async function sendFromQueueDetail(enrollmentId) {
 async function previewEmail(enrollmentId) {
   try {
     const preview = await apiFetch(`/api/queue/preview/${enrollmentId}`);
+    let bodyHtml = renderEmailBody(preview.body);
+    // Show art preview if this is a step 1 email and we have company tags
+    if (preview.step_number === 1 && preview.company_tags && typeof getArtForTags === 'function') {
+      const artImg = getArtForTags(preview.company_tags);
+      bodyHtml += buildArtPreviewCard(artImg);
+    }
     document.getElementById('preview-content').innerHTML = `
       <div class="preview-subject">Subject: ${esc(preview.subject)}</div>
-      <div class="preview-body">${renderEmailBody(preview.body)}</div>
+      <div class="preview-body">${bodyHtml}</div>
     `;
     currentEnrollmentIdForPreview = enrollmentId;
     document.getElementById('preview-send-btn').onclick = () => {

@@ -1,3 +1,120 @@
+// ── PHIL LEWIS ART — CATEGORY-TO-IMAGE MAPPING ───────────────────────────
+// Maps company tags/categories to Phil's collaboration product images
+const ART_IMAGE_MAP = {
+  skateboard: {
+    url: 'https://phillewisart.com/cdn/shop/articles/soulcraft-header2_600x.jpg?v=1630337503',
+    alt: 'Phil Lewis Art × Soulcraft Boards',
+    label: 'Board Art',
+  },
+  surf: {
+    url: 'https://phillewisart.com/cdn/shop/articles/soulcraft-header2_600x.jpg?v=1630337503',
+    alt: 'Phil Lewis Art × Soulcraft Wake Surf Boards',
+    label: 'Board Art',
+  },
+  snowboard: {
+    url: 'https://phillewisart.com/cdn/shop/articles/Final_3_wood_demo_8041b6df-1fe3-4780-98f7-802164043715_600x.jpg?v=1645204598',
+    alt: 'Phil Lewis Art × Meier Skis',
+    label: 'Board Art',
+  },
+  outdoor: {
+    url: 'https://phillewisart.com/cdn/shop/articles/Final_3_wood_demo_8041b6df-1fe3-4780-98f7-802164043715_600x.jpg?v=1645204598',
+    alt: 'Phil Lewis Art × Meier Skis',
+    label: 'Outdoor Products',
+  },
+  drinkware: {
+    url: 'https://phillewisart.com/cdn/shop/articles/epic-hero2_600x.jpg?v=1604016747',
+    alt: 'Phil Lewis Art × Epic Water Filters',
+    label: 'Drinkware',
+  },
+  puzzles: {
+    url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4423WEB_600x.jpg?v=1603909822',
+    alt: 'Phil Lewis Art × Liberty Puzzles',
+    label: 'Puzzles',
+  },
+  'hard-goods': {
+    url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product5843WEB_fadcaa8c-3b21-462c-b8be-26b402bc6f94_600x.jpg?v=1747320948',
+    alt: 'Phil Lewis Art × LogoJET UV Products',
+    label: 'Hard Goods',
+  },
+  fabric: {
+    url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4973WEB_768653d3-f5fc-42a1-8a97-c2929961780a_600x.jpg?v=1603909864',
+    alt: 'Phil Lewis Art × Third Eye Tapestries',
+    label: 'Fabric & Tapestries',
+  },
+  apparel: {
+    url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4389WEB_600x.jpg?v=1603909818',
+    alt: 'Phil Lewis Art × Grassroots California',
+    label: 'Apparel & Accessories',
+  },
+  footwear: {
+    url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4389WEB_600x.jpg?v=1603909818',
+    alt: 'Phil Lewis Art × Grassroots California',
+    label: 'Footwear & Apparel',
+  },
+  camping: {
+    url: 'https://phillewisart.com/cdn/shop/articles/epic-hero2_600x.jpg?v=1604016747',
+    alt: 'Phil Lewis Art × Epic Water Filters',
+    label: 'Camping & Outdoor Gear',
+  },
+  fishing: {
+    url: 'https://phillewisart.com/cdn/shop/articles/epic-hero2_600x.jpg?v=1604016747',
+    alt: 'Phil Lewis Art × Epic Water Filters',
+    label: 'Fishing & Outdoor',
+  },
+  calendars: {
+    url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4423WEB_600x.jpg?v=1603909822',
+    alt: 'Phil Lewis Art × Liberty Puzzles',
+    label: 'Calendars & Print',
+  },
+  cards: {
+    url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4423WEB_600x.jpg?v=1603909822',
+    alt: 'Phil Lewis Art × Liberty Puzzles',
+    label: 'Cards & Stationery',
+  },
+  lifestyle: {
+    url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4973WEB_768653d3-f5fc-42a1-8a97-c2929961780a_600x.jpg?v=1603909864',
+    alt: 'Phil Lewis Art × Third Eye Tapestries',
+    label: 'Lifestyle Products',
+  },
+};
+
+// Default fallback image (general Phil Lewis art)
+const ART_IMAGE_DEFAULT = {
+  url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product5843WEB_fadcaa8c-3b21-462c-b8be-26b402bc6f94_600x.jpg?v=1747320948',
+  alt: 'Phil Lewis Art — Collaboration Products',
+  label: 'Phil Lewis Art',
+};
+
+// Given a tags string (comma-separated), return the best matching art image
+function getArtForTags(tagsStr) {
+  if (!tagsStr) return ART_IMAGE_DEFAULT;
+  const tags = tagsStr.toLowerCase().split(',').map(t => t.trim());
+  for (const tag of tags) {
+    if (ART_IMAGE_MAP[tag]) return ART_IMAGE_MAP[tag];
+  }
+  return ART_IMAGE_DEFAULT;
+}
+
+// Build the HTML block that gets embedded in emails
+function buildArtImageHtml(artImg) {
+  return `
+<div style="margin:24px 0;text-align:center">
+  <div style="margin-bottom:8px;font-size:13px;color:#666;font-style:italic">${esc(artImg.label)} — Recent Collaboration</div>
+  <img src="${artImg.url}" alt="${esc(artImg.alt)}" style="max-width:100%;width:480px;border-radius:8px;border:1px solid #e0e0e0" />
+  <div style="margin-top:8px;font-size:12px;color:#999">${esc(artImg.alt)}</div>
+</div>`;
+}
+
+// Build the preview HTML for the sequence editor (shows art card inline)
+function buildArtPreviewCard(artImg) {
+  return `
+<div class="art-preview-card">
+  <div class="art-preview-label">${esc(artImg.label)} — Collaboration Preview</div>
+  <img src="${artImg.url}" alt="${esc(artImg.alt)}" class="art-preview-img" />
+  <div class="art-preview-caption">${esc(artImg.alt)}</div>
+</div>`;
+}
+
 // ── INBOX MULTI-SELECT & BULK DELETE ──────────────────────────────────────
 
 function updateInboxSelection() {
