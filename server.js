@@ -1447,6 +1447,7 @@ app.get('/api/pipeline/stuck-count', async (req, res) => {
 // ─── ART GALLERY ────────────────────────────────────────────────────────────
 
 const ART_SEEDS = [
+  // ── Collaborations (original) ──
   { title: 'Soulcraft Wake Surf Boards', url: 'https://phillewisart.com/cdn/shop/articles/soulcraft-header2_600x.jpg?v=1630337503', tags: 'skateboard,surf', category: 'boards' },
   { title: 'Meier Skis', url: 'https://phillewisart.com/cdn/shop/articles/Final_3_wood_demo_8041b6df-1fe3-4780-98f7-802164043715_600x.jpg?v=1645204598', tags: 'snowboard,outdoor', category: 'boards' },
   { title: 'Epic Water Filters', url: 'https://phillewisart.com/cdn/shop/articles/epic-hero2_600x.jpg?v=1604016747', tags: 'drinkware,camping,fishing', category: 'drinkware' },
@@ -1456,6 +1457,33 @@ const ART_SEEDS = [
   { title: 'Grassroots California', url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4389WEB_600x.jpg?v=1603909818', tags: 'apparel,footwear', category: 'apparel' },
   { title: 'Minute Key', url: 'https://phillewisart.com/cdn/shop/articles/minute-key-collab-hero_600x.jpg?v=1603909120', tags: 'hard-goods,lifestyle', category: 'hard-goods' },
   { title: 'PAMP Silver Coins', url: 'https://phillewisart.com/cdn/shop/articles/package-open_600x.jpg?v=1623250937', tags: 'hard-goods,lifestyle', category: 'collectibles' },
+  // ── Stickers & Collectibles ──
+  { title: 'Sticker Pack — 7 Chakras', url: 'https://phillewisart.com/cdn/shop/products/stickerpack3.jpg?v=1618612977', tags: 'stickers,collectibles', category: 'stickers' },
+  { title: 'Pop Sockets', url: 'https://phillewisart.com/cdn/shop/products/PhilLewisProduct4471WEB.jpg?v=1651449244', tags: 'collectibles,tech,accessories', category: 'collectibles' },
+  // ── Apparel ──
+  { title: 'Ice Fox Hoodie', url: 'https://phillewisart.com/cdn/shop/products/PhilLewisProduct4906WEB_600x.jpg?v=1603406278', tags: 'apparel,hoodie', category: 'apparel' },
+  { title: 'Jellyfish Nimbus Hat', url: 'https://phillewisart.com/cdn/shop/products/PhilLewisProduct4406WEB_600x.jpg?v=1603403562', tags: 'apparel,hat,accessories', category: 'apparel' },
+  { title: 'Winter Carnival Hoodie', url: 'https://phillewisart.com/cdn/shop/files/MainPic_2Phil2_600x.jpg?v=1730044303', tags: 'apparel,hoodie', category: 'apparel' },
+  { title: 'Orcas Hat', url: 'https://phillewisart.com/cdn/shop/files/IMG_5121_600x.jpg?v=1752704659', tags: 'apparel,hat,accessories', category: 'apparel' },
+  { title: 'Phil Lewis Socks', url: 'https://phillewisart.com/cdn/shop/products/peace-socks-mockup_600x.jpg?v=1603403450', tags: 'apparel,socks,accessories', category: 'apparel' },
+  // ── Drinkware ──
+  { title: 'Limited-Edition Prism Tumblers', url: 'https://phillewisart.com/cdn/shop/files/2_28b0a853-eb82-4cfb-ab66-a995f5e1c229_600x.jpg?v=1764110919', tags: 'drinkware,tumbler', category: 'drinkware' },
+  { title: 'Insulated Wine Tumblers', url: 'https://phillewisart.com/cdn/shop/products/IMG_1886_600x.jpg?v=1658670818', tags: 'drinkware,tumbler', category: 'drinkware' },
+  { title: 'Sea Turtles — 24oz Nalgene', url: 'https://phillewisart.com/cdn/shop/files/7E4607EF-AE84-4CDC-B418-410C646532EB_600x.jpg?v=1731084916', tags: 'drinkware,bottle', category: 'drinkware' },
+  { title: 'Ceramic Mugs', url: 'https://phillewisart.com/cdn/shop/files/IMG_1657_600x.jpg?v=1702159686', tags: 'drinkware,mug', category: 'drinkware' },
+  { title: 'Owl Eyes — 32oz Flask', url: 'https://phillewisart.com/cdn/shop/products/PhilLewisProduct6552_600x.jpg?v=1603496408', tags: 'drinkware,flask', category: 'drinkware' },
+  { title: 'Let it Flow — CamelBak Bottle', url: 'https://phillewisart.com/cdn/shop/files/4_6af829a9-f8ed-42be-8f33-5bdda2fbfb0c_600x.jpg?v=1767798332', tags: 'drinkware,bottle', category: 'drinkware' },
+  // ── Boardsports ──
+  { title: 'Skateboard Decks', url: 'https://phillewisart.com/cdn/shop/products/IMG_0896_600x.jpg?v=1646926505', tags: 'skateboard,boardsports', category: 'boards' },
+  { title: 'Skateboard Grip Tape', url: 'https://phillewisart.com/cdn/shop/files/three-headed-dragon_3903ccd9-da88-4bf2-86d5-2feabf344e40_600x.jpg?v=1762356481', tags: 'skateboard,boardsports', category: 'boards' },
+  { title: 'Custom Traction Pads', url: 'https://phillewisart.com/cdn/shop/files/1_69101f2a-4b32-4f2d-9646-06617f1596b6_600x.jpg?v=1775862568', tags: 'surf,boardsports', category: 'boards' },
+  { title: 'Soulcraft Custom Surfboards', url: 'https://phillewisart.com/cdn/shop/products/surfboard1_600x.jpg?v=1639755792', tags: 'surf,boardsports', category: 'boards' },
+  { title: 'Meier Custom Skis & Snowboards', url: 'https://phillewisart.com/cdn/shop/products/Pow-Days_600x.jpg?v=1701384339', tags: 'snowboard,ski,boardsports,outdoor', category: 'boards' },
+  // ── Tech ──
+  { title: 'XL Desk Mat — Lion', url: 'https://phillewisart.com/cdn/shop/files/Lion2_600x.jpg?v=1767200990', tags: 'tech,desk,accessories', category: 'tech' },
+  { title: 'XL Desk Mat — Let it Flow', url: 'https://phillewisart.com/cdn/shop/files/Let-it-Flow2_fad4d1c7-72b5-42ad-afc7-b6227aec4be8_600x.jpg?v=1767201092', tags: 'tech,desk,accessories', category: 'tech' },
+  { title: 'XL Desk Mat — Owl Eyes', url: 'https://phillewisart.com/cdn/shop/files/owl-eyes2_8bbdbdf0-ad30-4573-89c8-fa52b14fe1a0_600x.jpg?v=1767201037', tags: 'tech,desk,accessories', category: 'tech' },
+  { title: 'XL Desk Mat — Red Rocks Remix', url: 'https://phillewisart.com/cdn/shop/files/Red-Rocks2_dd97a344-1c71-436b-8086-374f2f368717_600x.jpg?v=1767201062', tags: 'tech,desk,accessories', category: 'tech' },
 ]
 
 async function seedArtIfEmpty() {
