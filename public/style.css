@@ -297,6 +297,29 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
 .tile-more { font-size: 11px; color: var(--text-muted); padding-left: 18px; }
 .seq-badge.seq-none { background: #F3F4F6; color: #9CA3AF; }
 
+/* ── MULTI-SELECT DROPDOWNS ── */
+.ms-dropdown { position: relative; display: inline-block; }
+.ms-dropdown-btn {
+  padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+  font-size: 13px; background: var(--surface); cursor: pointer; white-space: nowrap;
+  display: flex; align-items: center; gap: 6px; color: var(--text);
+}
+.ms-dropdown-btn:hover { border-color: var(--primary); }
+.ms-arrow { font-size: 10px; color: var(--text-muted); }
+.ms-dropdown-menu {
+  display: none; position: absolute; top: 100%; left: 0; margin-top: 4px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12); z-index: 100; min-width: 180px;
+  padding: 6px 0;
+}
+.ms-dropdown-menu.open { display: block; }
+.ms-option {
+  display: flex; align-items: center; gap: 8px; padding: 7px 14px;
+  cursor: pointer; font-size: 13px; color: var(--text); transition: background 0.1s;
+}
+.ms-option:hover { background: var(--bg); }
+.ms-option input[type="checkbox"] { margin: 0; accent-color: var(--primary); }
+
 /* ── CARD GRID ── */
 .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
 .company-card {

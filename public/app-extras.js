@@ -254,13 +254,17 @@ async function loadLeadHeatmap() {
 
 function applyHeatmapFilter() {
   if (!_heatmapCache) return;
-  let leads = _heatmapCache;
-  const company = document.getElementById('news-company-search')?.value?.trim().toLowerCase() || '';
-  if (_newsTag) {
-    const matchTags = TAG_GROUP_MAP[_newsTag] || [_newsTag];
-    leads = leads.filter(l => {
-      const tags = (l.tags || '').toLowerCase().split(',').map(t => t.trim());
-      return matchTags.some(mt => tags.includes(mt));
+  var leads = _heatmapCache;
+  var company = document.getElementById('news-company-search')?.value?.trim().toLowerCase() || '';
+  if (typeof _newsTags !== 'undefined' && _newsTags.length) {
+    var allMatchTags = [];
+    _newsTags.forEach(function(nt) {
+      var mapped = TAG_GROUP_MAP[nt] || [nt];
+      mapped.forEach(function(t) { if (allMatchTags.indexOf(t) === -1) allMatchTags.push(t); });
+    });
+    leads = leads.filter(function(l) {
+      var tags = (l.tags || '').toLowerCase().split(',').map(function(t) { return t.trim(); });
+      return allMatchTags.some(function(mt) { return tags.indexOf(mt) !== -1; });
     });
   }
   if (company) {

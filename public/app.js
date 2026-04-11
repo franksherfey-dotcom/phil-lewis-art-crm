@@ -22,7 +22,9 @@ const API = '';
 let currentEnrollContacts = [];
 let currentEnrollmentIdForPreview = null;
 let allCompanies = [];
-let activeTagFilter = '';
+var activeTagFilters = [];
+var activeTypeFilters = [];
+var activeStatusFilters = [];
 let allTags = [];
 let currentDetailCompanyId = null; // tracks which company detail is open when adding/editing contacts
 
@@ -52,29 +54,90 @@ function renderTagChips(tagsStr) {
 
 async function loadAllTags() {
   allTags = await apiFetch('/api/tags');
-  // Populate filter dropdown
-  const sel = document.getElementById('filter-tag');
-  if (!sel) return;
-  sel.innerHTML = `<option value="">All Tags</option>` +
-    allTags.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
-  // Render clickable chips below filters
   renderTagFilterChips();
 }
 
 function renderTagFilterChips() {
-  const el = document.getElementById('tag-filter-chips');
+  var el = document.getElementById('tag-filter-chips');
   if (!el) return;
-  el.innerHTML = INDUSTRY_TAGS.map(t => `
-    <span class="tag-filter-chip ${activeTagFilter===t?'active':''}" onclick="setTagFilter('${esc(t)}')">${esc(t)}</span>
-  `).join('');
+  el.innerHTML = INDUSTRY_TAGS.map(function(t) {
+    var isActive = activeTagFilters.indexOf(t) !== -1;
+    return '<span class="tag-filter-chip ' + (isActive ? 'active' : '') + '" onclick="toggleTagFilter(\'' + esc(t) + '\')">' + esc(t) + '</span>';
+  }).join('');
 }
 
-function setTagFilter(tag) {
-  activeTagFilter = activeTagFilter === tag ? '' : tag;
-  const sel = document.getElementById('filter-tag');
-  if (sel) sel.value = activeTagFilter;
+function toggleTagFilter(tag) {
+  var idx = activeTagFilters.indexOf(tag);
+  if (idx === -1) activeTagFilters.push(tag);
+  else activeTagFilters.splice(idx, 1);
   renderTagFilterChips();
   loadCompanies();
+}
+
+/* ── Multi-select dropdown helper ── */
+function renderMultiSelectDropdown(containerId, label, options, activeArr, toggleFn) {
+  var el = document.getElementById(containerId);
+  if (!el) return;
+  var count = activeArr.length;
+  var btnLabel = count ? label + ' (' + count + ')' : label;
+  el.innerHTML = '<div class="ms-dropdown">' +
+    '<button class="ms-dropdown-btn" onclick="event.stopPropagation();toggleMsDropdown(\'' + containerId + '\')">' +
+      esc(btnLabel) + ' <span class="ms-arrow">▾</span>' +
+    '</button>' +
+    '<div class="ms-dropdown-menu" id="' + containerId + '-menu">' +
+      options.map(function(o) {
+        var checked = activeArr.indexOf(o.value) !== -1;
+        return '<label class="ms-option" onclick="event.stopPropagation()">' +
+          '<input type="checkbox" ' + (checked ? 'checked' : '') + ' onchange="' + toggleFn + '(\'' + esc(o.value) + '\')">' +
+          '<span>' + esc(o.label) + '</span>' +
+        '</label>';
+      }).join('') +
+    '</div>' +
+  '</div>';
+}
+
+function toggleMsDropdown(containerId) {
+  var menu = document.getElementById(containerId + '-menu');
+  if (!menu) return;
+  document.querySelectorAll('.ms-dropdown-menu.open').forEach(function(m) { if (m !== menu) m.classList.remove('open'); });
+  menu.classList.toggle('open');
+}
+
+var TYPE_OPTIONS = [
+  { value: 'manufacturer', label: 'Manufacturer' },
+  { value: 'retailer', label: 'Retailer' },
+  { value: 'publisher', label: 'Publisher' },
+  { value: 'agent', label: 'Agent / Rep' },
+  { value: 'other', label: 'Other' }
+];
+
+var STATUS_OPTIONS = [
+  { value: 'prospect', label: 'Prospect' },
+  { value: 'contacted', label: 'Contacted' },
+  { value: 'interested', label: 'Interested' },
+  { value: 'licensed', label: 'Licensed' },
+  { value: 'not-interested', label: 'Not Interested' }
+];
+
+function toggleTypeFilter(val) {
+  var idx = activeTypeFilters.indexOf(val);
+  if (idx === -1) activeTypeFilters.push(val);
+  else activeTypeFilters.splice(idx, 1);
+  renderProspectDropdowns();
+  loadCompanies();
+}
+
+function toggleStatusFilter(val) {
+  var idx = activeStatusFilters.indexOf(val);
+  if (idx === -1) activeStatusFilters.push(val);
+  else activeStatusFilters.splice(idx, 1);
+  renderProspectDropdowns();
+  loadCompanies();
+}
+
+function renderProspectDropdowns() {
+  renderMultiSelectDropdown('ms-type', 'All Types', TYPE_OPTIONS, activeTypeFilters, 'toggleTypeFilter');
+  renderMultiSelectDropdown('ms-status', 'All Statuses', STATUS_OPTIONS, activeStatusFilters, 'toggleStatusFilter');
 }
 
 // ── NAVIGATION ────────────────────────────────────────────────────────────
@@ -91,7 +154,7 @@ function showPage(page) {
   if (nav) nav.classList.add('active');
 
   if (page === 'dashboard') loadDashboard();
-  if (page === 'prospects') { loadAllTags(); loadCompanies(); }
+  if (page === 'prospects') { loadAllTags(); renderProspectDropdowns(); loadCompanies(); }
   if (page === 'contacts') { loadContactCategories(); populateBulkSequenceDropdown(); renderContactsTagChips(); loadContacts(); }
   if (page === 'pipeline') loadPipeline();
   if (page === 'sequences') loadSequences();
@@ -610,9 +673,9 @@ function toggleActivityMenu(btn) {
   menu.classList.toggle('open');
 }
 
-// Close menus when clicking outside
+// Close menus when clicking outside (activity menus + ms-dropdown menus)
 document.addEventListener('click', function() {
-  document.querySelectorAll('.activity-menu.open').forEach(function(m) { m.classList.remove('open'); });
+  document.querySelectorAll('.activity-menu.open, .ms-dropdown-menu.open').forEach(function(m) { m.classList.remove('open'); });
 });
 
 async function archiveReply(activityId) {
@@ -757,17 +820,28 @@ async function openContactDetail(contactId) {
   } catch(e) { toast(e.message, 'error'); }
 }
 
+function clearProspectFilters() {
+  activeTagFilters = [];
+  activeTypeFilters = [];
+  activeStatusFilters = [];
+  var searchEl = document.getElementById('search-companies');
+  if (searchEl) searchEl.value = '';
+  renderTagFilterChips();
+  renderProspectDropdowns();
+  loadCompanies();
+}
+
 // ── COMPANIES ─────────────────────────────────────────────────────────────
 async function loadCompanies() {
-  const search = document.getElementById('search-companies')?.value || '';
-  const type = document.getElementById('filter-type')?.value || '';
-  const status = document.getElementById('filter-status')?.value || '';
-  const tag = document.getElementById('filter-tag')?.value || activeTagFilter || '';
-  let url = '/api/companies?';
-  if (search) url += `search=${encodeURIComponent(search)}&`;
-  if (type) url += `type=${encodeURIComponent(type)}&`;
-  if (status) url += `status=${encodeURIComponent(status)}&`;
-  if (tag) url += `tag=${encodeURIComponent(tag)}&`;
+  var search = document.getElementById('search-companies')?.value || '';
+  var type = activeTypeFilters.join(',');
+  var status = activeStatusFilters.join(',');
+  var tag = activeTagFilters.join(',');
+  var url = '/api/companies?';
+  if (search) url += 'search=' + encodeURIComponent(search) + '&';
+  if (type) url += 'type=' + encodeURIComponent(type) + '&';
+  if (status) url += 'status=' + encodeURIComponent(status) + '&';
+  if (tag) url += 'tag=' + encodeURIComponent(tag) + '&';
   try {
     const companies = await apiFetch(url);
     allCompanies = companies;
@@ -1001,19 +1075,28 @@ async function deleteCompany(id) {
 let _selectedContactIds = new Set();
 let _notInSeqActive = false;
 
-var _contactsTagFilter = '';
+var _contactsTagFilters = [];
 
 function renderContactsTagChips() {
   var el = document.getElementById('contacts-tag-chips');
   if (!el) return;
-  el.innerHTML = `<span class="tag-filter-chip ${_contactsTagFilter===''?'active':''}" onclick="setContactsTagFilter('')">All</span>` +
+  el.innerHTML = '<span class="tag-filter-chip ' + (_contactsTagFilters.length===0?'active':'') + '" onclick="clearContactTagFilters()">All</span>' +
     INDUSTRY_TAGS.map(function(t) {
-      return '<span class="tag-filter-chip ' + (_contactsTagFilter===t?'active':'') + '" onclick="setContactsTagFilter(\'' + esc(t) + '\')">' + esc(t) + '</span>';
+      var isActive = _contactsTagFilters.indexOf(t) !== -1;
+      return '<span class="tag-filter-chip ' + (isActive?'active':'') + '" onclick="toggleContactTagFilter(\'' + esc(t) + '\')">' + esc(t) + '</span>';
     }).join('');
 }
 
-function setContactsTagFilter(tag) {
-  _contactsTagFilter = (_contactsTagFilter === tag) ? '' : tag;
+function toggleContactTagFilter(tag) {
+  var idx = _contactsTagFilters.indexOf(tag);
+  if (idx === -1) _contactsTagFilters.push(tag);
+  else _contactsTagFilters.splice(idx, 1);
+  renderContactsTagChips();
+  loadContacts();
+}
+
+function clearContactTagFilters() {
+  _contactsTagFilters = [];
   renderContactsTagChips();
   loadContacts();
 }
@@ -1024,7 +1107,7 @@ async function loadContacts() {
   var params    = new URLSearchParams();
   if (search)         params.set('search', search);
   if (category)       params.set('category', category);
-  if (_contactsTagFilter) params.set('tag', _contactsTagFilter);
+  if (_contactsTagFilters.length) params.set('tag', _contactsTagFilters.join(','));
   if (_notInSeqActive) params.set('not_in_sequence', 'true');
 
   try {
@@ -1205,13 +1288,15 @@ function toggleNotInSequence() {
 }
 
 function clearContactFilters() {
-  const search = document.getElementById('search-contacts');
-  const cat = document.getElementById('filter-category');
+  var search = document.getElementById('search-contacts');
+  var cat = document.getElementById('filter-category');
   if (search) search.value = '';
   if (cat) cat.value = '';
+  _contactsTagFilters = [];
   _notInSeqActive = false;
-  const btn = document.getElementById('btn-not-in-seq');
+  var btn = document.getElementById('btn-not-in-seq');
   if (btn) btn.classList.remove('filter-toggle-active');
+  renderContactsTagChips();
   loadContacts();
 }
 
@@ -3052,7 +3137,7 @@ async function loadReports() {
 // ── NEWS ───────────────────────────────────────────────────────────────────
 // ── INDUSTRY NEWS ─────────────────────────────────────────────────────────
 let _newsCache = null;         // raw items from API
-let _newsTag   = '';           // active tag filter
+var _newsTags  = [];           // active tag filters (multi-select)
 let newsSearchTimeout;
 
 async function loadNews(company, forceRefresh) {
@@ -3085,21 +3170,36 @@ async function loadNews(company, forceRefresh) {
 }
 
 function setNewsTag(tag, btn) {
-  _newsTag = tag;
-  document.querySelectorAll('.news-tag-chip').forEach(c => c.classList.remove('news-tag-active'));
-  if (btn) btn.classList.add('news-tag-active');
+  if (!tag) {
+    // "All" button — clear all selections
+    _newsTags = [];
+  } else {
+    var idx = _newsTags.indexOf(tag);
+    if (idx === -1) _newsTags.push(tag);
+    else _newsTags.splice(idx, 1);
+  }
+  // Update chip active states
+  document.querySelectorAll('.news-tag-chip').forEach(function(c) {
+    var chipTag = c.getAttribute('data-tag');
+    if (chipTag === '') {
+      // "All" chip — active when nothing selected
+      c.classList.toggle('news-tag-active', _newsTags.length === 0);
+    } else {
+      c.classList.toggle('news-tag-active', _newsTags.indexOf(chipTag) !== -1);
+    }
+  });
   applyNewsFilters();
 }
 
 function applyNewsFilters() {
   if (!_newsCache) return;
-  const days     = parseInt(document.getElementById('news-date-filter')?.value || '0') || 0;
-  const cutoff   = days ? Date.now() - days * 86400000 : 0;
-  const company  = document.getElementById('news-company-search')?.value?.trim().toLowerCase() || '';
+  var days     = parseInt(document.getElementById('news-date-filter')?.value || '0') || 0;
+  var cutoff   = days ? Date.now() - days * 86400000 : 0;
+  var company  = document.getElementById('news-company-search')?.value?.trim().toLowerCase() || '';
 
-  let items = _newsCache.filter(item => {
-    // Tag filter
-    if (_newsTag && !(item.tags || []).includes(_newsTag)) return false;
+  var items = _newsCache.filter(function(item) {
+    // Tag filter (multi-select OR)
+    if (_newsTags.length && !_newsTags.some(function(t) { return (item.tags || []).includes(t); })) return false;
     // Date filter
     if (cutoff && new Date(item.date).getTime() < cutoff) return false;
     // Company text search
@@ -3108,16 +3208,16 @@ function applyNewsFilters() {
     return true;
   });
 
-  const infoEl = document.getElementById('news-results-info');
+  var infoEl = document.getElementById('news-results-info');
   if (infoEl) {
-    const filters = [
-      _newsTag ? `#${_newsTag}` : '',
-      days ? `last ${days} days` : '',
-      company ? `"${company}"` : '',
+    var filters = [
+      _newsTags.length ? _newsTags.map(function(t){ return '#'+t; }).join(', ') : '',
+      days ? 'last ' + days + ' days' : '',
+      company ? '"' + company + '"' : '',
     ].filter(Boolean).join(' · ');
     infoEl.textContent = filters
-      ? `${items.length} article${items.length !== 1 ? 's' : ''} · ${filters}`
-      : `${items.length} articles`;
+      ? items.length + ' article' + (items.length !== 1 ? 's' : '') + ' · ' + filters
+      : items.length + ' articles';
   }
 
   renderNews(items);

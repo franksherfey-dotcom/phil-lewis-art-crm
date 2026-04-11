@@ -188,25 +188,9 @@
         </div>
         <div class="filters-bar">
           <input type="text" id="search-companies" placeholder="Search companies..." oninput="loadCompanies()" class="filter-input">
-          <select id="filter-type" onchange="loadCompanies()" class="filter-select">
-            <option value="">All Types</option>
-            <option value="manufacturer">Manufacturer</option>
-            <option value="retailer">Retailer</option>
-            <option value="publisher">Publisher</option>
-            <option value="agent">Agent/Rep</option>
-            <option value="other">Other</option>
-          </select>
-          <select id="filter-status" onchange="loadCompanies()" class="filter-select">
-            <option value="">All Statuses</option>
-            <option value="prospect">Prospect</option>
-            <option value="contacted">Contacted</option>
-            <option value="interested">Interested</option>
-            <option value="licensed">Licensed</option>
-            <option value="not-interested">Not Interested</option>
-          </select>
-          <select id="filter-tag" onchange="loadCompanies()" class="filter-select">
-            <option value="">All Tags</option>
-          </select>
+          <div id="ms-type"></div>
+          <div id="ms-status"></div>
+          <button class="btn btn-ghost btn-sm" onclick="clearProspectFilters()" style="color:var(--text-muted)">Clear filters</button>
         </div>
         <div id="tag-filter-chips" class="tag-filter-chips"></div>
         <div id="companies-list" class="card-grid"></div>
