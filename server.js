@@ -1043,9 +1043,11 @@ app.get('/api/inbox/not-in-sequence', async (req, res) => {
              (SELECT MAX(a.sent_at) FROM activities a WHERE a.contact_id = c.id) AS last_activity_at
       FROM contacts c
       LEFT JOIN companies co ON c.company_id = co.id
-      WHERE NOT EXISTS (
-        SELECT 1 FROM enrollments e WHERE e.contact_id = c.id AND e.status = 'active'
-      )
+      WHERE c.email IS NOT NULL AND c.email != ''
+        AND NOT EXISTS (
+          SELECT 1 FROM enrollments e WHERE e.contact_id = c.id
+            AND e.status IN ('active', 'replied', 'completed')
+        )
     `
     const params = []
     let i = 1
@@ -1058,6 +1060,26 @@ app.get('/api/inbox/not-in-sequence', async (req, res) => {
     if (limit) { sql += ` LIMIT $${i}`; params.push(parseInt(limit)); i++ }
     const contacts = await all(sql, params)
     res.json({ contacts })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// Deduplicate existing inbox messages — keeps the newest copy, removes older dupes
+app.post('/api/inbox/dedup', async (req, res) => {
+  try {
+    const result = await run(`
+      DELETE FROM activities WHERE id IN (
+        SELECT id FROM (
+          SELECT id, ROW_NUMBER() OVER (
+            PARTITION BY contact_id, subject, DATE_TRUNC('day', sent_at)
+            ORDER BY sent_at DESC
+          ) AS rn
+          FROM activities
+          WHERE type = 'received_email'
+        ) dupes WHERE rn > 1
+      )
+    `)
+    const removed = result.rowCount || 0
+    res.json({ ok: true, removed })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
@@ -1082,9 +1104,11 @@ app.post('/api/inbox/sync', async (req, res) => {
       const contact = emailToContact[msg.from_email]
       if (!contact) continue
       const contactId = contact.id
-      // Avoid duplicates — check if this subject+sent_at already logged
+      // Avoid duplicates — check if this subject already logged from this contact
+      // within a 24-hour window (handles auto-replies with slightly different timestamps)
       const existing = await one(
-        `SELECT id FROM activities WHERE contact_id=$1 AND type='received_email' AND subject=$2 AND sent_at=$3`,
+        `SELECT id FROM activities WHERE contact_id=$1 AND type='received_email' AND subject=$2
+         AND sent_at BETWEEN ($3::timestamptz - INTERVAL '24 hours') AND ($3::timestamptz + INTERVAL '24 hours')`,
         [contactId, msg.subject, msg.received_at]
       )
       if (existing) continue

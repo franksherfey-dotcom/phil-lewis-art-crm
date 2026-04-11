@@ -1849,8 +1849,14 @@ function switchInboxTab(tab) {
   loadInbox();
 }
 
+let _inboxDeduped = false;
 async function loadInbox() {
   try {
+    // One-time dedup on first inbox load per session
+    if (!_inboxDeduped) {
+      _inboxDeduped = true;
+      apiFetch('/api/inbox/dedup', { method: 'POST' }).catch(() => {});
+    }
     const search = document.getElementById('search-inbox')?.value || '';
     const el = document.getElementById('inbox-list');
 
@@ -2246,9 +2252,12 @@ async function syncInboxFromInbox() {
   toast('Syncing inbox...');
   try {
     const r = await apiFetch('/api/inbox/sync', { method: 'POST' });
+    // Auto-dedup after sync to clean up any existing duplicates
+    const dedup = await apiFetch('/api/inbox/dedup', { method: 'POST' });
     const parts = [`${r.imported} new repl${r.imported !== 1 ? 'ies' : 'y'}`];
     if (r.autoStopped > 0) parts.push(`${r.autoStopped} sequence${r.autoStopped !== 1 ? 's' : ''} stopped`);
     if (r.opportunitiesCreated > 0) parts.push(`${r.opportunitiesCreated} new opportunit${r.opportunitiesCreated !== 1 ? 'ies' : 'y'} created`);
+    if (dedup.removed > 0) parts.push(`${dedup.removed} duplicate${dedup.removed !== 1 ? 's' : ''} cleaned`);
     toast(`Inbox synced: ${parts.join(', ')}`, 'success');
     closeInboxPane();
     loadInbox();
