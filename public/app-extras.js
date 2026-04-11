@@ -274,54 +274,86 @@ function applyHeatmapFilter() {
 }
 
 function scoreLeadTemperature(lead) {
-  let score = 0;
-  const reasons = [];
-  const now = Date.now();
+  var score = 0;
+  var factors = []; // { label, points, detail }
+  var now = Date.now();
 
   // Reply sentiment — strongest signal
-  if (lead.latest_sentiment === 'positive') { score += 40; reasons.push('positive reply'); }
-  else if (lead.latest_sentiment === 'neutral') { score += 15; reasons.push('neutral reply'); }
-  else if (lead.latest_sentiment === 'negative') { score -= 20; reasons.push('negative reply'); }
+  if (lead.latest_sentiment === 'positive') {
+    score += 40; factors.push({ label: 'Sentiment', points: '+40', detail: 'Positive reply received', cls: 'up' });
+  } else if (lead.latest_sentiment === 'neutral') {
+    score += 15; factors.push({ label: 'Sentiment', points: '+15', detail: 'Neutral reply received', cls: 'up' });
+  } else if (lead.latest_sentiment === 'negative') {
+    score -= 20; factors.push({ label: 'Sentiment', points: '-20', detail: 'Negative reply received', cls: 'down' });
+  }
 
   // Got replies at all
-  if (lead.reply_count > 0) { score += 20; reasons.push(`${lead.reply_count} repl${lead.reply_count > 1 ? 'ies' : 'y'}`); }
+  if (lead.reply_count > 0) {
+    score += 20; factors.push({ label: 'Replies', points: '+20', detail: lead.reply_count + ' repl' + (lead.reply_count > 1 ? 'ies' : 'y') + ' received', cls: 'up' });
+  }
 
   // Pipeline stage advancement
-  const stage = (lead.pipeline_stage || 'prospect').toLowerCase();
-  if (stage === 'negotiation' || stage === 'closed-won') { score += 25; reasons.push(lead.pipeline_stage); }
-  else if (stage === 'proposal') { score += 15; reasons.push('proposal stage'); }
-  else if (stage === 'outreach') { score += 5; }
+  var stage = (lead.pipeline_stage || 'prospect').toLowerCase();
+  if (stage === 'negotiation' || stage === 'closed-won') {
+    score += 25; factors.push({ label: 'Pipeline', points: '+25', detail: 'Stage: ' + (lead.pipeline_stage || 'Prospect'), cls: 'up' });
+  } else if (stage === 'proposal') {
+    score += 15; factors.push({ label: 'Pipeline', points: '+15', detail: 'Stage: Proposal', cls: 'up' });
+  } else if (stage === 'interested') {
+    score += 10; factors.push({ label: 'Pipeline', points: '+10', detail: 'Stage: Interested', cls: 'up' });
+  } else if (stage === 'outreach') {
+    score += 5; factors.push({ label: 'Pipeline', points: '+5', detail: 'Stage: Outreach', cls: 'neutral' });
+  }
 
   // Opportunity value
-  const opp = parseFloat(lead.opportunity_value) || 0;
-  if (opp >= 10000) { score += 10; reasons.push(`$${opp.toLocaleString()} opp`); }
-  else if (opp >= 5000) { score += 5; }
+  var opp = parseFloat(lead.opportunity_value) || 0;
+  if (opp >= 10000) {
+    score += 10; factors.push({ label: 'Opp Value', points: '+10', detail: '$' + opp.toLocaleString() + ' opportunity', cls: 'up' });
+  } else if (opp >= 5000) {
+    score += 5; factors.push({ label: 'Opp Value', points: '+5', detail: '$' + opp.toLocaleString() + ' opportunity', cls: 'up' });
+  }
 
-  // Active sequences = currently being worked
-  if (lead.active_sequences > 0) { score += 5; reasons.push('active sequence'); }
+  // Active sequences
+  if (lead.active_sequences > 0) {
+    score += 5; factors.push({ label: 'Sequence', points: '+5', detail: 'Active outreach sequence running', cls: 'neutral' });
+  }
 
   // Recency of last reply
   if (lead.last_reply_at) {
-    const daysAgo = (now - new Date(lead.last_reply_at).getTime()) / 86400000;
-    if (daysAgo <= 7) { score += 15; reasons.push('replied this week'); }
-    else if (daysAgo <= 30) { score += 5; reasons.push('replied this month'); }
+    var replyDays = Math.floor((now - new Date(lead.last_reply_at).getTime()) / 86400000);
+    if (replyDays <= 7) {
+      score += 15; factors.push({ label: 'Reply Recency', points: '+15', detail: 'Replied ' + (replyDays === 0 ? 'today' : replyDays + 'd ago'), cls: 'up' });
+    } else if (replyDays <= 30) {
+      score += 5; factors.push({ label: 'Reply Recency', points: '+5', detail: 'Replied ' + replyDays + 'd ago', cls: 'neutral' });
+    } else {
+      factors.push({ label: 'Reply Recency', points: '0', detail: 'Last reply ' + replyDays + 'd ago', cls: 'neutral' });
+    }
   }
 
   // Recency of any activity
   if (lead.last_activity_at) {
-    const daysAgo = (now - new Date(lead.last_activity_at).getTime()) / 86400000;
-    if (daysAgo > 60) { score -= 10; reasons.push('inactive 60+ days'); }
+    var actDays = Math.floor((now - new Date(lead.last_activity_at).getTime()) / 86400000);
+    if (actDays > 60) {
+      score -= 10; factors.push({ label: 'Activity', points: '-10', detail: 'No activity in ' + actDays + ' days', cls: 'down' });
+    }
   } else if (lead.emails_sent === 0) {
-    score -= 5; reasons.push('no outreach yet');
+    score -= 5; factors.push({ label: 'Activity', points: '-5', detail: 'No outreach sent yet', cls: 'down' });
+  }
+
+  // Emails sent with no reply
+  if (lead.emails_sent > 0 && lead.reply_count === 0) {
+    factors.push({ label: 'Engagement', points: '0', detail: lead.emails_sent + ' sent, no reply yet', cls: 'neutral' });
   }
 
   // Classify
-  let temp, cls;
+  var temp, cls;
   if (score >= 35) { temp = 'Hot'; cls = 'hot'; }
   else if (score >= 10) { temp = 'Warm'; cls = 'warm'; }
   else { temp = 'Cold'; cls = 'cold'; }
 
-  return { score, temp, cls, reasons };
+  // Legacy reasons array for compatibility
+  var reasons = factors.map(function(f) { return f.detail; });
+
+  return { score: score, temp: temp, cls: cls, reasons: reasons, factors: factors };
 }
 
 // Phil's core categories — companies tagged with these are "aligned"
@@ -351,27 +383,33 @@ function renderLeadHeatmap(leads) {
   const cold = scored.filter(l => l.cls === 'cold');
 
   function renderSection(title, items, cls) {
-    if (!items.length) return `<div class="heatmap-section heatmap-${cls}"><div class="heatmap-section-title">${title} <span class="heatmap-count">(0)</span></div><div class="heatmap-empty">No ${title.toLowerCase()} leads</div></div>`;
-    return `
-      <div class="heatmap-section heatmap-${cls}">
-        <div class="heatmap-section-title">${title} <span class="heatmap-count">(${items.length})</span></div>
-        <div class="heatmap-grid">
-          ${items.map(l => `
-            <div class="heatmap-card heatmap-card-${cls}" data-tags="${esc((l.tags || '').toLowerCase())}" onclick="openCompanyDetail(${l.id})">
-              <div class="heatmap-card-header">
-                <span class="heatmap-dot heatmap-dot-${cls}"></span>
-                <strong>${esc(l.name)}</strong>
-              </div>
-              <div class="heatmap-card-stage">${esc(l.pipeline_stage || 'Prospect')}${l.opportunity_value > 0 ? ` · $${parseFloat(l.opportunity_value).toLocaleString(undefined,{maximumFractionDigits:0})}` : ''}</div>
-              <div class="heatmap-card-reasons">${l.reasons.join(' · ')}</div>
-              <div class="heatmap-card-stats">
-                <span title="Emails sent">${l.emails_sent} sent</span>
-                <span title="Replies received">${l.reply_count} repl${l.reply_count !== 1 ? 'ies' : 'y'}</span>
-              </div>
-            </div>
-          `).join('')}
-        </div>
-      </div>`;
+    if (!items.length) return '<div class="heatmap-section heatmap-' + cls + '"><div class="heatmap-section-title">' + title + ' <span class="heatmap-count">(0)</span></div><div class="heatmap-empty">No ' + title.replace(/[^\w\s]/g,'').trim().toLowerCase() + ' leads</div></div>';
+    return '<div class="heatmap-section heatmap-' + cls + '">' +
+      '<div class="heatmap-section-title">' + title + ' <span class="heatmap-count">(' + items.length + ')</span></div>' +
+      '<div class="heatmap-grid">' +
+        items.map(function(l) {
+          var factorsHtml = (l.factors || []).map(function(f) {
+            return '<div class="score-factor score-factor-' + f.cls + '">' +
+              '<span class="score-factor-pts">' + f.points + '</span>' +
+              '<span class="score-factor-detail">' + esc(f.detail) + '</span>' +
+            '</div>';
+          }).join('');
+          return '<div class="heatmap-card heatmap-card-' + cls + '" onclick="openCompanyDetail(' + l.id + ')">' +
+            '<div class="heatmap-card-header">' +
+              '<span class="heatmap-dot heatmap-dot-' + cls + '"></span>' +
+              '<strong>' + esc(l.name) + '</strong>' +
+              '<span class="heatmap-score">Score: ' + l.score + '</span>' +
+            '</div>' +
+            '<div class="heatmap-card-stage">' + esc(l.pipeline_stage || 'Prospect') + (l.opportunity_value > 0 ? ' · $' + parseFloat(l.opportunity_value).toLocaleString(undefined,{maximumFractionDigits:0}) : '') + '</div>' +
+            '<div class="score-breakdown">' + factorsHtml + '</div>' +
+            '<div class="heatmap-card-stats">' +
+              '<span title="Emails sent">' + l.emails_sent + ' sent</span>' +
+              '<span title="Replies received">' + l.reply_count + ' repl' + (l.reply_count !== 1 ? 'ies' : 'y') + '</span>' +
+            '</div>' +
+          '</div>';
+        }).join('') +
+      '</div>' +
+    '</div>';
   }
 
   function renderSleepers(items) {
