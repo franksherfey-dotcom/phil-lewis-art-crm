@@ -23,32 +23,23 @@ app.use(express.json())
 app.use(express.static(path.join(__dirname, 'public')))
 
 // ── PHIL LEWIS ART IMAGE MAP (for embedding in outreach emails) ─────────
-const ART_IMAGES = {
-  skateboard:  { url: 'https://phillewisart.com/cdn/shop/articles/soulcraft-header2_600x.jpg?v=1630337503', alt: 'Phil Lewis Art × Soulcraft Boards' },
-  surf:        { url: 'https://phillewisart.com/cdn/shop/articles/soulcraft-header2_600x.jpg?v=1630337503', alt: 'Phil Lewis Art × Soulcraft Wake Surf Boards' },
-  snowboard:   { url: 'https://phillewisart.com/cdn/shop/articles/Final_3_wood_demo_8041b6df-1fe3-4780-98f7-802164043715_600x.jpg?v=1645204598', alt: 'Phil Lewis Art × Meier Skis' },
-  outdoor:     { url: 'https://phillewisart.com/cdn/shop/articles/Final_3_wood_demo_8041b6df-1fe3-4780-98f7-802164043715_600x.jpg?v=1645204598', alt: 'Phil Lewis Art × Meier Skis' },
-  drinkware:   { url: 'https://phillewisart.com/cdn/shop/articles/epic-hero2_600x.jpg?v=1604016747', alt: 'Phil Lewis Art × Epic Water Filters' },
-  puzzles:     { url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4423WEB_600x.jpg?v=1603909822', alt: 'Phil Lewis Art × Liberty Puzzles' },
-  'hard-goods':{ url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product5843WEB_fadcaa8c-3b21-462c-b8be-26b402bc6f94_600x.jpg?v=1747320948', alt: 'Phil Lewis Art × LogoJET UV Products' },
-  fabric:      { url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4973WEB_768653d3-f5fc-42a1-8a97-c2929961780a_600x.jpg?v=1603909864', alt: 'Phil Lewis Art × Third Eye Tapestries' },
-  apparel:     { url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4389WEB_600x.jpg?v=1603909818', alt: 'Phil Lewis Art × Grassroots California' },
-  footwear:    { url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4389WEB_600x.jpg?v=1603909818', alt: 'Phil Lewis Art × Grassroots California' },
-  camping:     { url: 'https://phillewisart.com/cdn/shop/articles/epic-hero2_600x.jpg?v=1604016747', alt: 'Phil Lewis Art × Epic Water Filters' },
-  fishing:     { url: 'https://phillewisart.com/cdn/shop/articles/epic-hero2_600x.jpg?v=1604016747', alt: 'Phil Lewis Art × Epic Water Filters' },
-  calendars:   { url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4423WEB_600x.jpg?v=1603909822', alt: 'Phil Lewis Art × Liberty Puzzles' },
-  cards:       { url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4423WEB_600x.jpg?v=1603909822', alt: 'Phil Lewis Art × Liberty Puzzles' },
-  lifestyle:   { url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4973WEB_768653d3-f5fc-42a1-8a97-c2929961780a_600x.jpg?v=1603909864', alt: 'Phil Lewis Art × Third Eye Tapestries' },
-}
-const ART_DEFAULT = { url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product5843WEB_fadcaa8c-3b21-462c-b8be-26b402bc6f94_600x.jpg?v=1747320948', alt: 'Phil Lewis Art — Collaboration Products' }
-
-function getArtForCompany(company) {
-  if (!company || !company.tags) return ART_DEFAULT
-  const tags = company.tags.toLowerCase().split(',').map(t => t.trim())
-  for (const tag of tags) {
-    if (ART_IMAGES[tag]) return ART_IMAGES[tag]
-  }
-  return ART_DEFAULT
+// Now uses database art_images table instead of hardcoded map
+async function getArtForCompany(company) {
+  const fallback = { url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product5843WEB_fadcaa8c-3b21-462c-b8be-26b402bc6f94_600x.jpg?v=1747320948', alt: 'Phil Lewis Art — Collaboration Products' }
+  try {
+    if (company && company.tags) {
+      const companyTags = company.tags.toLowerCase().split(',').map(t => t.trim())
+      const artRows = await all('SELECT * FROM art_images ORDER BY id')
+      for (const tag of companyTags) {
+        const match = artRows.find(a => a.tags && a.tags.toLowerCase().split(',').some(at => at.trim() === tag))
+        if (match) return { url: match.url, alt: 'Phil Lewis Art × ' + match.title }
+      }
+      // Fall back to default image
+      const defaultImg = artRows.find(a => a.is_default)
+      if (defaultImg) return { url: defaultImg.url, alt: 'Phil Lewis Art × ' + defaultImg.title }
+    }
+    return fallback
+  } catch { return fallback }
 }
 
 function buildArtEmailBlock(artImg) {
@@ -113,6 +104,43 @@ const migrationReady = (async () => {
       console.log('✅ Seeded initial admin user: frank / ChangeMe123!')
     }
     console.log('✅ Users table ready.')
+
+    // Art gallery table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS art_images (
+        id BIGSERIAL PRIMARY KEY,
+        title TEXT NOT NULL,
+        url TEXT NOT NULL,
+        tags TEXT DEFAULT '',
+        category TEXT DEFAULT '',
+        notes TEXT DEFAULT '',
+        is_default BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+    // Seed default collaboration images if table is empty
+    const { rows: artCount } = await pool.query('SELECT COUNT(*)::int AS n FROM art_images')
+    if (artCount[0].n === 0) {
+      const seeds = [
+        { title: 'Soulcraft Wake Surf Boards', url: 'https://phillewisart.com/cdn/shop/articles/soulcraft-header2_600x.jpg?v=1630337503', tags: 'skateboard,surf', category: 'boards' },
+        { title: 'Meier Skis', url: 'https://phillewisart.com/cdn/shop/articles/Final_3_wood_demo_8041b6df-1fe3-4780-98f7-802164043715_600x.jpg?v=1645204598', tags: 'snowboard,outdoor', category: 'boards' },
+        { title: 'Epic Water Filters', url: 'https://phillewisart.com/cdn/shop/articles/epic-hero2_600x.jpg?v=1604016747', tags: 'drinkware,camping,fishing', category: 'drinkware' },
+        { title: 'Liberty Puzzles', url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4423WEB_600x.jpg?v=1603909822', tags: 'puzzles,calendars,cards', category: 'print' },
+        { title: 'Third Eye Tapestries', url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4973WEB_768653d3-f5fc-42a1-8a97-c2929961780a_600x.jpg?v=1603909864', tags: 'fabric,lifestyle', category: 'home-decor' },
+        { title: 'LogoJET UV Products', url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product5843WEB_fadcaa8c-3b21-462c-b8be-26b402bc6f94_600x.jpg?v=1747320948', tags: 'hard-goods', category: 'hard-goods', is_default: true },
+        { title: 'Grassroots California', url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4389WEB_600x.jpg?v=1603909818', tags: 'apparel,footwear', category: 'apparel' },
+        { title: 'Minute Key', url: 'https://phillewisart.com/cdn/shop/articles/minute-key-collab-hero_600x.jpg?v=1603909120', tags: 'hard-goods,lifestyle', category: 'hard-goods' },
+        { title: 'PAMP Silver Coins', url: 'https://phillewisart.com/cdn/shop/articles/package-open_600x.jpg?v=1623250937', tags: 'hard-goods,lifestyle', category: 'collectibles' },
+      ]
+      for (const s of seeds) {
+        await pool.query(
+          'INSERT INTO art_images (title, url, tags, category, is_default) VALUES ($1,$2,$3,$4,$5)',
+          [s.title, s.url, s.tags, s.category, s.is_default || false]
+        )
+      }
+      console.log('✅ Seeded art gallery with Phil Lewis collaboration images.')
+    }
+    console.log('✅ Art gallery table ready.')
   } catch (e) { console.error('Users migration error:', e.message) }
 })()
 
@@ -723,10 +751,15 @@ app.post('/api/queue/send', async (req, res) => {
     const company = enr.company_id ? await one('SELECT * FROM companies WHERE id=$1', [enr.company_id]) : null
     const contact = { first_name: enr.first_name, last_name: enr.last_name, email: enr.email, title: enr.title }
 
-    // For step 1 emails, append Phil's art collaboration image matched to company tags
+    // Embed Phil's art in every other step (1,3,5…) and the closing step
+    const { n: totalSteps } = await one(
+      'SELECT COUNT(*)::int AS n FROM sequence_steps WHERE sequence_id=$1',
+      [enr.sequence_id]
+    )
+    const isArtStep = (enr.current_step % 2 === 1) || (enr.current_step >= totalSteps)
     let emailBody = custom_body || step.body
-    if (enr.current_step === 1) {
-      const artImg = getArtForCompany(company)
+    if (isArtStep) {
+      const artImg = await getArtForCompany(company)
       emailBody = emailBody + '\n' + buildArtEmailBlock(artImg)
     }
 
@@ -735,7 +768,7 @@ app.post('/api/queue/send', async (req, res) => {
       toName: [enr.first_name, enr.last_name].filter(Boolean).join(' '),
       subject: custom_subject || step.subject,
       body: emailBody,
-      isHtml: enr.current_step === 1,
+      isHtml: isArtStep,
       contact,
       company,
     })
@@ -746,10 +779,6 @@ app.post('/api/queue/send', async (req, res) => {
     )
     if (enr.company_id) await run("UPDATE companies SET last_activity_at=NOW() WHERE id=$1", [enr.company_id])
 
-    const { n: totalSteps } = await one(
-      'SELECT COUNT(*)::int AS n FROM sequence_steps WHERE sequence_id=$1',
-      [enr.sequence_id]
-    )
     if (enr.current_step >= totalSteps) {
       await run("UPDATE enrollments SET status='completed', completed_at=NOW() WHERE id=$1", [enrollment_id])
     } else {
@@ -782,10 +811,15 @@ app.post('/api/queue/send-all', async (req, res) => {
         const company = enr.company_id ? await one('SELECT * FROM companies WHERE id=$1', [enr.company_id]) : null
         const contact = { first_name: enr.first_name, last_name: enr.last_name, email: enr.email, title: enr.title }
 
-        // For step 1 emails, append Phil's art collaboration image
+        // Embed Phil's art in every other step (1,3,5…) and the closing step
+        const { n: totalSteps } = await one(
+          'SELECT COUNT(*)::int AS n FROM sequence_steps WHERE sequence_id=$1',
+          [enr.sequence_id]
+        )
+        const isArtStep = (enr.current_step % 2 === 1) || (enr.current_step >= totalSteps)
         let emailBody = step.body
-        if (enr.current_step === 1) {
-          const artImg = getArtForCompany(company)
+        if (isArtStep) {
+          const artImg = await getArtForCompany(company)
           emailBody = emailBody + '\n' + buildArtEmailBlock(artImg)
         }
 
@@ -794,7 +828,7 @@ app.post('/api/queue/send-all', async (req, res) => {
           toName: [enr.first_name, enr.last_name].filter(Boolean).join(' '),
           subject: step.subject,
           body: emailBody,
-          isHtml: enr.current_step === 1,
+          isHtml: isArtStep,
           contact,
           company,
         })
@@ -805,10 +839,6 @@ app.post('/api/queue/send-all', async (req, res) => {
         )
         if (enr.company_id) await run("UPDATE companies SET last_activity_at=NOW() WHERE id=$1", [enr.company_id])
 
-        const { n: totalSteps } = await one(
-          'SELECT COUNT(*)::int AS n FROM sequence_steps WHERE sequence_id=$1',
-          [enr.sequence_id]
-        )
         if (enr.current_step >= totalSteps) {
           await run("UPDATE enrollments SET status='completed', completed_at=NOW() WHERE id=$1", [item.enrollment_id])
         } else {
@@ -1433,6 +1463,62 @@ app.get('/api/pipeline/stuck-count', async (req, res) => {
         )
     `)
     res.json({ count: result.count })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ─── ART GALLERY ────────────────────────────────────────────────────────────
+
+app.get('/api/art', async (req, res) => {
+  try { res.json(await all('SELECT * FROM art_images ORDER BY created_at DESC')) }
+  catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.post('/api/art', async (req, res) => {
+  try {
+    const { title, url, tags, category, notes, is_default } = req.body
+    if (!title || !url) return res.status(400).json({ error: 'Title and URL are required' })
+    // If marking as default, clear others
+    if (is_default) await run('UPDATE art_images SET is_default=FALSE WHERE is_default=TRUE')
+    const row = await one(
+      'INSERT INTO art_images (title, url, tags, category, notes, is_default) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
+      [title, url, tags || '', category || '', notes || '', is_default || false]
+    )
+    res.json(row)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.put('/api/art/:id', async (req, res) => {
+  try {
+    const { title, url, tags, category, notes, is_default } = req.body
+    if (is_default) await run('UPDATE art_images SET is_default=FALSE WHERE is_default=TRUE')
+    const row = await one(
+      'UPDATE art_images SET title=$1, url=$2, tags=$3, category=$4, notes=$5, is_default=$6 WHERE id=$7 RETURNING *',
+      [title, url, tags || '', category || '', notes || '', is_default || false, req.params.id]
+    )
+    res.json(row)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.delete('/api/art/:id', async (req, res) => {
+  try {
+    await run('DELETE FROM art_images WHERE id=$1', [req.params.id])
+    res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// Returns art images matching given tags (for sequence editor auto-pick)
+app.get('/api/art/match', async (req, res) => {
+  try {
+    const tagsParam = (req.query.tags || '').toLowerCase().split(',').map(t => t.trim()).filter(Boolean)
+    const artRows = await all('SELECT * FROM art_images ORDER BY id')
+    const matched = []
+    const rest = []
+    for (const a of artRows) {
+      const artTags = (a.tags || '').toLowerCase().split(',').map(t => t.trim())
+      if (tagsParam.some(t => artTags.includes(t))) matched.push(a)
+      else rest.push(a)
+    }
+    res.json({ matched, rest })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 

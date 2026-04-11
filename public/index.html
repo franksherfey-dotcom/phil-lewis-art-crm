@@ -100,6 +100,9 @@
         <li class="nav-item" data-page="sequences">
           <span class="nav-icon">◈</span> Sequences
         </li>
+        <li class="nav-item" data-page="gallery">
+          <span class="nav-icon">🎨</span> Art Gallery
+        </li>
         <li class="nav-item" data-page="queue">
           <span class="nav-icon">▸</span> Outreach Queue
           <span class="nav-badge queue-badge" id="badge-queue"></span>
@@ -277,6 +280,21 @@
           </div>
         </div>
         <div id="sequences-list" class="card-grid"></div>
+      </section>
+
+      <!-- ART GALLERY -->
+      <section id="page-gallery" class="page">
+        <div class="page-header">
+          <h1>Art Gallery</h1>
+          <div class="page-actions">
+            <button class="btn btn-primary" onclick="openArtModal()">+ Add Art</button>
+          </div>
+        </div>
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:16px">
+          Manage Phil's art images for email outreach. Tag images to auto-match with company categories.
+        </div>
+        <div id="gallery-filter-chips" style="margin-bottom:16px;display:flex;flex-wrap:wrap;gap:6px"></div>
+        <div id="gallery-grid" class="gallery-grid"></div>
       </section>
 
       <!-- OUTREACH QUEUE -->
@@ -838,6 +856,79 @@
           <button type="submit" class="btn btn-primary">Save Sequence</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Art Image Modal -->
+  <div id="modal-art" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="art-modal-title">Add Art Image</h2>
+        <button class="modal-close" onclick="closeModal('modal-art')">✕</button>
+      </div>
+      <form id="art-form" onsubmit="saveArtImage(event)">
+        <input type="hidden" name="art_id">
+        <div class="form-group">
+          <label>Title *</label>
+          <input type="text" name="art_title" required placeholder="e.g. Soulcraft Wake Surf Boards">
+        </div>
+        <div class="form-group">
+          <label>Image URL *</label>
+          <input type="url" name="art_url" required placeholder="https://phillewisart.com/cdn/shop/..." oninput="updateArtPreview(this.value)">
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Paste a direct link to the image (from phillewisart.com, Shopify, Dropbox, etc.)</div>
+        </div>
+        <div id="art-form-preview" style="margin:12px 0;text-align:center;display:none">
+          <img id="art-form-preview-img" style="max-width:100%;max-height:200px;border-radius:8px;border:1px solid #e0e0e0" />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Tags (comma-separated)</label>
+            <input type="text" name="art_tags" placeholder="e.g. skateboard, surf, snowboard">
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Match to company categories: outdoor, surf, skateboard, apparel, drinkware, etc.</div>
+          </div>
+          <div class="form-group">
+            <label>Category</label>
+            <select name="art_category">
+              <option value="">Select…</option>
+              <option value="boards">Boards</option>
+              <option value="drinkware">Drinkware</option>
+              <option value="apparel">Apparel</option>
+              <option value="hard-goods">Hard Goods</option>
+              <option value="home-decor">Home Decor</option>
+              <option value="print">Print (puzzles, calendars, cards)</option>
+              <option value="collectibles">Collectibles</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Notes</label>
+          <textarea name="art_notes" rows="2" placeholder="Optional notes about this piece"></textarea>
+        </div>
+        <div class="form-group" style="display:flex;align-items:center;gap:8px">
+          <input type="checkbox" name="art_is_default" id="art-is-default">
+          <label for="art-is-default" style="margin:0;font-weight:normal">Use as default fallback image (when no tag match)</label>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="closeModal('modal-art')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Image</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Art Picker Modal (for sequence editor) -->
+  <div id="modal-art-picker" class="modal-overlay hidden">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <h2>Choose Art for This Step</h2>
+        <button class="modal-close" onclick="closeModal('modal-art-picker')">✕</button>
+      </div>
+      <div id="art-picker-content" class="gallery-grid" style="padding:16px;max-height:60vh;overflow-y:auto"></div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" onclick="closeModal('modal-art-picker')">Cancel</button>
+        <button type="button" class="btn btn-danger" onclick="clearStepArt()">No Art for This Step</button>
+      </div>
     </div>
   </div>
 

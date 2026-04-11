@@ -89,6 +89,7 @@ function showPage(page) {
   if (page === 'contacts') { loadContactCategories(); populateBulkSequenceDropdown(); loadContacts(); }
   if (page === 'pipeline') loadPipeline();
   if (page === 'sequences') loadSequences();
+  if (page === 'gallery') loadArtGallery();
   if (page === 'queue') loadQueue();
   if (page === 'inbox') loadInbox();
   if (page === 'activity') loadActivity();
@@ -1340,8 +1341,36 @@ function addStep(data = null) {
       <textarea id="step-body-textarea-${n}" name="step_body_${n}" rows="10" placeholder="Hi {{first_name}},&#10;&#10;I'm Frank Sherfey, licensing representative for Phil Lewis..." required>${data ? esc(data.body) : ''}</textarea>
       <div id="step-body-preview-${n}" class="step-body-preview" style="display:none"></div>
     </div>
+    <div class="step-art-row" id="step-art-row-${n}">
+      <div class="step-art-label">
+        🎨 Art Image
+        <button type="button" class="btn btn-ghost btn-sm" onclick="openArtPicker(${n})">Choose Art</button>
+      </div>
+      <div id="step-art-preview-${n}" class="step-art-preview"></div>
+    </div>
   `;
   container.appendChild(div);
+  // Show initial art status
+  if (typeof updateStepArtPreview === 'function') updateStepArtPreview(n);
+  // Update art indicators on all steps (recalculate which is "closing")
+  updateArtStepIndicators();
+}
+
+function updateArtStepIndicators() {
+  const blocks = document.querySelectorAll('.step-block');
+  blocks.forEach((block, i) => {
+    const stepNum = parseInt(block.id.replace('step-block-',''));
+    const row = document.getElementById(`step-art-row-${stepNum}`);
+    if (!row) return;
+    const realIdx = i + 1;
+    const isLast = i === blocks.length - 1;
+    const willGetArt = (realIdx % 2 === 1) || isLast;
+    const label = row.querySelector('.step-art-label');
+    if (label && !_stepArtOverrides[stepNum]) {
+      const hint = willGetArt ? ' <span style="font-size:11px;color:var(--text-muted)">(auto-included)</span>' : ' <span style="font-size:11px;color:var(--text-muted)">(no art — even step)</span>';
+      label.innerHTML = `🎨 Art Image${hint} <button type="button" class="btn btn-ghost btn-sm" onclick="openArtPicker(${stepNum})">Choose Art</button>`;
+    }
+  });
 }
 
 function removeStep(n) {

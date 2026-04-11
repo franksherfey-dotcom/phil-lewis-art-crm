@@ -292,3 +292,217 @@ function renderLeadHeatmap(leads) {
     + renderSection('\uD83D\uDD35 Cold', cold, 'cold')
     + renderSleepers(sleepers);
 }
+
+// ── ART GALLERY ──────────────────────────────────────────────────────────
+let _artCache = [];
+let _galleryFilter = '';
+
+async function loadArtGallery() {
+  try {
+    _artCache = await apiFetch('/api/art');
+    renderGalleryFilters();
+    renderArtGallery();
+  } catch(e) {
+    const el = document.getElementById('gallery-grid');
+    if (el) el.innerHTML = `<div class="empty-state">Could not load gallery: ${esc(e.message)}</div>`;
+  }
+}
+
+function renderGalleryFilters() {
+  const el = document.getElementById('gallery-filter-chips');
+  if (!el) return;
+  const cats = [...new Set(_artCache.map(a => a.category).filter(Boolean))];
+  const tagSet = new Set();
+  _artCache.forEach(a => (a.tags||'').split(',').forEach(t => { if (t.trim()) tagSet.add(t.trim()); }));
+  const allTags = [...tagSet].sort();
+
+  el.innerHTML = `
+    <span class="tag-filter-chip ${_galleryFilter===''?'active':''}" onclick="filterGallery('')">All (${_artCache.length})</span>
+    ${cats.map(c => {
+      const count = _artCache.filter(a => a.category === c).length;
+      return `<span class="tag-filter-chip ${_galleryFilter===c?'active':''}" onclick="filterGallery('${esc(c)}')">${esc(c)} (${count})</span>`;
+    }).join('')}
+  `;
+}
+
+function filterGallery(val) {
+  _galleryFilter = _galleryFilter === val ? '' : val;
+  renderGalleryFilters();
+  renderArtGallery();
+}
+
+function renderArtGallery() {
+  const el = document.getElementById('gallery-grid');
+  if (!el) return;
+  let items = _artCache;
+  if (_galleryFilter) {
+    items = items.filter(a => a.category === _galleryFilter || (a.tags||'').includes(_galleryFilter));
+  }
+  if (!items.length) {
+    el.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><div style="font-size:32px;margin-bottom:8px">🎨</div><p>No art images yet. Click "+ Add Art" to get started.</p></div>`;
+    return;
+  }
+  el.innerHTML = items.map(a => `
+    <div class="gallery-card${a.is_default ? ' gallery-card-default' : ''}">
+      <div class="gallery-card-img-wrap">
+        <img src="${esc(a.url)}" alt="${esc(a.title)}" class="gallery-card-img" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 200 150%22><rect fill=%22%23f0f0f0%22 width=%22200%22 height=%22150%22/><text x=%2250%25%22 y=%2250%25%22 fill=%22%23999%22 text-anchor=%22middle%22 dy=%22.3em%22>Image Error</text></svg>'">
+        ${a.is_default ? '<div class="gallery-default-badge">Default</div>' : ''}
+      </div>
+      <div class="gallery-card-body">
+        <div class="gallery-card-title">${esc(a.title)}</div>
+        ${a.tags ? `<div class="gallery-card-tags">${a.tags.split(',').map(t => `<span class="tag-chip tag-default">${esc(t.trim())}</span>`).join('')}</div>` : ''}
+        ${a.category ? `<div class="gallery-card-cat">${esc(a.category)}</div>` : ''}
+        <div class="gallery-card-actions">
+          <button class="btn btn-ghost btn-sm" onclick="openArtModal(${a.id})">Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteArtImage(${a.id})">Delete</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function openArtModal(id = null) {
+  const form = document.getElementById('art-form');
+  form.reset();
+  form.querySelector('[name="art_id"]').value = '';
+  document.getElementById('art-form-preview').style.display = 'none';
+  document.getElementById('art-modal-title').textContent = id ? 'Edit Art Image' : 'Add Art Image';
+
+  if (id) {
+    const art = _artCache.find(a => a.id === id);
+    if (art) {
+      form.querySelector('[name="art_id"]').value = art.id;
+      form.querySelector('[name="art_title"]').value = art.title;
+      form.querySelector('[name="art_url"]').value = art.url;
+      form.querySelector('[name="art_tags"]').value = art.tags || '';
+      form.querySelector('[name="art_category"]').value = art.category || '';
+      form.querySelector('[name="art_notes"]').value = art.notes || '';
+      form.querySelector('[name="art_is_default"]').checked = art.is_default;
+      updateArtPreview(art.url);
+    }
+  }
+  openModal('modal-art');
+}
+
+function updateArtPreview(url) {
+  const wrap = document.getElementById('art-form-preview');
+  const img = document.getElementById('art-form-preview-img');
+  if (url && url.startsWith('http')) {
+    img.src = url;
+    wrap.style.display = 'block';
+  } else {
+    wrap.style.display = 'none';
+  }
+}
+
+async function saveArtImage(e) {
+  e.preventDefault();
+  const form = e.target;
+  const id = form.querySelector('[name="art_id"]').value;
+  const data = {
+    title: form.querySelector('[name="art_title"]').value,
+    url: form.querySelector('[name="art_url"]').value,
+    tags: form.querySelector('[name="art_tags"]').value,
+    category: form.querySelector('[name="art_category"]').value,
+    notes: form.querySelector('[name="art_notes"]').value,
+    is_default: form.querySelector('[name="art_is_default"]').checked,
+  };
+  try {
+    if (id) {
+      await apiFetch(`/api/art/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+      toast('Art image updated', 'success');
+    } else {
+      await apiFetch('/api/art', { method: 'POST', body: JSON.stringify(data) });
+      toast('Art image added', 'success');
+    }
+    closeModal('modal-art');
+    loadArtGallery();
+  } catch(err) { toast(err.message, 'error'); }
+}
+
+async function deleteArtImage(id) {
+  if (!confirm('Delete this art image? It will no longer be available for outreach emails.')) return;
+  try {
+    await apiFetch(`/api/art/${id}`, { method: 'DELETE' });
+    toast('Art image deleted', 'success');
+    loadArtGallery();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ── ART PICKER (for sequence editor steps) ──────────────────────────────
+let _artPickerStepNum = null;
+let _stepArtOverrides = {}; // stepNum -> artId or null
+
+function openArtPicker(stepNum) {
+  _artPickerStepNum = stepNum;
+  const content = document.getElementById('art-picker-content');
+  content.innerHTML = '<div style="padding:20px;color:var(--text-muted)">Loading art…</div>';
+  openModal('modal-art-picker');
+
+  // Get sequence description tags for auto-match highlighting
+  const descField = document.querySelector('#sequence-form [name="description"]');
+  const desc = descField ? descField.value : '';
+  const tagMatch = desc.match(/tags?:\s*([^\n]+)/i);
+  const seqTags = (tagMatch ? tagMatch[1] : desc).toLowerCase();
+
+  apiFetch('/api/art').then(arts => {
+    if (!arts.length) {
+      content.innerHTML = '<div class="empty-state" style="grid-column:1/-1">No art images. Go to Art Gallery to add some.</div>';
+      return;
+    }
+    content.innerHTML = arts.map(a => {
+      const artTags = (a.tags||'').toLowerCase().split(',').map(t=>t.trim());
+      const isMatch = artTags.some(t => t && seqTags.includes(t));
+      return `
+        <div class="gallery-card gallery-picker-card ${isMatch ? 'gallery-card-matched' : ''}" onclick="selectArtForStep(${a.id}, '${esc(a.url)}', '${esc(a.title)}')">
+          <div class="gallery-card-img-wrap">
+            <img src="${esc(a.url)}" alt="${esc(a.title)}" class="gallery-card-img">
+            ${isMatch ? '<div class="gallery-match-badge">Tag Match</div>' : ''}
+          </div>
+          <div class="gallery-card-body">
+            <div class="gallery-card-title">${esc(a.title)}</div>
+            ${a.tags ? `<div class="gallery-card-tags">${a.tags.split(',').map(t=>`<span class="tag-chip tag-default">${esc(t.trim())}</span>`).join('')}</div>` : ''}
+          </div>
+        </div>`;
+    }).join('');
+  }).catch(err => {
+    content.innerHTML = `<div style="padding:20px;color:red">${esc(err.message)}</div>`;
+  });
+}
+
+function selectArtForStep(artId, url, title) {
+  _stepArtOverrides[_artPickerStepNum] = { id: artId, url, title };
+  updateStepArtPreview(_artPickerStepNum);
+  closeModal('modal-art-picker');
+  toast(`Art set: ${title}`, 'success');
+}
+
+function clearStepArt() {
+  _stepArtOverrides[_artPickerStepNum] = null; // explicit "no art"
+  updateStepArtPreview(_artPickerStepNum);
+  closeModal('modal-art-picker');
+  toast('Art removed from this step', '');
+}
+
+function updateStepArtPreview(stepNum) {
+  const previewEl = document.getElementById(`step-art-preview-${stepNum}`);
+  if (!previewEl) return;
+  const override = _stepArtOverrides[stepNum];
+  if (override === null) {
+    // Explicitly no art
+    previewEl.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:8px">No art for this step <button class="btn btn-ghost btn-sm" onclick="openArtPicker(' + stepNum + ')">Change</button></div>';
+  } else if (override) {
+    previewEl.innerHTML = `
+      <div class="step-art-selected">
+        <img src="${esc(override.url)}" class="step-art-thumb" />
+        <span>${esc(override.title)}</span>
+        <button class="btn btn-ghost btn-sm" onclick="openArtPicker(${stepNum})">Change</button>
+      </div>`;
+  } else {
+    // Auto-assigned — show placeholder
+    previewEl.innerHTML = `
+      <div style="font-size:12px;color:var(--text-muted);padding:8px">
+        Auto-matched by tags <button class="btn btn-ghost btn-sm" onclick="openArtPicker(${stepNum})">Override</button>
+      </div>`;
+  }
+}
