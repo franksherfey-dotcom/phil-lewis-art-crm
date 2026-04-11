@@ -1488,6 +1488,35 @@ const ART_SEEDS = [
   { title: 'Custom Engraving Projects', url: 'https://phillewisart.com/cdn/shop/products/Engravings-custom_items_-_57_of_113_1024x.jpg?v=1573872914', tags: 'engraving,custom,hard-goods,laser', category: 'engraving' },
   { title: 'Custom Engraving — Sample 1', url: 'https://phillewisart.com/cdn/shop/products/Engravings-custom_items_-_1_of_113_800x.jpg?v=1573872914', tags: 'engraving,custom,hard-goods,laser', category: 'engraving' },
   { title: 'Custom Engraving — Sample 2', url: 'https://phillewisart.com/cdn/shop/products/Engravings-custom_items_-_3_of_113_800x.jpg?v=1573872914', tags: 'engraving,custom,hard-goods,laser', category: 'engraving' },
+  // ── Kids & Games ──
+  { title: 'Go Fish Card Game', url: 'https://phillewisart.com/cdn/shop/files/deck_600x.jpg?v=1729436140', tags: 'kids,games,cards,family', category: 'kids-games' },
+  { title: 'Animal Friends — Children\'s Book', url: 'https://phillewisart.com/cdn/shop/products/PhilLewisProduct4454WEB_32da098a-f2c6-4ab2-8edb-9eb36a96d273_600x.jpg?v=1603403270', tags: 'kids,books,children,family', category: 'kids-games' },
+  { title: 'Coloring Book Combo', url: 'https://phillewisart.com/cdn/shop/products/PhilLewisProduct4501WEB_600x.jpg?v=1603404713', tags: 'kids,books,coloring,family', category: 'kids-games' },
+  // ── Pets ──
+  { title: 'Engraved Dog Tags', url: 'https://phillewisart.com/cdn/shop/products/PhilLewisProduct4667WEB_600x.jpg?v=1603405298', tags: 'pets,dog,tags,engraving,accessories', category: 'pets' },
+  // ── Disc Sports ──
+  { title: 'Octopus — Canyon Golf Disc', url: 'https://phillewisart.com/cdn/shop/files/octopus-canyon_600x.jpg?v=1752184951', tags: 'golf,disc,sports,outdoor', category: 'disc-sports' },
+  { title: 'Trash Panda Golf Discs', url: 'https://phillewisart.com/cdn/shop/files/River-Dance_600x.jpg?v=1702851822', tags: 'golf,disc,sports,outdoor', category: 'disc-sports' },
+  { title: 'Lotus Ultimate Frisbee', url: 'https://phillewisart.com/cdn/shop/files/lotus-ultimate-mock-up_600x.jpg?v=1695057826', tags: 'frisbee,disc,sports,outdoor', category: 'disc-sports' },
+  // ── Home Decor (tapestries, blankets) ──
+  { title: 'Jellyfish Nimbus Tapestry', url: 'https://phillewisart.com/cdn/shop/products/Lewis_Jellyfish_T_600x.png?v=1573872900', tags: 'tapestry,fabric,home-decor,lifestyle', category: 'home-decor' },
+  { title: 'Red Rocks Tapestry', url: 'https://phillewisart.com/cdn/shop/products/Lewis_Redrocks_T_600x.png?v=1573872912', tags: 'tapestry,fabric,home-decor,lifestyle', category: 'home-decor' },
+  { title: 'Lion — Sherpa Blanket', url: 'https://phillewisart.com/cdn/shop/products/IMG_0851_600x.jpg?v=1646014118', tags: 'blanket,home-decor,lifestyle,fabric', category: 'home-decor' },
+  { title: 'Foxy — Woven Blanket', url: 'https://phillewisart.com/cdn/shop/products/IMG_2680_600x.jpeg?v=1603563608', tags: 'blanket,home-decor,lifestyle,fabric', category: 'home-decor' },
+  // ── Pins, Patches & Accessories ──
+  { title: 'Giraffes — Embroidered Patch', url: 'https://phillewisart.com/cdn/shop/products/PhilLewisProduct4487WEB_600x.jpg?v=1603404560', tags: 'pins,patches,accessories,collectibles', category: 'accessories' },
+  { title: 'Lord Gush Pin', url: 'https://phillewisart.com/cdn/shop/products/PhilLewisProduct4749WEB_600x.jpg?v=1603405656', tags: 'pins,accessories,collectibles', category: 'accessories' },
+  { title: 'Jellyfish Moodmat', url: 'https://phillewisart.com/cdn/shop/products/PhilLewisProduct4636WEB_600x.jpg?v=1603405200', tags: 'accessories,barware,lifestyle', category: 'accessories' },
+  // ── Barware ──
+  { title: 'Engraved Bottle Openers', url: 'https://phillewisart.com/cdn/shop/products/PhilLewisProduct4665WEB_600x.jpg?v=1603405259', tags: 'barware,bottle-opener,engraving,hard-goods', category: 'barware' },
+  { title: 'Printed Bottle Openers', url: 'https://phillewisart.com/cdn/shop/products/IMG_0918_600x.jpg?v=1647372872', tags: 'barware,bottle-opener,hard-goods', category: 'barware' },
+  // ── Greeting Cards ──
+  { title: 'Greeting Cards', url: 'https://phillewisart.com/cdn/shop/products/wolfsong_a006b5ab-91cb-415e-aaf9-e7941f54d75f_600x.jpg?v=1602521191', tags: 'cards,greeting,stationery,print', category: 'print' },
+  { title: 'Sea Turtles — Greeting Card', url: 'https://phillewisart.com/cdn/shop/files/sea-turtles-card-mockup_600x.jpg?v=1729892058', tags: 'cards,greeting,stationery,print', category: 'print' },
+  // ── Books & Journals ──
+  { title: 'Phil Lewis Journals', url: 'https://phillewisart.com/cdn/shop/products/IMG_2981_600x.jpg?v=1672265639', tags: 'books,journals,stationery,print', category: 'print' },
+  // ── Apparel extras (boardshorts) ──
+  { title: 'Let it Flow — Boardshorts', url: 'https://phillewisart.com/cdn/shop/files/Shorts3_600x.jpg?v=1721420070', tags: 'apparel,boardshorts,surf,outdoor', category: 'apparel' },
 ]
 
 async function seedArtIfEmpty() {
