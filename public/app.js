@@ -1588,6 +1588,8 @@ async function confirmEnroll() {
 // ── QUEUE ─────────────────────────────────────────────────────────────────
 let _queueCache = [];
 
+let _queueExpanded = {}; // seqId -> bool (default open)
+
 async function loadQueue() {
   try {
     const queue = await apiFetch('/api/queue');
@@ -1611,24 +1613,71 @@ async function loadQueue() {
     }
 
     if (btn) btn.disabled = false;
-    infoEl.textContent = `${queue.length} email${queue.length!==1?'s':''} ready to send`;
-    listEl.innerHTML = `<div class="queue-list">${queue.map((item, i) => `
-      <div class="queue-item queue-item-clickable" onclick="openQueueDetail(${i})">
-        <div class="queue-item-info">
-          <div class="queue-contact">${esc(item.first_name)} ${esc(item.last_name||'')}</div>
-          <div class="queue-company">${esc(item.company_name||'No company')} ${item.company_type ? `· ${typeName(item.company_type)}` : ''}</div>
-          ${item.email ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px">${esc(item.email)}</div>` : ''}
-          <div class="queue-seq">${esc(item.sequence_name)}</div>
-          <span class="queue-step-badge">Step ${item.current_step} of ${item.total_steps}</span>
-          <div class="queue-subject">"${esc(item.step_subject)}"</div>
-        </div>
-        <div class="queue-actions" onclick="event.stopPropagation()">
-          <button class="btn btn-ghost btn-sm" onclick="previewEmail(${item.enrollment_id})">Preview</button>
-          <button class="btn btn-primary btn-sm" onclick="sendOne(${item.enrollment_id})">Send</button>
-        </div>
-      </div>
-    `).join('')}</div>`;
+    infoEl.textContent = `${queue.length} email${queue.length!==1?'s':''} ready to send across ${countCampaigns(queue)} campaign${countCampaigns(queue)!==1?'s':''}`;
+
+    // Group by sequence
+    const groups = {};
+    queue.forEach((item, i) => {
+      const key = item.sequence_id;
+      if (!groups[key]) groups[key] = { name: item.sequence_name, id: key, items: [] };
+      groups[key].items.push({ ...item, _index: i });
+    });
+
+    // Default: all expanded
+    Object.keys(groups).forEach(k => {
+      if (_queueExpanded[k] === undefined) _queueExpanded[k] = true;
+    });
+
+    listEl.innerHTML = Object.values(groups).map(g => {
+      const isOpen = _queueExpanded[g.id];
+      const stepCounts = {};
+      g.items.forEach(item => {
+        const k = `Step ${item.current_step}`;
+        stepCounts[k] = (stepCounts[k] || 0) + 1;
+      });
+      const stepSummary = Object.entries(stepCounts).map(([k,v]) => `${k}: ${v}`).join(' · ');
+
+      return `
+        <div class="queue-group">
+          <div class="queue-group-header" onclick="toggleQueueGroup(${g.id})">
+            <div class="queue-group-left">
+              <span class="queue-group-arrow">${isOpen ? '▾' : '▸'}</span>
+              <span class="queue-group-name">${esc(g.name)}</span>
+              <span class="queue-group-count">${g.items.length} recipient${g.items.length!==1?'s':''}</span>
+              <span class="queue-group-steps">${stepSummary}</span>
+            </div>
+            <div class="queue-group-actions" onclick="event.stopPropagation()">
+              <button class="btn btn-outline btn-sm" onclick="openEnrollModalForSeq(${g.id})">+ Add Contacts</button>
+              <button class="btn btn-ghost btn-sm" onclick="openSequenceModal(${g.id})">Edit Sequence</button>
+            </div>
+          </div>
+          ${isOpen ? `<div class="queue-group-body">${g.items.map(item => `
+            <div class="queue-item queue-item-clickable" onclick="openQueueDetail(${item._index})">
+              <div class="queue-item-info">
+                <div class="queue-contact">${esc(item.first_name)} ${esc(item.last_name||'')}</div>
+                <div class="queue-company">${esc(item.company_name||'No company')} ${item.company_type ? `· ${typeName(item.company_type)}` : ''}</div>
+                ${item.email ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px">${esc(item.email)}</div>` : ''}
+                <span class="queue-step-badge">Step ${item.current_step} of ${item.total_steps}</span>
+                <div class="queue-subject">"${esc(item.step_subject)}"</div>
+              </div>
+              <div class="queue-actions" onclick="event.stopPropagation()">
+                <button class="btn btn-ghost btn-sm" onclick="previewEmail(${item.enrollment_id})">Preview</button>
+                <button class="btn btn-primary btn-sm" onclick="sendOne(${item.enrollment_id})">Send</button>
+              </div>
+            </div>
+          `).join('')}</div>` : ''}
+        </div>`;
+    }).join('');
   } catch(e) { toast(e.message, 'error'); }
+}
+
+function countCampaigns(queue) {
+  return new Set(queue.map(q => q.sequence_id)).size;
+}
+
+function toggleQueueGroup(seqId) {
+  _queueExpanded[seqId] = !_queueExpanded[seqId];
+  loadQueue();
 }
 
 async function openQueueDetail(index) {
