@@ -457,26 +457,6 @@ async function apiFetch(url, opts = {}) {
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
   return data;
 }
-  const token = getToken();
-  const res = await fetch(API + url, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-      ...opts.headers,
-    },
-    ...opts,
-  });
-  if (res.status === 401) {
-    // Token expired or invalid
-    setToken(null);
-    document.getElementById('app').style.display = 'none';
-    document.getElementById('login-screen').style.display = 'flex';
-    throw new Error('Session expired. Please log in again.');
-  }
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
-  return data;
-}
 
 // ── TOAST ──────────────────────────────────────────────────────────────────
 let toastTimeout;
