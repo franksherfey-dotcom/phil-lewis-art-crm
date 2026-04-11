@@ -258,49 +258,44 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
 /* ── Selected contact row highlight ── */
 .contact-row-selected { background: #F0F5FF !important; }
 
-/* ── GROUPED CONTACTS ── */
-.contacts-grouped { display: flex; flex-direction: column; gap: 24px; }
-.contacts-industry-group { }
+/* ── CONTACTS TILE GRID ── */
+.contacts-grouped { display: flex; flex-direction: column; gap: 28px; }
 .contacts-industry-header {
-  display: flex; align-items: center; gap: 10px;
-  padding: 10px 0 8px; border-bottom: 2px solid var(--primary);
-  margin-bottom: 8px;
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 0 0 8px; border-bottom: 2px solid var(--primary);
+  margin-bottom: 4px;
 }
 .contacts-industry-label {
-  font-size: 15px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: 0.05em; color: var(--primary);
+  font-size: 14px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--primary);
 }
 .contacts-industry-count { font-size: 12px; color: var(--text-muted); }
-.contacts-company-group { margin-bottom: 4px; }
-.contacts-company-header {
-  display: flex; align-items: center; gap: 8px;
-  padding: 8px 14px; background: var(--bg); border-radius: 6px 6px 0 0;
-  border: 1px solid var(--border); border-bottom: none;
+.contacts-tile-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px;
 }
-.contacts-company-header:hover { background: #EDEAE5; }
-.contacts-company-name { font-weight: 600; font-size: 14px; color: var(--text); }
-.contacts-company-count {
-  font-size: 11px; background: var(--border); color: var(--text-muted);
-  padding: 1px 8px; border-radius: 99px; font-weight: 600;
+.contact-tile {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 14px 16px; cursor: pointer;
+  transition: box-shadow 0.15s, border-color 0.15s;
+  display: flex; flex-direction: column; gap: 8px;
 }
-.contacts-company-list { border: 1px solid var(--border); border-radius: 0 0 6px 6px; margin-bottom: 8px; }
-.contact-card {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 14px; border-bottom: 1px solid var(--border);
-  cursor: pointer; transition: background 0.12s;
+.contact-tile:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); border-color: var(--primary); }
+.tile-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.tile-company-name { font-weight: 700; font-size: 14px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile-contact-count {
+  font-size: 11px; font-weight: 600; background: var(--bg); color: var(--text-muted);
+  padding: 2px 8px; border-radius: 99px; flex-shrink: 0;
 }
-.contact-card:last-child { border-bottom: none; }
-.contact-card:hover { background: var(--bg); }
-.contact-card-left { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
-.contact-card-info { min-width: 0; }
-.contact-card-name { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.contact-card-name .primary-badge { color: #D4A017; }
-.contact-card-title { font-weight: 400; color: var(--text-muted); font-size: 13px; }
-.contact-card-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
-.contact-card-meta a { color: var(--primary); text-decoration: none; }
-.contact-card-meta a:hover { text-decoration: underline; }
-.contact-card-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-.contact-email-link, .contact-linkedin-link { color: var(--primary); text-decoration: none; font-size: 12px; }
+.tile-status { }
+.tile-contacts { display: flex; flex-direction: column; gap: 3px; }
+.tile-contact-row { display: flex; align-items: center; gap: 4px; font-size: 12px; line-height: 1.5; min-width: 0; }
+.tile-star { color: #D4A017; font-size: 11px; flex-shrink: 0; width: 14px; text-align: center; }
+.tile-star-placeholder { width: 14px; flex-shrink: 0; }
+.tile-contact-name { font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile-contact-title { color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; }
+.tile-contact-title::before { content: '·'; margin: 0 4px; }
+.tile-more { font-size: 11px; color: var(--text-muted); padding-left: 18px; }
+.seq-badge.seq-none { background: #F3F4F6; color: #9CA3AF; }
 
 /* ── CARD GRID ── */
 .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }

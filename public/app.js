@@ -1065,53 +1065,44 @@ async function loadContacts() {
       return '<div class="contacts-industry-group">' +
         '<div class="contacts-industry-header">' +
           '<span class="contacts-industry-label">' + esc(label) + '</span>' +
-          '<span class="contacts-industry-count">' + totalContacts + ' contact' + (totalContacts !== 1 ? 's' : '') + '</span>' +
+          '<span class="contacts-industry-count">' + totalContacts + ' contact' + (totalContacts !== 1 ? 's' : '') + ' · ' + companyNames.length + ' compan' + (companyNames.length !== 1 ? 'ies' : 'y') + '</span>' +
         '</div>' +
+        '<div class="contacts-tile-grid">' +
         companyNames.map(function(coName) {
           var group = companies[coName];
           var cts = group.contacts;
-          return '<div class="contacts-company-group">' +
-            '<div class="contacts-company-header" onclick="' + (group.companyId ? 'openCompanyDetail(' + group.companyId + ')' : '') + '" style="cursor:' + (group.companyId ? 'pointer' : 'default') + '">' +
-              '<span class="contacts-company-name">' + esc(coName) + '</span>' +
-              '<span class="contacts-company-count">' + cts.length + '</span>' +
-            '</div>' +
-            '<div class="contacts-company-list">' +
-              cts.map(function(c) {
-                var seqBadge = c.enrollment_status === 'active'
-                  ? '<span class="seq-badge seq-active" title="' + esc(c.sequence_name||'') + '">● Active</span>'
-                  : c.enrollment_status === 'replied'
-                  ? '<span class="seq-badge seq-replied" title="' + esc(c.sequence_name||'') + '">✓ Replied</span>'
-                  : c.enrollment_status === 'completed'
-                  ? '<span class="seq-badge seq-completed" title="' + esc(c.sequence_name||'') + '">✓ Done</span>'
-                  : '';
-                var emailLink = c.email ? '<a href="mailto:' + esc(c.email) + '" class="contact-email-link" onclick="event.stopPropagation()">' + esc(c.email) + '</a>' : '';
-                var linkedinLink = c.linkedin ? '<a href="' + esc(c.linkedin.startsWith('http')?c.linkedin:'https://'+c.linkedin) + '" target="_blank" class="contact-linkedin-link" onclick="event.stopPropagation()">LinkedIn</a>' : '';
+          var primary = cts.find(function(c) { return c.is_primary; }) || cts[0];
+          // Determine best sequence status for tile badge
+          var hasActive = cts.some(function(c) { return c.enrollment_status === 'active'; });
+          var hasReplied = cts.some(function(c) { return c.enrollment_status === 'replied'; });
+          var hasDone = cts.some(function(c) { return c.enrollment_status === 'completed'; });
+          var tileBadge = hasReplied
+            ? '<span class="seq-badge seq-replied">Replied</span>'
+            : hasActive
+            ? '<span class="seq-badge seq-active">In Sequence</span>'
+            : hasDone
+            ? '<span class="seq-badge seq-completed">Done</span>'
+            : '<span class="seq-badge seq-none">No Outreach</span>';
 
-                return '<div class="contact-card" onclick="openContactDetail(' + c.id + ')">' +
-                  '<div class="contact-card-left">' +
-                    '<input type="checkbox" class="contact-checkbox" value="' + c.id + '" onclick="event.stopPropagation();toggleContactSelect(' + c.id + ', this)">' +
-                    '<div class="contact-card-info">' +
-                      '<div class="contact-card-name">' +
-                        (c.is_primary ? '<span class="primary-badge" title="Primary contact">★</span> ' : '') +
-                        esc(c.first_name) + ' ' + esc(c.last_name||'') +
-                        (c.title ? ' <span class="contact-card-title">· ' + esc(c.title) + '</span>' : '') +
-                      '</div>' +
-                      '<div class="contact-card-meta">' +
-                        emailLink +
-                        (emailLink && linkedinLink ? ' · ' : '') +
-                        linkedinLink +
-                      '</div>' +
-                    '</div>' +
-                  '</div>' +
-                  '<div class="contact-card-right">' +
-                    seqBadge +
-                    '<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openContactModal(' + c.id + ')">Edit</button>' +
-                  '</div>' +
-                '</div>';
-              }).join('') +
+          var contactLines = cts.slice(0, 3).map(function(c) {
+            return '<div class="tile-contact-row">' +
+              (c.is_primary ? '<span class="tile-star">★</span>' : '<span class="tile-star-placeholder"></span>') +
+              '<span class="tile-contact-name">' + esc(c.first_name) + ' ' + esc(c.last_name||'') + '</span>' +
+              (c.title ? '<span class="tile-contact-title">' + esc(c.title) + '</span>' : '') +
+            '</div>';
+          }).join('');
+          var moreCount = cts.length > 3 ? '<div class="tile-more">+' + (cts.length - 3) + ' more</div>' : '';
+
+          return '<div class="contact-tile" onclick="openCompanyDetail(' + (group.companyId||0) + ')">' +
+            '<div class="tile-header">' +
+              '<div class="tile-company-name">' + esc(coName) + '</div>' +
+              '<div class="tile-contact-count">' + cts.length + '</div>' +
             '</div>' +
+            '<div class="tile-status">' + tileBadge + '</div>' +
+            '<div class="tile-contacts">' + contactLines + moreCount + '</div>' +
           '</div>';
         }).join('') +
+        '</div>' +
       '</div>';
     }).join('');
 
