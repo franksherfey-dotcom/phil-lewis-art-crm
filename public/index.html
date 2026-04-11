@@ -173,7 +173,7 @@
           </div>
         </div>
         <div class="stats-grid" id="stats-grid"></div>
-        <div class="section-title">Recent Activity</div>
+        <div class="section-title">Prospect Replies</div>
         <div id="recent-activity"></div>
       </section>
 
@@ -911,9 +911,8 @@
           <label>Notes</label>
           <textarea name="art_notes" rows="2" placeholder="Optional notes about this piece"></textarea>
         </div>
-        <div class="form-group" style="display:flex;align-items:center;gap:8px">
-          <input type="checkbox" name="art_is_default" id="art-is-default">
-          <label for="art-is-default" style="margin:0;font-weight:normal">Use as default fallback image (when no tag match)</label>
+        <div class="form-group" style="font-size:12px;color:var(--text-muted)">
+          Art images are auto-matched to prospects by tag overlap — no default needed.
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline" onclick="closeModal('modal-art')">Cancel</button>

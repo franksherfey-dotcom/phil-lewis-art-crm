@@ -1,98 +1,37 @@
-// ── PHIL LEWIS ART — CATEGORY-TO-IMAGE MAPPING ───────────────────────────
-// Maps company tags/categories to Phil's collaboration product images
-const ART_IMAGE_MAP = {
-  skateboard: {
-    url: 'https://phillewisart.com/cdn/shop/articles/soulcraft-header2_600x.jpg?v=1630337503',
-    alt: 'Phil Lewis Art × Soulcraft Boards',
-    label: 'Board Art',
-  },
-  surf: {
-    url: 'https://phillewisart.com/cdn/shop/articles/soulcraft-header2_600x.jpg?v=1630337503',
-    alt: 'Phil Lewis Art × Soulcraft Wake Surf Boards',
-    label: 'Board Art',
-  },
-  snowboard: {
-    url: 'https://phillewisart.com/cdn/shop/articles/Final_3_wood_demo_8041b6df-1fe3-4780-98f7-802164043715_600x.jpg?v=1645204598',
-    alt: 'Phil Lewis Art × Meier Skis',
-    label: 'Board Art',
-  },
-  outdoor: {
-    url: 'https://phillewisart.com/cdn/shop/articles/Final_3_wood_demo_8041b6df-1fe3-4780-98f7-802164043715_600x.jpg?v=1645204598',
-    alt: 'Phil Lewis Art × Meier Skis',
-    label: 'Outdoor Products',
-  },
-  drinkware: {
-    url: 'https://phillewisart.com/cdn/shop/articles/epic-hero2_600x.jpg?v=1604016747',
-    alt: 'Phil Lewis Art × Epic Water Filters',
-    label: 'Drinkware',
-  },
-  puzzles: {
-    url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4423WEB_600x.jpg?v=1603909822',
-    alt: 'Phil Lewis Art × Liberty Puzzles',
-    label: 'Puzzles',
-  },
-  'hard-goods': {
-    url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product5843WEB_fadcaa8c-3b21-462c-b8be-26b402bc6f94_600x.jpg?v=1747320948',
-    alt: 'Phil Lewis Art × LogoJET UV Products',
-    label: 'Hard Goods',
-  },
-  fabric: {
-    url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4973WEB_768653d3-f5fc-42a1-8a97-c2929961780a_600x.jpg?v=1603909864',
-    alt: 'Phil Lewis Art × Third Eye Tapestries',
-    label: 'Fabric & Tapestries',
-  },
-  apparel: {
-    url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4389WEB_600x.jpg?v=1603909818',
-    alt: 'Phil Lewis Art × Grassroots California',
-    label: 'Apparel & Accessories',
-  },
-  footwear: {
-    url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4389WEB_600x.jpg?v=1603909818',
-    alt: 'Phil Lewis Art × Grassroots California',
-    label: 'Footwear & Apparel',
-  },
-  camping: {
-    url: 'https://phillewisart.com/cdn/shop/articles/epic-hero2_600x.jpg?v=1604016747',
-    alt: 'Phil Lewis Art × Epic Water Filters',
-    label: 'Camping & Outdoor Gear',
-  },
-  fishing: {
-    url: 'https://phillewisart.com/cdn/shop/articles/epic-hero2_600x.jpg?v=1604016747',
-    alt: 'Phil Lewis Art × Epic Water Filters',
-    label: 'Fishing & Outdoor',
-  },
-  calendars: {
-    url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4423WEB_600x.jpg?v=1603909822',
-    alt: 'Phil Lewis Art × Liberty Puzzles',
-    label: 'Calendars & Print',
-  },
-  cards: {
-    url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4423WEB_600x.jpg?v=1603909822',
-    alt: 'Phil Lewis Art × Liberty Puzzles',
-    label: 'Cards & Stationery',
-  },
-  lifestyle: {
-    url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4973WEB_768653d3-f5fc-42a1-8a97-c2929961780a_600x.jpg?v=1603909864',
-    alt: 'Phil Lewis Art × Third Eye Tapestries',
-    label: 'Lifestyle Products',
-  },
-};
+// ── DYNAMIC ART MATCHING ─────────────────────────────────────────────────
+// Art images are pulled from the gallery database (_artCache).
+// getArtForTags() scores each gallery entry by tag overlap with the
+// prospect's company tags, so the best match is always automatic.
 
-// Default fallback image (general Phil Lewis art)
-const ART_IMAGE_DEFAULT = {
-  url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product5843WEB_fadcaa8c-3b21-462c-b8be-26b402bc6f94_600x.jpg?v=1747320948',
-  alt: 'Phil Lewis Art — Collaboration Products',
-  label: 'Phil Lewis Art',
-};
+function _artToImage(art) {
+  const label = (GALLERY_DISPLAY_NAMES && GALLERY_DISPLAY_NAMES[art.category])
+    || art.category || art.title;
+  return { url: art.url, alt: 'Phil Lewis Art × ' + art.title, label };
+}
 
 // Given a tags string (comma-separated), return the best matching art image
 function getArtForTags(tagsStr) {
-  if (!tagsStr) return ART_IMAGE_DEFAULT;
-  const tags = tagsStr.toLowerCase().split(',').map(t => t.trim());
-  for (const tag of tags) {
-    if (ART_IMAGE_MAP[tag]) return ART_IMAGE_MAP[tag];
+  const cache = (typeof _artCache !== 'undefined' && _artCache && _artCache.length) ? _artCache : [];
+  if (!cache.length) {
+    // Gallery not loaded yet — return a safe fallback
+    return { url: '', alt: 'Phil Lewis Art', label: 'Phil Lewis Art' };
   }
-  return ART_IMAGE_DEFAULT;
+  if (!tagsStr) return _artToImage(cache[0]);
+
+  const prospectTags = tagsStr.toLowerCase().split(',').map(t => t.trim());
+  let bestMatch = null;
+  let bestScore = 0;
+
+  for (const art of cache) {
+    const artTags = (art.tags || '').toLowerCase().split(',').map(t => t.trim());
+    const score = prospectTags.filter(t => artTags.includes(t)).length;
+    if (score > bestScore) {
+      bestScore = score;
+      bestMatch = art;
+    }
+  }
+
+  return _artToImage(bestMatch || cache[0]);
 }
 
 // Build the HTML block that gets embedded in emails
@@ -385,10 +324,9 @@ function renderArtGallery() {
     return;
   }
   el.innerHTML = items.map(a => `
-    <div class="gallery-card${a.is_default ? ' gallery-card-default' : ''}">
+    <div class="gallery-card">
       <div class="gallery-card-img-wrap">
         <img src="${esc(a.url)}" alt="${esc(a.title)}" class="gallery-card-img" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 200 150%22><rect fill=%22%23f0f0f0%22 width=%22200%22 height=%22150%22/><text x=%2250%25%22 y=%2250%25%22 fill=%22%23999%22 text-anchor=%22middle%22 dy=%22.3em%22>Image Error</text></svg>'">
-        ${a.is_default ? '<div class="gallery-default-badge">Default</div>' : ''}
       </div>
       <div class="gallery-card-body">
         <div class="gallery-card-title">${esc(a.title)}</div>
@@ -419,7 +357,7 @@ function openArtModal(id = null) {
       form.querySelector('[name="art_tags"]').value = art.tags || '';
       form.querySelector('[name="art_category"]').value = art.category || '';
       form.querySelector('[name="art_notes"]').value = art.notes || '';
-      form.querySelector('[name="art_is_default"]').checked = art.is_default;
+      // is_default no longer used — art matching is dynamic by tags
       updateArtPreview(art.url);
     }
   }
@@ -447,7 +385,7 @@ async function saveArtImage(e) {
     tags: form.querySelector('[name="art_tags"]').value,
     category: form.querySelector('[name="art_category"]').value,
     notes: form.querySelector('[name="art_notes"]').value,
-    is_default: form.querySelector('[name="art_is_default"]').checked,
+    is_default: false,
   };
   try {
     if (id) {

@@ -286,26 +286,14 @@ app.get('/api/dashboard', async (req, res) => {
       one("SELECT COUNT(*)::int AS n FROM enrollments WHERE status='active'"),
       one("SELECT COUNT(*)::int AS n FROM activities WHERE type='email'"),
       all(`
-        SELECT * FROM (
-          SELECT DISTINCT ON (latest.contact_id)
-            latest.*,
-            c.first_name, c.last_name, co.name AS company_name, co.id AS company_id,
-            COALESCE(reply.has_reply, FALSE) AS has_reply,
-            COALESCE(reply.has_unread, FALSE) AS has_unread
-          FROM activities latest
-          LEFT JOIN contacts c ON latest.contact_id = c.id
-          LEFT JOIN companies co ON c.company_id = co.id
-          LEFT JOIN LATERAL (
-            SELECT
-              TRUE AS has_reply,
-              BOOL_OR(r.notes IS NULL OR r.notes != 'read') AS has_unread
-            FROM activities r
-            WHERE r.contact_id = latest.contact_id AND r.type = 'received_email'
-          ) reply ON TRUE
-          ORDER BY latest.contact_id, latest.sent_at DESC
-        ) deduped
-        ORDER BY has_unread DESC, has_reply DESC, sent_at DESC
-        LIMIT 15
+        SELECT DISTINCT ON (a.contact_id)
+          a.id, a.contact_id, a.subject, a.sent_at, a.notes, a.sentiment,
+          c.first_name, c.last_name, co.name AS company_name, co.id AS company_id
+        FROM activities a
+        LEFT JOIN contacts c ON a.contact_id = c.id
+        LEFT JOIN companies co ON c.company_id = co.id
+        WHERE a.type = 'received_email'
+        ORDER BY a.contact_id, a.sent_at DESC
       `),
     ])
     const queueCount = (await getQueueItems()).length

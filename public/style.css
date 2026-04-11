@@ -196,47 +196,22 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
 .stat-card.highlight .stat-value { color: var(--accent); }
 .stat-card.queue .stat-value { color: var(--primary); }
 
-/* ── RECENT ACTIVITY ── */
+/* ── PROSPECT REPLIES (Dashboard) ── */
 .section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 12px; }
 .activity-list { display: flex; flex-direction: column; gap: 2px; }
 .activity-row {
-  display: flex; align-items: center; gap: 10px;
+  display: flex; align-items: center; gap: 12px;
   padding: 10px 14px; background: var(--surface);
   border: 1px solid var(--border); border-radius: 6px;
   font-size: 13px; transition: background 0.15s;
 }
 .activity-row:hover { background: var(--bg); }
-.activity-needs-reply { border-left: 3px solid var(--warn); }
-.activity-replied { border-left: 3px solid var(--success); }
-.activity-sent { border-left: 3px solid var(--border); }
-
-/* Status dot */
-.activity-status-dot {
-  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
-}
-.status-needs-reply { background: var(--warn); }
-.status-replied { background: var(--success); }
-.status-sent { background: var(--border); }
-
-/* Main content area */
-.activity-main { flex: 1; min-width: 0; }
-.activity-top { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+.activity-unread { font-weight: 600; border-left: 3px solid var(--accent); }
+.activity-main { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
 .activity-name { font-weight: 600; white-space: nowrap; }
 .activity-co { color: var(--text-muted); font-size: 12px; white-space: nowrap; }
 .activity-co::before { content: '·'; margin-right: 0; }
-.activity-subj { color: var(--text-muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .activity-date { color: var(--text-muted); font-size: 11px; white-space: nowrap; flex-shrink: 0; }
-
-/* Status pill */
-.activity-pill {
-  font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
-  padding: 2px 7px; border-radius: 10px; white-space: nowrap; margin-left: auto;
-}
-.pill-needs-reply { background: var(--warn-pale); color: var(--warn); }
-.pill-replied { background: var(--success-pale); color: var(--success); }
-.pill-sent { background: var(--bg); color: var(--text-muted); }
-
-/* Legacy link style kept for other pages */
 .contact-name-link { color: var(--text); text-decoration: none; font-weight: 600; }
 .contact-name-link:hover { color: var(--primary); text-decoration: underline; }
 
