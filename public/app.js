@@ -94,7 +94,7 @@ function showPage(page) {
   if (page === 'activity') loadActivity();
   if (page === 'settings') loadSettings();
   if (page === 'reports') loadReports();
-  if (page === 'news') loadNews(null);
+  if (page === 'news') { loadNews(null); loadLeadHeatmap(); }
   if (page === 'users') loadUsers();
 }
 
@@ -1866,10 +1866,12 @@ async function loadInbox() {
       const fullName = [m.first_name, m.last_name].filter(Boolean).join(' ') || 'Unknown';
       const label = _inboxTab === 'sent' ? `To: ${fullName}` : fullName;
       const preview = cleanEmailBody(m.body || '').slice(0, 140);
+      const sentimentDot = m.sentiment ? `<span class="sentiment-dot sentiment-${m.sentiment}" title="${m.sentiment}"></span>` : '';
       return `
         <div class="inbox-row ${isRead ? 'inbox-read' : 'inbox-unread'}" onclick="openInboxMessage(${i})">
           <div class="inbox-row-left">
             <div class="inbox-sender">
+              ${sentimentDot}
               <a href="#" onclick="event.stopPropagation();openContactDetail(${m.contact_id})" style="color:inherit;text-decoration:none">${esc(label)}</a>
               ${m.company_name ? `<span class="inbox-company-pill">${esc(m.company_name)}</span>` : ''}
             </div>
@@ -1878,6 +1880,14 @@ async function loadInbox() {
           </div>
           <div class="inbox-row-right">
             <div class="inbox-date">${fmtDate(m.sent_at)}</div>
+            <div class="inbox-row-actions" onclick="event.stopPropagation()">
+              <div class="sentiment-btns sentiment-btns-sm">
+                <button class="sentiment-btn sentiment-btn-positive ${m.sentiment==='positive'?'active':''}" title="Positive" onclick="setSentiment(${i},'positive')">&#9679;</button>
+                <button class="sentiment-btn sentiment-btn-neutral ${m.sentiment==='neutral'?'active':''}" title="Neutral" onclick="setSentiment(${i},'neutral')">&#9679;</button>
+                <button class="sentiment-btn sentiment-btn-negative ${m.sentiment==='negative'?'active':''}" title="Negative" onclick="setSentiment(${i},'negative')">&#9679;</button>
+              </div>
+              <button class="inbox-delete-btn" title="Delete" onclick="deleteInboxMessage(${i})">&#128465;</button>
+            </div>
           </div>
         </div>`;
     }).join('')}</div>`;
@@ -1925,7 +1935,14 @@ async function openInboxMessage(index) {
           <span>${fmtDate(m.sent_at)}</span>
         </div>
       </div>
-      <button class="inbox-rp-close" onclick="closeInboxPane()">&#10005;</button>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="sentiment-btns" id="rp-sentiment-btns">
+          <button class="sentiment-btn sentiment-btn-positive ${m.sentiment==='positive'?'active':''}" title="Positive" onclick="setSentiment(${index},'positive')">&#9679; Hot</button>
+          <button class="sentiment-btn sentiment-btn-neutral ${m.sentiment==='neutral'?'active':''}" title="Neutral" onclick="setSentiment(${index},'neutral')">&#9679; Warm</button>
+          <button class="sentiment-btn sentiment-btn-negative ${m.sentiment==='negative'?'active':''}" title="Negative" onclick="setSentiment(${index},'negative')">&#9679; Cold</button>
+        </div>
+        <button class="inbox-rp-close" onclick="closeInboxPane()">&#10005;</button>
+      </div>
     </div>
     <div class="inbox-rp-body">${renderEmailBody(m.body)}</div>
     <div class="inbox-rp-actions">
@@ -1933,6 +1950,7 @@ async function openInboxMessage(index) {
       ${m.email ? `<button class="btn btn-outline" onclick="openReplyCompose(${index}, true)">&#8627; Forward</button>` : ''}
       ${m.contact_id ? `<button class="btn btn-outline" onclick="openContactDetail(${m.contact_id})">View Contact</button>` : ''}
       ${m.company_id ? `<button class="btn btn-outline" onclick="openCompanyDetail(${m.company_id})">View Company</button>` : ''}
+      <button class="btn btn-danger-outline" onclick="deleteInboxMessage(${index})">&#128465; Delete</button>
     </div>
     <div id="inbox-compose-area" style="display:none"></div>
   `;
@@ -2103,6 +2121,33 @@ async function sendInboxReply(index, isForward) {
 function closeInboxPane() {
   const pane = document.getElementById('inbox-reading-pane');
   if (pane) pane.remove();
+}
+
+async function setSentiment(index, sentiment) {
+  const m = _inboxCache[index];
+  if (!m) return;
+  // Toggle off if already set to same value
+  const newVal = m.sentiment === sentiment ? null : sentiment;
+  try {
+    await apiFetch(`/api/inbox/${m.id}/sentiment`, {
+      method: 'PATCH',
+      body: JSON.stringify({ sentiment: newVal }),
+    });
+    m.sentiment = newVal;
+    loadInbox(); // refresh list to show updated dots
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function deleteInboxMessage(index) {
+  const m = _inboxCache[index];
+  if (!m) return;
+  if (!confirm('Delete this message from the CRM? (This won\u2019t delete it from your email server.)')) return;
+  try {
+    await apiFetch(`/api/inbox/${m.id}`, { method: 'DELETE' });
+    toast('Message deleted.', 'success');
+    closeInboxPane();
+    loadInbox();
+  } catch(e) { toast(e.message, 'error'); }
 }
 
 async function syncInboxFromInbox() {
@@ -2838,6 +2883,110 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 });
+
+// ── LEAD HEAT MAP ─────────────────────────────────────────────────────────
+
+async function loadLeadHeatmap() {
+  const el = document.getElementById('lead-heatmap');
+  if (!el) return;
+  try {
+    const leads = await apiFetch('/api/leads/heatmap');
+    renderLeadHeatmap(leads);
+  } catch(e) {
+    el.innerHTML = `<div class="empty-state">Could not load heat map: ${esc(e.message)}</div>`;
+  }
+}
+
+function scoreLeadTemperature(lead) {
+  let score = 0;
+  const reasons = [];
+  const now = Date.now();
+
+  // Reply sentiment — strongest signal
+  if (lead.latest_sentiment === 'positive') { score += 40; reasons.push('positive reply'); }
+  else if (lead.latest_sentiment === 'neutral') { score += 15; reasons.push('neutral reply'); }
+  else if (lead.latest_sentiment === 'negative') { score -= 20; reasons.push('negative reply'); }
+
+  // Got replies at all
+  if (lead.reply_count > 0) { score += 20; reasons.push(`${lead.reply_count} repl${lead.reply_count > 1 ? 'ies' : 'y'}`); }
+
+  // Pipeline stage advancement
+  const stage = (lead.pipeline_stage || 'prospect').toLowerCase();
+  if (stage === 'negotiation' || stage === 'closed-won') { score += 25; reasons.push(lead.pipeline_stage); }
+  else if (stage === 'proposal') { score += 15; reasons.push('proposal stage'); }
+  else if (stage === 'outreach') { score += 5; }
+
+  // Opportunity value
+  const opp = parseFloat(lead.opportunity_value) || 0;
+  if (opp >= 10000) { score += 10; reasons.push(`$${opp.toLocaleString()} opp`); }
+  else if (opp >= 5000) { score += 5; }
+
+  // Active sequences = currently being worked
+  if (lead.active_sequences > 0) { score += 5; reasons.push('active sequence'); }
+
+  // Recency of last reply
+  if (lead.last_reply_at) {
+    const daysAgo = (now - new Date(lead.last_reply_at).getTime()) / 86400000;
+    if (daysAgo <= 7) { score += 15; reasons.push('replied this week'); }
+    else if (daysAgo <= 30) { score += 5; reasons.push('replied this month'); }
+  }
+
+  // Recency of any activity
+  if (lead.last_activity_at) {
+    const daysAgo = (now - new Date(lead.last_activity_at).getTime()) / 86400000;
+    if (daysAgo > 60) { score -= 10; reasons.push('inactive 60+ days'); }
+  } else if (lead.emails_sent === 0) {
+    score -= 5; reasons.push('no outreach yet');
+  }
+
+  // Classify
+  let temp, cls;
+  if (score >= 35) { temp = 'Hot'; cls = 'hot'; }
+  else if (score >= 10) { temp = 'Warm'; cls = 'warm'; }
+  else { temp = 'Cold'; cls = 'cold'; }
+
+  return { score, temp, cls, reasons };
+}
+
+function renderLeadHeatmap(leads) {
+  const el = document.getElementById('lead-heatmap');
+  if (!el) return;
+
+  const scored = leads.map(l => ({ ...l, ...scoreLeadTemperature(l) }))
+    .sort((a, b) => b.score - a.score);
+
+  const hot  = scored.filter(l => l.cls === 'hot');
+  const warm = scored.filter(l => l.cls === 'warm');
+  const cold = scored.filter(l => l.cls === 'cold');
+
+  function renderSection(title, items, cls) {
+    if (!items.length) return `<div class="heatmap-section heatmap-${cls}"><div class="heatmap-section-title">${title} <span class="heatmap-count">(0)</span></div><div class="heatmap-empty">No ${title.toLowerCase()} leads</div></div>`;
+    return `
+      <div class="heatmap-section heatmap-${cls}">
+        <div class="heatmap-section-title">${title} <span class="heatmap-count">(${items.length})</span></div>
+        <div class="heatmap-grid">
+          ${items.map(l => `
+            <div class="heatmap-card heatmap-card-${cls}" onclick="openCompanyDetail(${l.id})">
+              <div class="heatmap-card-header">
+                <span class="heatmap-dot heatmap-dot-${cls}"></span>
+                <strong>${esc(l.name)}</strong>
+              </div>
+              <div class="heatmap-card-stage">${esc(l.pipeline_stage || 'Prospect')}${l.opportunity_value > 0 ? ` · $${parseFloat(l.opportunity_value).toLocaleString(undefined,{maximumFractionDigits:0})}` : ''}</div>
+              <div class="heatmap-card-reasons">${l.reasons.join(' · ')}</div>
+              <div class="heatmap-card-stats">
+                <span title="Emails sent">${l.emails_sent} sent</span>
+                <span title="Replies received">${l.reply_count} repl${l.reply_count !== 1 ? 'ies' : 'y'}</span>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>`;
+  }
+
+  el.innerHTML = renderSection('🔥 Hot', hot, 'hot')
+    + renderSection('🟡 Warm', warm, 'warm')
+    + renderSection('🔵 Cold', cold, 'cold');
+}
 
 // ── INIT ──────────────────────────────────────────────────────────────────
 initAuth();
