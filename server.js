@@ -286,11 +286,14 @@ app.get('/api/dashboard', async (req, res) => {
       one("SELECT COUNT(*)::int AS n FROM enrollments WHERE status='active'"),
       one("SELECT COUNT(*)::int AS n FROM activities WHERE type='email'"),
       all(`
-        SELECT a.*, c.first_name, c.last_name, co.name AS company_name
-        FROM activities a
-        LEFT JOIN contacts c ON a.contact_id = c.id
-        LEFT JOIN companies co ON c.company_id = co.id
-        ORDER BY a.sent_at DESC LIMIT 10
+        SELECT * FROM (
+          SELECT DISTINCT ON (a.contact_id, REGEXP_REPLACE(a.subject, '^(Re: )+', '', 'i'))
+            a.*, c.first_name, c.last_name, co.name AS company_name
+          FROM activities a
+          LEFT JOIN contacts c ON a.contact_id = c.id
+          LEFT JOIN companies co ON c.company_id = co.id
+          ORDER BY a.contact_id, REGEXP_REPLACE(a.subject, '^(Re: )+', '', 'i'), a.sent_at DESC
+        ) deduped ORDER BY sent_at DESC LIMIT 10
       `),
     ])
     const queueCount = (await getQueueItems()).length
@@ -927,6 +930,13 @@ app.post('/api/activities', async (req, res) => {
       [contact_id, type||'note', subject||'', body||'', status||'sent', notes||'']
     )
     res.json({ id: r.id })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.delete('/api/activities/:id', async (req, res) => {
+  try {
+    await run('DELETE FROM activities WHERE id=$1', [req.params.id])
+    res.json({ ok: true })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
