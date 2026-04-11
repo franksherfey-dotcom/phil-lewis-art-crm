@@ -909,7 +909,7 @@ app.get('/api/inbox', async (req, res) => {
     const { search, limit, tab } = req.query
     const activityType = tab === 'sent' ? 'email' : 'received_email'
     let sql = `
-      SELECT a.id, a.contact_id, a.subject, a.body, a.status, a.sent_at, a.notes,
+      SELECT a.id, a.contact_id, a.subject, a.body, a.status, a.sent_at, a.notes, a.sentiment,
              c.first_name, c.last_name, c.email, c.title,
              co.id AS company_id, co.name AS company_name, co.type AS company_type,
              co.opportunity_value, co.pipeline_stage, co.status AS company_status
@@ -936,6 +936,23 @@ app.get('/api/inbox', async (req, res) => {
 app.patch('/api/inbox/:id/read', async (req, res) => {
   try {
     await run("UPDATE activities SET notes='read' WHERE id=$1", [req.params.id])
+    res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// Delete (dismiss) an inbox message — removes from CRM only, not from email server
+app.delete('/api/inbox/:id', async (req, res) => {
+  try {
+    await run("DELETE FROM activities WHERE id=$1", [req.params.id])
+    res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// Set sentiment (positive / neutral / negative) on an inbox message
+app.patch('/api/inbox/:id/sentiment', async (req, res) => {
+  try {
+    const { sentiment } = req.body // 'positive', 'neutral', 'negative', or null
+    await run("UPDATE activities SET sentiment=$1 WHERE id=$2", [sentiment || null, req.params.id])
     res.json({ ok: true })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
@@ -1292,6 +1309,41 @@ app.get('/api/news', async (req, res) => {
     results = results.map(i => ({ ...i, tags: autoTagArticle(i) }))
     res.json(results)
   } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+// ─── LEAD HEAT MAP ───────────────────────────────────────────────────────────
+
+app.get('/api/leads/heatmap', async (req, res) => {
+  try {
+    const leads = await all(`
+      SELECT c.id, c.name, c.type, c.category, c.tags, c.status,
+             c.pipeline_stage, c.opportunity_value, c.next_step, c.next_step_date,
+             c.last_activity_at, c.updated_at, c.created_at,
+             COUNT(ct.id)::int AS contact_count,
+             (SELECT COUNT(*)::int FROM enrollments e
+                JOIN contacts ct2 ON e.contact_id = ct2.id
+                WHERE ct2.company_id = c.id AND e.status = 'active') AS active_sequences,
+             (SELECT COUNT(*)::int FROM activities a
+                JOIN contacts ct3 ON a.contact_id = ct3.id
+                WHERE ct3.company_id = c.id AND a.type = 'received_email') AS reply_count,
+             (SELECT COUNT(*)::int FROM activities a
+                JOIN contacts ct4 ON a.contact_id = ct4.id
+                WHERE ct4.company_id = c.id AND a.type = 'email') AS emails_sent,
+             (SELECT MAX(a.sent_at) FROM activities a
+                JOIN contacts ct5 ON a.contact_id = ct5.id
+                WHERE ct5.company_id = c.id AND a.type = 'received_email') AS last_reply_at,
+             (SELECT a.sentiment FROM activities a
+                JOIN contacts ct6 ON a.contact_id = ct6.id
+                WHERE ct6.company_id = c.id AND a.type = 'received_email' AND a.sentiment IS NOT NULL
+                ORDER BY a.sent_at DESC LIMIT 1) AS latest_sentiment
+      FROM companies c
+      LEFT JOIN contacts ct ON c.id = ct.company_id
+      WHERE c.status != 'dead'
+      GROUP BY c.id
+      ORDER BY c.name ASC
+    `)
+    res.json(leads)
+  } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
 // ─── STUCK COUNT ─────────────────────────────────────────────────────────────
