@@ -212,6 +212,8 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
 .activity-co { color: var(--text-muted); font-size: 12px; white-space: nowrap; }
 .activity-co::before { content: '·'; margin-right: 0; }
 .activity-date { color: var(--text-muted); font-size: 11px; white-space: nowrap; flex-shrink: 0; }
+.activity-reply-btn { opacity: 0; transition: opacity 0.15s; flex-shrink: 0; }
+.activity-row:hover .activity-reply-btn { opacity: 1; }
 .contact-name-link { color: var(--text); text-decoration: none; font-weight: 600; }
 .contact-name-link:hover { color: var(--primary); text-decoration: underline; }
 

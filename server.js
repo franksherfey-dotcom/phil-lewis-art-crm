@@ -119,6 +119,20 @@ const migrationReady = (async () => {
       )
     `)
     console.log('✅ Art gallery table ready.')
+
+    // Reply templates table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS reply_templates (
+        id BIGSERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        category TEXT NOT NULL DEFAULT 'general',
+        subject TEXT NOT NULL DEFAULT '',
+        body TEXT NOT NULL DEFAULT '',
+        sort_order INT NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+    console.log('✅ Reply templates table ready.')
   } catch (e) { console.error('Users migration error:', e.message) }
 })()
 
@@ -1614,6 +1628,231 @@ app.get('/api/art/match', async (req, res) => {
       else rest.push(a)
     }
     res.json({ matched, rest })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ─── REPLY TEMPLATES ────────────────────────────────────────────────────────
+
+const REPLY_SEEDS = [
+  {
+    name: 'Interested — Send Licensing Deck',
+    category: 'interested',
+    subject: 'Re: {{original_subject}}',
+    body: `Hi {{first_name}},
+
+Great to hear from you! I'd love to explore what a collaboration between Phil Lewis Art and {{company}} could look like.
+
+I've attached our licensing overview — it covers how we typically work with partners, usage terms, and a few examples of past collaborations.
+
+{{art_block}}
+
+I'd be happy to jump on a quick call to walk through ideas whenever works for you. What does your schedule look like this week or next?
+
+Best,
+Phil Lewis`,
+    sort_order: 1,
+  },
+  {
+    name: 'Pricing & Terms',
+    category: 'pricing',
+    subject: 'Re: {{original_subject}}',
+    body: `Hi {{first_name}},
+
+Thanks for asking — happy to share how licensing works with Phil Lewis Art.
+
+Licensing terms are flexible depending on the product type, run size, and distribution. Most of our partnerships are royalty-based, though we also do flat-fee arrangements for limited runs.
+
+Here's an example of what Phil's art looks like on a product in your space:
+
+{{art_block}}
+
+Want to set up a quick call to talk specifics? I can put together a custom proposal based on what {{company}} has in mind.
+
+Best,
+Phil Lewis`,
+    sort_order: 2,
+  },
+  {
+    name: 'Not Now — Stay in Touch',
+    category: 'later',
+    subject: 'Re: {{original_subject}}',
+    body: `Hi {{first_name}},
+
+Totally understand — timing is everything. I appreciate you letting me know.
+
+I'll circle back in a few months to see if things have opened up. In the meantime, here's a look at one of Phil's recent collaborations to keep on your radar:
+
+{{art_block}}
+
+Feel free to reach out anytime if something comes up sooner. Wishing {{company}} a great rest of the year!
+
+Best,
+Phil Lewis`,
+    sort_order: 3,
+  },
+  {
+    name: 'Product Fit — Show Examples',
+    category: 'examples',
+    subject: 'Re: {{original_subject}}',
+    body: `Hi {{first_name}},
+
+Great question! Phil's art works beautifully across a range of product types. Here's an example that I think lines up well with what {{company}} does:
+
+{{art_block}}
+
+The art is available in high-resolution formats and we can adapt it to fit any product spec — packaging, all-over prints, spot graphics, you name it.
+
+Would you like to see a few mockups tailored to your product line? I'd love to put something together.
+
+Best,
+Phil Lewis`,
+    sort_order: 4,
+  },
+  {
+    name: 'Follow Up — Checking In',
+    category: 'follow-up',
+    subject: 'Re: {{original_subject}}',
+    body: `Hi {{first_name}},
+
+Just wanted to circle back and see if you've had a chance to think about a potential collaboration with Phil Lewis Art.
+
+Here's a quick look at Phil's work on a product similar to yours — always a good conversation starter:
+
+{{art_block}}
+
+No pressure at all — just wanted to keep the door open. Let me know if you'd like to chat.
+
+Best,
+Phil Lewis`,
+    sort_order: 5,
+  },
+  {
+    name: 'Thank You — Post-Meeting',
+    category: 'thanks',
+    subject: 'Re: {{original_subject}}',
+    body: `Hi {{first_name}},
+
+Really enjoyed our conversation — thanks for taking the time to chat about what a Phil Lewis Art × {{company}} collaboration could look like.
+
+As a reminder, here's one of the pieces we discussed:
+
+{{art_block}}
+
+I'll get that proposal over to you by end of week. In the meantime, don't hesitate to reach out with any questions.
+
+Looking forward to working together!
+
+Best,
+Phil Lewis`,
+    sort_order: 6,
+  },
+]
+
+async function seedReplyTemplatesIfEmpty() {
+  const { rows } = await pool.query('SELECT COUNT(*)::int AS n FROM reply_templates')
+  if (rows[0].n === 0) {
+    for (const t of REPLY_SEEDS) {
+      await pool.query(
+        'INSERT INTO reply_templates (name, category, subject, body, sort_order) VALUES ($1,$2,$3,$4,$5)',
+        [t.name, t.category, t.subject, t.body, t.sort_order]
+      )
+    }
+  }
+}
+
+app.get('/api/reply-templates', async (req, res) => {
+  try {
+    await seedReplyTemplatesIfEmpty()
+    res.json(await all('SELECT * FROM reply_templates ORDER BY sort_order, id'))
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.post('/api/reply-templates', async (req, res) => {
+  try {
+    const { name, category, subject, body, sort_order } = req.body
+    if (!name) return res.status(400).json({ error: 'Name is required' })
+    const row = await one(
+      'INSERT INTO reply_templates (name, category, subject, body, sort_order) VALUES ($1,$2,$3,$4,$5) RETURNING *',
+      [name, category || 'general', subject || '', body || '', sort_order || 0]
+    )
+    res.json(row)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.put('/api/reply-templates/:id', async (req, res) => {
+  try {
+    const { name, category, subject, body, sort_order } = req.body
+    const row = await one(
+      'UPDATE reply_templates SET name=$1, category=$2, subject=$3, body=$4, sort_order=$5 WHERE id=$6 RETURNING *',
+      [name, category || 'general', subject || '', body || '', sort_order || 0, req.params.id]
+    )
+    res.json(row)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.delete('/api/reply-templates/:id', async (req, res) => {
+  try {
+    await run('DELETE FROM reply_templates WHERE id=$1', [req.params.id])
+    res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ─── QUICK REPLY (send a templated reply to a prospect) ────────────────────
+
+app.post('/api/quick-reply', async (req, res) => {
+  try {
+    const { activity_id, subject, body } = req.body
+    if (!activity_id || !body) return res.status(400).json({ error: 'activity_id and body required' })
+
+    // Look up the original inbound activity
+    const orig = await one(`
+      SELECT a.*, c.email AS contact_email, c.first_name, c.last_name, c.id AS cid,
+             co.name AS company_name
+      FROM activities a
+      LEFT JOIN contacts c ON a.contact_id = c.id
+      LEFT JOIN companies co ON c.company_id = co.id
+      WHERE a.id = $1
+    `, [activity_id])
+    if (!orig) return res.status(404).json({ error: 'Activity not found' })
+    if (!orig.contact_email) return res.status(400).json({ error: 'Contact has no email address' })
+
+    // Get SMTP settings
+    const settings = {}
+    const sRows = await all('SELECT key, value FROM settings')
+    sRows.forEach(r => { settings[r.key] = r.value })
+
+    if (!settings.smtp_host || !settings.smtp_user || !settings.smtp_pass) {
+      return res.status(400).json({ error: 'SMTP not configured. Set up email in Settings first.' })
+    }
+
+    const nodemailer = require('nodemailer')
+    const transport = nodemailer.createTransport({
+      host: settings.smtp_host,
+      port: parseInt(settings.smtp_port || '587'),
+      secure: (settings.smtp_port || '587') === '465',
+      auth: { user: settings.smtp_user, pass: settings.smtp_pass },
+    })
+
+    const fromName = settings.from_name || 'Phil Lewis Art'
+    const fromEmail = settings.smtp_user
+
+    await transport.sendMail({
+      from: `"${fromName}" <${fromEmail}>`,
+      to: orig.contact_email,
+      subject: subject || `Re: ${orig.subject || ''}`,
+      html: body.replace(/\n/g, '<br>'),
+    })
+
+    // Log the reply as an activity
+    await one(
+      'INSERT INTO activities (contact_id, type, subject, body, status, sent_at) VALUES ($1,$2,$3,$4,$5,NOW()) RETURNING id',
+      [orig.cid, 'email', subject || `Re: ${orig.subject || ''}`, body, 'sent']
+    )
+
+    // Mark the original as read
+    await run("UPDATE activities SET notes='read' WHERE id=$1", [activity_id])
+
+    res.json({ ok: true, to: orig.contact_email })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 

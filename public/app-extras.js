@@ -54,6 +54,148 @@ function buildArtPreviewCard(artImg) {
 </div>`;
 }
 
+// ── QUICK REPLY ─────────────────────────────────────────────────────────
+
+var _replyTemplates = [];
+var _qrActivityId = null;
+var _qrContactTags = '';
+var _qrContext = {};
+
+async function openQuickReply(activityId) {
+  _qrActivityId = activityId;
+  try {
+    // Load templates if not cached
+    if (!_replyTemplates.length) {
+      _replyTemplates = await apiFetch('/api/reply-templates');
+    }
+
+    // Load the activity + contact info
+    const activities = await apiFetch(`/api/activities?contact_id=&limit=200`);
+    const activity = activities.find(a => a.id == activityId);
+    if (!activity) { toast('Activity not found', 'error'); return; }
+
+    // Get company tags for art matching
+    if (activity.company_id) {
+      try {
+        const co = await apiFetch(`/api/companies/${activity.company_id}`);
+        _qrContactTags = co.tags || '';
+      } catch(e) { _qrContactTags = ''; }
+    }
+
+    _qrContext = {
+      first_name: activity.first_name || '',
+      last_name: activity.last_name || '',
+      company: activity.company_name || '',
+      original_subject: (activity.subject || '').replace(/^(Re: )+/i, ''),
+      contact_email: activity.email || '',
+    };
+
+    // Set header
+    document.getElementById('qr-header').textContent = `Reply to ${_qrContext.first_name} at ${_qrContext.company}`;
+
+    // Context line
+    document.getElementById('qr-context').innerHTML = `
+      <strong>To:</strong> ${esc(_qrContext.contact_email)} &nbsp;·&nbsp;
+      <strong>Thread:</strong> ${esc(_qrContext.original_subject)}
+    `;
+
+    // Template chips
+    const chipsEl = document.getElementById('qr-template-chips');
+    chipsEl.innerHTML = _replyTemplates.map(t => `
+      <button class="btn btn-outline btn-sm" onclick="applyReplyTemplate(${t.id})" style="font-size:12px">${esc(t.name)}</button>
+    `).join('');
+
+    // Default subject
+    document.getElementById('qr-subject').value = `Re: ${_qrContext.original_subject}`;
+    document.getElementById('qr-body').value = '';
+
+    // Show art preview
+    renderQuickReplyArt();
+
+    openModal('modal-quick-reply');
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+function applyReplyTemplate(templateId) {
+  const t = _replyTemplates.find(r => r.id == templateId);
+  if (!t) return;
+
+  // Fill placeholders
+  let body = t.body
+    .replace(/\{\{first_name\}\}/g, _qrContext.first_name)
+    .replace(/\{\{last_name\}\}/g, _qrContext.last_name)
+    .replace(/\{\{company\}\}/g, _qrContext.company)
+    .replace(/\{\{original_subject\}\}/g, _qrContext.original_subject);
+
+  // Replace art block placeholder with a text marker (actual art is shown in preview)
+  body = body.replace(/\{\{art_block\}\}/g, '[Art image will be embedded below]');
+
+  let subject = (t.subject || 'Re: {{original_subject}}')
+    .replace(/\{\{original_subject\}\}/g, _qrContext.original_subject);
+
+  document.getElementById('qr-subject').value = subject;
+  document.getElementById('qr-body').value = body;
+
+  // Highlight the selected chip
+  document.querySelectorAll('#qr-template-chips .btn').forEach(b => {
+    b.classList.remove('btn-primary');
+    b.classList.add('btn-outline');
+  });
+  event.target.classList.remove('btn-outline');
+  event.target.classList.add('btn-primary');
+}
+
+function renderQuickReplyArt() {
+  const el = document.getElementById('qr-art-preview');
+  if (!el) return;
+  const artImg = getArtForTags(_qrContactTags);
+  if (artImg && artImg.url) {
+    el.innerHTML = `
+      <div style="border:1px solid var(--border);border-radius:8px;padding:12px;background:var(--bg)">
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);margin-bottom:8px">Art Preview — matched to prospect tags</div>
+        <div style="text-align:center">
+          <img src="${esc(artImg.url)}" alt="${esc(artImg.alt)}" style="max-width:100%;width:400px;border-radius:6px" />
+          <div style="font-size:12px;color:var(--text-muted);margin-top:6px">${esc(artImg.alt)}</div>
+        </div>
+      </div>`;
+  } else {
+    el.innerHTML = '';
+  }
+}
+
+async function sendQuickReply() {
+  const subject = document.getElementById('qr-subject').value.trim();
+  let body = document.getElementById('qr-body').value.trim();
+  if (!body) { toast('Write a message first', 'error'); return; }
+
+  // Replace the art placeholder with actual HTML for the email
+  const artImg = getArtForTags(_qrContactTags);
+  if (artImg && artImg.url) {
+    const artHtml = `<div style="margin:24px 0;text-align:center"><div style="margin-bottom:8px;font-size:13px;color:#666;font-style:italic">${esc(artImg.label)} — Recent Collaboration</div><img src="${artImg.url}" alt="${esc(artImg.alt)}" style="max-width:100%;width:480px;border-radius:8px;border:1px solid #e0e0e0" /><div style="margin-top:8px;font-size:12px;color:#999">${esc(artImg.alt)}</div></div>`;
+    body = body.replace('[Art image will be embedded below]', artHtml);
+  }
+
+  const btn = document.getElementById('qr-send-btn');
+  btn.disabled = true;
+  btn.textContent = 'Sending...';
+
+  try {
+    await apiFetch('/api/quick-reply', {
+      method: 'POST',
+      body: JSON.stringify({ activity_id: _qrActivityId, subject, body }),
+    });
+    toast('Reply sent!', 'success');
+    closeModal('modal-quick-reply');
+    // Refresh dashboard
+    if (typeof loadDashboard === 'function') loadDashboard();
+  } catch(e) {
+    toast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Send Reply';
+  }
+}
+
 // ── INBOX MULTI-SELECT & BULK DELETE ──────────────────────────────────────
 
 function updateInboxSelection() {
@@ -259,8 +401,13 @@ function renderLeadHeatmap(leads) {
 }
 
 // ── ART GALLERY ──────────────────────────────────────────────────────────
-let _artCache = [];
+var _artCache = [];
 let _galleryFilter = '';
+
+// Pre-load art cache at startup so getArtForTags works from any page
+(async function() {
+  try { _artCache = await apiFetch('/api/art'); } catch(e) {}
+})();
 
 async function loadArtGallery() {
   try {

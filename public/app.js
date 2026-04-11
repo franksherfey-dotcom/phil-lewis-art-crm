@@ -545,11 +545,12 @@ async function loadDashboard() {
     actEl.innerHTML = `<div class="activity-list">${replies.map(a => {
       const isNew = !a.notes || a.notes !== 'read';
       return `
-      <div class="activity-row${isNew ? ' activity-unread' : ''}" onclick="openContactDetail(${a.contact_id})" style="cursor:pointer">
-        <div class="activity-main">
+      <div class="activity-row${isNew ? ' activity-unread' : ''}">
+        <div class="activity-main" onclick="openContactDetail(${a.contact_id})" style="cursor:pointer">
           <span class="activity-name">${esc(a.first_name)} ${esc(a.last_name||'')}</span>
           <span class="activity-co">${esc(a.company_name||'')}</span>
         </div>
+        <button class="btn btn-sm btn-primary activity-reply-btn" onclick="event.stopPropagation();openQuickReply(${a.id})">Reply</button>
         <div class="activity-date">${fmtDate(a.sent_at)}</div>
       </div>`;
     }).join('')}</div>`;
