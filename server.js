@@ -120,6 +120,46 @@ const migrationReady = (async () => {
     `)
     console.log('✅ Art gallery table ready.')
 
+    // Seed Phil's actual art collection (replace company mockups if present)
+    const artCount = await one("SELECT COUNT(*)::int AS n FROM art_images")
+    const hasCompanyArt = artCount.n > 0 ? await one("SELECT COUNT(*)::int AS n FROM art_images WHERE title ILIKE '%PAMP%' OR title ILIKE '%Minute Key%' OR title ILIKE '%Grassroots%' OR title ILIKE '%LogoJET%'") : { n: 0 }
+    if (artCount.n === 0 || hasCompanyArt.n > 0) {
+      await pool.query("DELETE FROM art_images")
+      const ART_SEEDS = [
+        { title: 'Angel Fish', url: 'https://phillewisart.com/cdn/shop/files/Angel-Fish-1500.jpg', tags: 'drinkware,apparel,outdoor,puzzles,cards', category: 'Wildlife', notes: 'Vibrant tropical fish — great for drinkware, apparel, puzzles' },
+        { title: 'Bison', url: 'https://phillewisart.com/cdn/shop/products/Bison-Web.jpg', tags: 'outdoor,hard-goods,apparel,lifestyle', category: 'Wildlife', notes: 'Iconic American bison — strong fit for outdoor brands' },
+        { title: 'Azure Dragon', url: 'https://phillewisart.com/cdn/shop/files/Azure-Dragon-1500.jpg', tags: 'apparel,fabric,skateboard,snowboard,lifestyle', category: 'Fantasy', notes: 'Psychedelic dragon — bold statement piece for board graphics, apparel' },
+        { title: 'Chameleon', url: 'https://phillewisart.com/cdn/shop/products/chameleon.jpg', tags: 'apparel,fabric,lifestyle,cards,puzzles', category: 'Wildlife', notes: 'Colorful chameleon — versatile across product types' },
+        { title: 'Orcas', url: 'https://phillewisart.com/cdn/shop/products/orcas.jpg', tags: 'outdoor,surf,drinkware,apparel,hard-goods', category: 'Wildlife', notes: 'Orca whales — perfect for surf, ocean, outdoor brands' },
+        { title: 'Aspens', url: 'https://phillewisart.com/cdn/shop/products/aspens11x14.jpg', tags: 'outdoor,lifestyle,cards,calendars,fabric', category: 'Nature', notes: 'Colorado aspens landscape — nature brands, cards, calendars' },
+        { title: 'Red Rocks', url: 'https://phillewisart.com/cdn/shop/products/redrocks.jpg', tags: 'outdoor,lifestyle,apparel,cards,puzzles', category: 'Nature', notes: 'Iconic Red Rocks — Colorado lifestyle, outdoor brands' },
+        { title: 'Octopus', url: 'https://phillewisart.com/cdn/shop/products/octopus.jpg', tags: 'surf,drinkware,apparel,skateboard,fabric', category: 'Wildlife', notes: 'Psychedelic octopus — surf culture, bold graphics' },
+        { title: '3rd Eye Chakra Eagle', url: 'https://phillewisart.com/cdn/shop/products/6_39f2a2eb-a929-4150-bffd-f30a69b73c94.jpg', tags: 'apparel,skateboard,snowboard,fabric,lifestyle', category: 'Psychedelic', notes: 'Spiritual eagle mandala — edgy board graphics, apparel' },
+        { title: 'Best Buds', url: 'https://phillewisart.com/cdn/shop/products/gnomes.jpg', tags: 'cards,puzzles,lifestyle,apparel,fabric', category: 'Whimsical', notes: 'Whimsical garden gnomes — greeting cards, puzzles, fun products' },
+        { title: 'Birdhouse', url: 'https://phillewisart.com/cdn/shop/products/birdhouse.jpg', tags: 'cards,outdoor,lifestyle,puzzles,fabric', category: 'Nature', notes: 'Colorful birdhouse scene — cards, home decor, puzzles' },
+        { title: 'Wolf Song', url: 'https://phillewisart.com/cdn/shop/products/wolf.jpg', tags: 'outdoor,hard-goods,apparel,snowboard,lifestyle', category: 'Wildlife', notes: 'Howling wolf — outdoor brands, winter sports, hard goods' },
+        { title: 'Jellyfish Dreamcatcher', url: 'https://phillewisart.com/cdn/shop/products/jelly.jpg', tags: 'surf,fabric,apparel,drinkware,lifestyle', category: 'Fantasy', notes: 'Jellyfish dreamcatcher fusion — surf, bohemian lifestyle' },
+        { title: 'Black Swan', url: 'https://phillewisart.com/cdn/shop/products/blackswan.jpg', tags: 'apparel,fabric,cards,lifestyle,puzzles', category: 'Wildlife', notes: 'Elegant black swan — premium apparel, fabric, stationery' },
+        { title: 'Flatirons', url: 'https://phillewisart.com/cdn/shop/products/flatirons.jpg', tags: 'outdoor,lifestyle,hard-goods,cards,calendars', category: 'Nature', notes: 'Boulder Flatirons landscape — outdoor lifestyle brands' },
+        { title: 'Dolphins', url: 'https://phillewisart.com/cdn/shop/products/dolphins.jpg', tags: 'surf,drinkware,outdoor,apparel,cards', category: 'Wildlife', notes: 'Playful dolphins — surf, ocean, drinkware brands' },
+        { title: 'Confluence', url: 'https://phillewisart.com/cdn/shop/products/Confluence-1500.jpg', tags: 'outdoor,skateboard,snowboard,apparel,fabric', category: 'Nature', notes: 'River confluence — flow-state vibes for board sports, outdoor' },
+        { title: 'Flow Tree', url: 'https://phillewisart.com/cdn/shop/products/flowtree.jpg', tags: 'outdoor,lifestyle,fabric,cards,apparel', category: 'Nature', notes: 'Psychedelic tree of life — versatile nature theme' },
+        { title: 'Bluegrass Mandala', url: 'https://phillewisart.com/cdn/shop/products/bluegrass-mandala-stickercopy.jpg', tags: 'apparel,drinkware,lifestyle,fabric,hard-goods', category: 'Psychedelic', notes: 'Intricate mandala — drinkware wraps, apparel prints, fabric' },
+        { title: 'Alpha Elephant', url: 'https://phillewisart.com/cdn/shop/products/IMG_2506.jpg', tags: 'drinkware,hard-goods,apparel,lifestyle,outdoor', category: 'Wildlife', notes: 'Bold geometric elephant — drinkware, hard goods, lifestyle' },
+        { title: 'Phoenix', url: 'https://phillewisart.com/cdn/shop/products/phoenix.jpg', tags: 'skateboard,snowboard,apparel,fabric,lifestyle', category: 'Fantasy', notes: 'Fiery phoenix — powerful board graphics, apparel' },
+        { title: 'Pelicans', url: 'https://phillewisart.com/cdn/shop/products/pelicans.jpg', tags: 'surf,outdoor,cards,drinkware,apparel', category: 'Wildlife', notes: 'Coastal pelicans — surf, beach, coastal lifestyle brands' },
+        { title: 'Colorado Sand Dunes', url: 'https://phillewisart.com/cdn/shop/products/dunes.jpg', tags: 'outdoor,lifestyle,cards,calendars,puzzles', category: 'Nature', notes: 'Great Sand Dunes — outdoor adventure, travel brands' },
+        { title: 'Boulder Rez', url: 'https://phillewisart.com/cdn/shop/products/res.jpg', tags: 'outdoor,lifestyle,cards,calendars,puzzles', category: 'Nature', notes: 'Boulder Reservoir sunset — local Colorado, outdoor lifestyle' },
+      ]
+      for (const a of ART_SEEDS) {
+        await run(
+          "INSERT INTO art_images (title, url, tags, category, notes, is_default) VALUES ($1,$2,$3,$4,$5,FALSE)",
+          [a.title, a.url, a.tags, a.category, a.notes]
+        )
+      }
+      console.log('✅ Seeded Phil Lewis art collection (' + ART_SEEDS.length + ' pieces)')
+    }
+
     // Reply templates table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS reply_templates (
@@ -350,9 +390,24 @@ app.get('/api/companies', async (req, res) => {
       sql += ` AND (c.name ILIKE $${i} OR c.category ILIKE $${i+1} OR c.city ILIKE $${i+2} OR c.tags ILIKE $${i+3})`
       params.push(s, s, s, s); i += 4
     }
-    if (type)   { sql += ` AND c.type=$${i}`;   params.push(type);   i++ }
-    if (status) { sql += ` AND c.status=$${i}`; params.push(status); i++ }
-    if (tag)    { sql += ` AND (',' || c.tags || ',') LIKE $${i}`; params.push(`%,${tag},%`); i++ }
+    if (type) {
+      const types = type.split(',').filter(Boolean)
+      if (types.length === 1) { sql += ` AND c.type=$${i}`; params.push(types[0]); i++ }
+      else if (types.length > 1) { sql += ` AND c.type IN (${types.map((_,j) => `$${i+j}`).join(',')})`; types.forEach(t => params.push(t)); i += types.length }
+    }
+    if (status) {
+      const statuses = status.split(',').filter(Boolean)
+      if (statuses.length === 1) { sql += ` AND c.status=$${i}`; params.push(statuses[0]); i++ }
+      else if (statuses.length > 1) { sql += ` AND c.status IN (${statuses.map((_,j) => `$${i+j}`).join(',')})`; statuses.forEach(s => params.push(s)); i += statuses.length }
+    }
+    if (tag) {
+      const tags = tag.split(',').filter(Boolean)
+      if (tags.length === 1) { sql += ` AND (',' || c.tags || ',') ILIKE $${i}`; params.push(`%,${tags[0]},%`); i++ }
+      else if (tags.length > 1) {
+        sql += ` AND (${tags.map((_,j) => `(',' || c.tags || ',') ILIKE $${i+j}`).join(' OR ')})`
+        tags.forEach(t => params.push(`%,${t},%`)); i += tags.length
+      }
+    }
     sql += ' GROUP BY c.id ORDER BY c.name ASC'
     res.json(await all(sql, params))
   } catch (err) { res.status(500).json({ error: err.message }) }
@@ -466,8 +521,19 @@ app.get('/api/contacts', async (req, res) => {
       params.push(s, s, s, s); i += 4
     }
     if (company_id) { sql += ` AND ct.company_id=$${i}`; params.push(company_id); i++ }
-    if (category)   { sql += ` AND co.category ILIKE $${i}`; params.push(category); i++ }
-    if (tag)        { sql += ` AND (',' || co.tags || ',') LIKE $${i}`; params.push(`%,${tag},%`); i++ }
+    if (category) {
+      const cats = category.split(',').filter(Boolean)
+      if (cats.length === 1) { sql += ` AND co.category ILIKE $${i}`; params.push(cats[0]); i++ }
+      else if (cats.length > 1) { sql += ` AND co.category ILIKE ANY(ARRAY[${cats.map((_,j)=>`$${i+j}`).join(',')}])`; cats.forEach(c => params.push(c)); i += cats.length }
+    }
+    if (tag) {
+      const tags = tag.split(',').filter(Boolean)
+      if (tags.length === 1) { sql += ` AND (',' || co.tags || ',') ILIKE $${i}`; params.push(`%,${tags[0]},%`); i++ }
+      else if (tags.length > 1) {
+        sql += ` AND (${tags.map((_,j) => `(',' || co.tags || ',') ILIKE $${i+j}`).join(' OR ')})`
+        tags.forEach(t => params.push(`%,${t},%`)); i += tags.length
+      }
+    }
     if (not_in_sequence === 'true') {
       sql += ` AND NOT EXISTS (SELECT 1 FROM enrollments WHERE contact_id=ct.id AND status='active')`
     }

@@ -421,6 +421,11 @@ async function loadArtGallery() {
 }
 
 var GALLERY_DISPLAY_NAMES = {
+  'Wildlife':     'Wildlife',
+  'Nature':       'Nature & Landscapes',
+  'Psychedelic':  'Psychedelic & Mandala',
+  'Fantasy':      'Fantasy & Mythical',
+  'Whimsical':    'Whimsical',
   'boards':       'Board Sports',
   'hard-goods':   'Hard Goods',
   'home-decor':   'Home Decor',
