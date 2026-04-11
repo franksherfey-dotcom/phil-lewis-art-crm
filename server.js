@@ -302,11 +302,18 @@ app.get('/api/dashboard', async (req, res) => {
       all(`
         SELECT DISTINCT ON (a.contact_id)
           a.id, a.contact_id, a.subject, a.body, a.sent_at, a.notes, a.sentiment,
-          c.first_name, c.last_name, co.name AS company_name, co.id AS company_id
+          c.first_name, c.last_name, co.name AS company_name, co.id AS company_id,
+          e.id AS enrollment_id, e.status AS enrollment_status
         FROM activities a
         LEFT JOIN contacts c ON a.contact_id = c.id
         LEFT JOIN companies co ON c.company_id = co.id
+        LEFT JOIN LATERAL (
+          SELECT id, status FROM enrollments
+          WHERE contact_id = a.contact_id AND status = 'active'
+          ORDER BY started_at DESC LIMIT 1
+        ) e ON true
         WHERE a.type = 'received_email'
+          AND (a.notes IS NULL OR a.notes NOT IN ('archived'))
         ORDER BY a.contact_id, a.sent_at DESC
       `),
     ])
@@ -951,6 +958,23 @@ app.delete('/api/activities/:id', async (req, res) => {
   try {
     await run('DELETE FROM activities WHERE id=$1', [req.params.id])
     res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.patch('/api/activities/:id/archive', async (req, res) => {
+  try {
+    await run("UPDATE activities SET notes='archived' WHERE id=$1", [req.params.id])
+    res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.patch('/api/activities/:id/toggle-read', async (req, res) => {
+  try {
+    const a = await one("SELECT notes FROM activities WHERE id=$1", [req.params.id])
+    if (!a) return res.status(404).json({ error: 'Not found' })
+    const newNotes = a.notes === 'read' ? null : 'read'
+    await run("UPDATE activities SET notes=$2 WHERE id=$1", [req.params.id, newNotes])
+    res.json({ ok: true, notes: newNotes })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 

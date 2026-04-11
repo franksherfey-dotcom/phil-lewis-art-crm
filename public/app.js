@@ -544,11 +544,12 @@ async function loadDashboard() {
     }
     actEl.innerHTML = `<div class="activity-list">${replies.map(a => {
       const isNew = !a.notes || a.notes !== 'read';
-      const rawSnippet = a.body ? a.body.replace(/<[^>]+>/g,' ').replace(/\n/g,' ').trim() : '';
+      const rawSnippet = cleanReplyBody(a.body || '');
       const snippet = rawSnippet.length > 120 ? rawSnippet.substring(0,120) + '…' : rawSnippet;
+      const hasSequence = !!a.enrollment_id;
       return `
-      <div class="activity-row${isNew ? ' activity-unread' : ''}" onclick="openContactDetail(${a.contact_id})" style="cursor:pointer">
-        <div class="activity-content">
+      <div class="activity-row${isNew ? ' activity-unread' : ''}" data-activity-id="${a.id}">
+        <div class="activity-content" onclick="openContactDetail(${a.contact_id})" style="cursor:pointer">
           <div class="activity-header">
             <span class="activity-name">${esc(a.first_name)} ${esc(a.last_name||'')}</span>
             <span class="activity-co">${esc(a.company_name||'')}</span>
@@ -556,9 +557,90 @@ async function loadDashboard() {
           </div>
           ${snippet ? `<div class="activity-snippet">"${esc(snippet)}"</div>` : ''}
         </div>
-        <button class="btn btn-sm btn-primary activity-reply-btn" onclick="event.stopPropagation();openQuickReply(${a.id})">Reply</button>
+        <div class="activity-actions">
+          <button class="btn btn-sm btn-primary activity-reply-btn" onclick="event.stopPropagation();openQuickReply(${a.id})">Reply</button>
+          <div class="activity-menu-wrap">
+            <button class="activity-menu-btn" onclick="event.stopPropagation();toggleActivityMenu(this)" title="More actions">⋯</button>
+            <div class="activity-menu">
+              <button onclick="event.stopPropagation();archiveReply(${a.id})">Archive</button>
+              <button onclick="event.stopPropagation();toggleReadReply(${a.id})">${isNew ? 'Mark read' : 'Mark unread'}</button>
+              ${hasSequence ? `<button onclick="event.stopPropagation();removeFromSequence(${a.enrollment_id},${a.id})">Remove from sequence</button>` : ''}
+              <button class="activity-menu-danger" onclick="event.stopPropagation();deleteReply(${a.id})">Delete</button>
+            </div>
+          </div>
+        </div>
       </div>`;
     }).join('')}</div>`;
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+/* ── Reply body cleanup (handles base64, HTML, encoding artifacts) ── */
+function cleanReplyBody(body) {
+  if (!body) return '';
+  var text = body;
+  // Detect base64-encoded content (long alphanumeric strings with no spaces)
+  if (/^[A-Za-z0-9+/=\s]{50,}$/.test(text.trim()) || /[A-Za-z0-9+/]{40,}/.test(text)) {
+    try {
+      var decoded = atob(text.replace(/\s/g, ''));
+      if (/[a-z ]{10,}/i.test(decoded)) text = decoded;
+    } catch(e) { /* not valid base64, keep original */ }
+  }
+  // Strip HTML tags
+  text = text.replace(/<[^>]+>/g, ' ');
+  // Decode common HTML entities
+  text = text.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ');
+  // Collapse whitespace
+  text = text.replace(/\s+/g, ' ').trim();
+  return text;
+}
+
+/* ── Prospect Reply action handlers ── */
+function toggleActivityMenu(btn) {
+  var menu = btn.nextElementSibling;
+  // Close any other open menus first
+  document.querySelectorAll('.activity-menu.open').forEach(function(m) {
+    if (m !== menu) m.classList.remove('open');
+  });
+  menu.classList.toggle('open');
+}
+
+// Close menus when clicking outside
+document.addEventListener('click', function() {
+  document.querySelectorAll('.activity-menu.open').forEach(function(m) { m.classList.remove('open'); });
+});
+
+async function archiveReply(activityId) {
+  try {
+    await fetch('/api/activities/' + activityId + '/archive', { method: 'PATCH' });
+    toast('Reply archived');
+    loadDashboard();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function toggleReadReply(activityId) {
+  try {
+    var res = await fetch('/api/activities/' + activityId + '/toggle-read', { method: 'PATCH' });
+    var data = await res.json();
+    toast(data.notes === 'read' ? 'Marked as read' : 'Marked as unread');
+    loadDashboard();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function removeFromSequence(enrollmentId, activityId) {
+  if (!confirm('Remove this contact from their active sequence?')) return;
+  try {
+    await fetch('/api/enrollments/' + enrollmentId, { method: 'DELETE' });
+    toast('Removed from sequence');
+    loadDashboard();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function deleteReply(activityId) {
+  if (!confirm('Permanently delete this reply? This cannot be undone.')) return;
+  try {
+    await fetch('/api/activities/' + activityId, { method: 'DELETE' });
+    toast('Reply deleted');
+    loadDashboard();
   } catch(e) { toast(e.message, 'error'); }
 }
 

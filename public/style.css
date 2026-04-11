@@ -214,7 +214,17 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
 .activity-co::before { content: '·'; margin-right: 0; }
 .activity-date { color: var(--text-muted); font-size: 11px; white-space: nowrap; margin-left: auto; }
 .activity-snippet { color: var(--text-muted); font-size: 13px; font-style: italic; margin-top: 3px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.activity-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .activity-reply-btn { flex-shrink: 0; }
+.activity-menu-wrap { position: relative; }
+.activity-menu-btn { background: none; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 16px; padding: 2px 8px; color: var(--text-muted); line-height: 1; }
+.activity-menu-btn:hover { background: var(--bg); color: var(--text); }
+.activity-menu { display: none; position: absolute; right: 0; top: 100%; margin-top: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.12); z-index: 100; min-width: 180px; padding: 4px 0; }
+.activity-menu.open { display: block; }
+.activity-menu button { display: block; width: 100%; text-align: left; padding: 8px 14px; border: none; background: none; cursor: pointer; font-size: 13px; color: var(--text); white-space: nowrap; }
+.activity-menu button:hover { background: var(--bg); }
+.activity-menu-danger { color: #c0392b !important; }
+.activity-menu-danger:hover { background: #fdf0ef !important; }
 .contact-name-link { color: var(--text); text-decoration: none; font-weight: 600; }
 .contact-name-link:hover { color: var(--primary); text-decoration: underline; }
 
