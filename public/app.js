@@ -92,7 +92,7 @@ function showPage(page) {
 
   if (page === 'dashboard') loadDashboard();
   if (page === 'prospects') { loadAllTags(); loadCompanies(); }
-  if (page === 'contacts') { loadContactCategories(); populateBulkSequenceDropdown(); loadContacts(); }
+  if (page === 'contacts') { loadContactCategories(); populateBulkSequenceDropdown(); renderContactsTagChips(); loadContacts(); }
   if (page === 'pipeline') loadPipeline();
   if (page === 'sequences') loadSequences();
   if (page === 'gallery') loadArtGallery();
@@ -1001,60 +1001,121 @@ async function deleteCompany(id) {
 let _selectedContactIds = new Set();
 let _notInSeqActive = false;
 
+var _contactsTagFilter = '';
+
+function renderContactsTagChips() {
+  var el = document.getElementById('contacts-tag-chips');
+  if (!el) return;
+  el.innerHTML = `<span class="tag-filter-chip ${_contactsTagFilter===''?'active':''}" onclick="setContactsTagFilter('')">All</span>` +
+    INDUSTRY_TAGS.map(function(t) {
+      return '<span class="tag-filter-chip ' + (_contactsTagFilter===t?'active':'') + '" onclick="setContactsTagFilter(\'' + esc(t) + '\')">' + esc(t) + '</span>';
+    }).join('');
+}
+
+function setContactsTagFilter(tag) {
+  _contactsTagFilter = (_contactsTagFilter === tag) ? '' : tag;
+  renderContactsTagChips();
+  loadContacts();
+}
+
 async function loadContacts() {
-  const search    = document.getElementById('search-contacts')?.value || '';
-  const category  = document.getElementById('filter-category')?.value || '';
-  const params    = new URLSearchParams();
+  var search    = document.getElementById('search-contacts')?.value || '';
+  var category  = document.getElementById('filter-category')?.value || '';
+  var params    = new URLSearchParams();
   if (search)         params.set('search', search);
   if (category)       params.set('category', category);
+  if (_contactsTagFilter) params.set('tag', _contactsTagFilter);
   if (_notInSeqActive) params.set('not_in_sequence', 'true');
 
   try {
-    const contacts = await apiFetch('/api/contacts?' + params.toString());
-    const tbody = document.getElementById('contacts-tbody');
+    var contacts = await apiFetch('/api/contacts?' + params.toString());
+    var container = document.getElementById('contacts-grouped');
+    _selectedContactIds.clear();
+    updateBulkBar();
+
     if (!contacts.length) {
-      tbody.innerHTML = `<tr><td colspan="9" class="empty-state">No contacts found.</td></tr>`;
-      _selectedContactIds.clear();
-      updateBulkBar();
+      container.innerHTML = '<div class="empty-state">No contacts found.</div>';
       return;
     }
-    tbody.innerHTML = contacts.map(c => {
-      const checked = _selectedContactIds.has(c.id) ? 'checked' : '';
-      const seqBadge = c.enrollment_status === 'active'
-        ? `<span class="seq-badge seq-active" title="${esc(c.sequence_name||'')}">● Active</span>`
-        : c.enrollment_status === 'replied'
-        ? `<span class="seq-badge seq-replied" title="${esc(c.sequence_name||'')}">✓ Replied</span>`
-        : c.enrollment_status === 'completed'
-        ? `<span class="seq-badge seq-completed" title="${esc(c.sequence_name||'')}">✓ Done</span>`
-        : `<span style="color:var(--text-muted)">—</span>`;
-      return `
-      <tr class="${_selectedContactIds.has(c.id) ? 'contact-row-selected' : ''}">
-        <td><input type="checkbox" class="contact-checkbox" value="${c.id}" ${checked} onchange="toggleContactSelect(${c.id}, this)"></td>
-        <td>
-          <div style="display:flex;align-items:center;gap:6px">
-            ${c.is_primary ? '<span class="primary-badge" title="Primary contact">★</span>' : ''}
-            <strong>${esc(c.first_name)} ${esc(c.last_name||'')}</strong>
-          </div>
-        </td>
-        <td>${esc(c.title||'—')}</td>
-        <td>${c.company_name ? `<a href="#" onclick="event.preventDefault();openCompanyDetail(${c.company_id||0})">${esc(c.company_name)}</a>` : '—'}</td>
-        <td>${c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : '—'}</td>
-        <td>${esc(c.phone||'—')}</td>
-        <td>${c.linkedin ? `<a href="${esc(c.linkedin.startsWith('http')?c.linkedin:'https://'+c.linkedin)}" target="_blank" class="linkedin-table-link">View</a>` : '—'}</td>
-        <td>${seqBadge}</td>
-        <td>
-          <div style="display:flex;gap:6px">
-            <button class="btn btn-ghost btn-sm" onclick="openContactModal(${c.id})">Edit</button>
-            <button class="btn btn-danger btn-sm" onclick="deleteContact(${c.id})">Delete</button>
-          </div>
-        </td>
-      </tr>`
+
+    // Group contacts by industry tag → company
+    var industryGroups = {};
+    contacts.forEach(function(c) {
+      var tags = (c.company_tags || '').toLowerCase().split(',').map(function(t) { return t.trim(); }).filter(Boolean);
+      var industry = 'Uncategorized';
+      for (var ti = 0; ti < INDUSTRY_TAGS.length; ti++) {
+        if (tags.indexOf(INDUSTRY_TAGS[ti]) !== -1) { industry = INDUSTRY_TAGS[ti]; break; }
+      }
+      if (!industryGroups[industry]) industryGroups[industry] = {};
+      var coKey = c.company_name || 'No Company';
+      if (!industryGroups[industry][coKey]) industryGroups[industry][coKey] = { companyId: c.company_id, contacts: [] };
+      industryGroups[industry][coKey].contacts.push(c);
+    });
+
+    // Sort industries: INDUSTRY_TAGS order first, then Uncategorized last
+    var sortedIndustries = INDUSTRY_TAGS.filter(function(t) { return industryGroups[t]; });
+    if (industryGroups['Uncategorized']) sortedIndustries.push('Uncategorized');
+
+    var html = sortedIndustries.map(function(industry) {
+      var companies = industryGroups[industry];
+      var companyNames = Object.keys(companies).sort();
+      var totalContacts = companyNames.reduce(function(sum, co) { return sum + companies[co].contacts.length; }, 0);
+      var label = industry === 'Uncategorized' ? 'Uncategorized' : industry.replace(/-/g,' ').replace(/\b\w/g, function(l) { return l.toUpperCase(); });
+
+      return '<div class="contacts-industry-group">' +
+        '<div class="contacts-industry-header">' +
+          '<span class="contacts-industry-label">' + esc(label) + '</span>' +
+          '<span class="contacts-industry-count">' + totalContacts + ' contact' + (totalContacts !== 1 ? 's' : '') + '</span>' +
+        '</div>' +
+        companyNames.map(function(coName) {
+          var group = companies[coName];
+          var cts = group.contacts;
+          return '<div class="contacts-company-group">' +
+            '<div class="contacts-company-header" onclick="' + (group.companyId ? 'openCompanyDetail(' + group.companyId + ')' : '') + '" style="cursor:' + (group.companyId ? 'pointer' : 'default') + '">' +
+              '<span class="contacts-company-name">' + esc(coName) + '</span>' +
+              '<span class="contacts-company-count">' + cts.length + '</span>' +
+            '</div>' +
+            '<div class="contacts-company-list">' +
+              cts.map(function(c) {
+                var seqBadge = c.enrollment_status === 'active'
+                  ? '<span class="seq-badge seq-active" title="' + esc(c.sequence_name||'') + '">● Active</span>'
+                  : c.enrollment_status === 'replied'
+                  ? '<span class="seq-badge seq-replied" title="' + esc(c.sequence_name||'') + '">✓ Replied</span>'
+                  : c.enrollment_status === 'completed'
+                  ? '<span class="seq-badge seq-completed" title="' + esc(c.sequence_name||'') + '">✓ Done</span>'
+                  : '';
+                var emailLink = c.email ? '<a href="mailto:' + esc(c.email) + '" class="contact-email-link" onclick="event.stopPropagation()">' + esc(c.email) + '</a>' : '';
+                var linkedinLink = c.linkedin ? '<a href="' + esc(c.linkedin.startsWith('http')?c.linkedin:'https://'+c.linkedin) + '" target="_blank" class="contact-linkedin-link" onclick="event.stopPropagation()">LinkedIn</a>' : '';
+
+                return '<div class="contact-card" onclick="openContactDetail(' + c.id + ')">' +
+                  '<div class="contact-card-left">' +
+                    '<input type="checkbox" class="contact-checkbox" value="' + c.id + '" onclick="event.stopPropagation();toggleContactSelect(' + c.id + ', this)">' +
+                    '<div class="contact-card-info">' +
+                      '<div class="contact-card-name">' +
+                        (c.is_primary ? '<span class="primary-badge" title="Primary contact">★</span> ' : '') +
+                        esc(c.first_name) + ' ' + esc(c.last_name||'') +
+                        (c.title ? ' <span class="contact-card-title">· ' + esc(c.title) + '</span>' : '') +
+                      '</div>' +
+                      '<div class="contact-card-meta">' +
+                        emailLink +
+                        (emailLink && linkedinLink ? ' · ' : '') +
+                        linkedinLink +
+                      '</div>' +
+                    '</div>' +
+                  '</div>' +
+                  '<div class="contact-card-right">' +
+                    seqBadge +
+                    '<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openContactModal(' + c.id + ')">Edit</button>' +
+                  '</div>' +
+                '</div>';
+              }).join('') +
+            '</div>' +
+          '</div>';
+        }).join('') +
+      '</div>';
     }).join('');
-    // Sync select-all checkbox state
-    const allIds = contacts.map(c => c.id);
-    const allChecked = allIds.length > 0 && allIds.every(id => _selectedContactIds.has(id));
-    const selAll = document.getElementById('select-all-contacts');
-    if (selAll) { selAll.checked = allChecked; selAll.indeterminate = !allChecked && _selectedContactIds.size > 0; }
+
+    container.innerHTML = html;
     updateBulkBar();
   } catch(e) { toast(e.message, 'error'); }
 }

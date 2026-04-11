@@ -240,24 +240,10 @@
           <button class="btn btn-ghost btn-sm" onclick="clearContactSelection()" style="margin-left:auto;color:var(--text-muted)">✕ Clear selection</button>
         </div>
 
-        <div id="contacts-table-wrap" class="table-scroll-wrapper">
-          <table class="data-table" id="contacts-table">
-            <thead>
-              <tr>
-                <th style="width:36px"><input type="checkbox" id="select-all-contacts" onclick="toggleSelectAllContacts()" title="Select all"></th>
-                <th>Name</th>
-                <th>Title</th>
-                <th>Company</th>
-                <th>Email</th>
-                <th>Phone</th>
-                <th>LinkedIn</th>
-                <th>Sequence</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody id="contacts-tbody"></tbody>
-          </table>
-        </div>
+        <!-- Industry tag filter chips -->
+        <div id="contacts-tag-chips" class="tag-filter-chips" style="margin-bottom:12px"></div>
+
+        <div id="contacts-grouped" class="contacts-grouped"></div>
       </section>
 
       <!-- PIPELINE -->
