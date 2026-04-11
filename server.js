@@ -118,28 +118,6 @@ const migrationReady = (async () => {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `)
-    // Seed default collaboration images if table is empty
-    const { rows: artCount } = await pool.query('SELECT COUNT(*)::int AS n FROM art_images')
-    if (artCount[0].n === 0) {
-      const seeds = [
-        { title: 'Soulcraft Wake Surf Boards', url: 'https://phillewisart.com/cdn/shop/articles/soulcraft-header2_600x.jpg?v=1630337503', tags: 'skateboard,surf', category: 'boards' },
-        { title: 'Meier Skis', url: 'https://phillewisart.com/cdn/shop/articles/Final_3_wood_demo_8041b6df-1fe3-4780-98f7-802164043715_600x.jpg?v=1645204598', tags: 'snowboard,outdoor', category: 'boards' },
-        { title: 'Epic Water Filters', url: 'https://phillewisart.com/cdn/shop/articles/epic-hero2_600x.jpg?v=1604016747', tags: 'drinkware,camping,fishing', category: 'drinkware' },
-        { title: 'Liberty Puzzles', url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4423WEB_600x.jpg?v=1603909822', tags: 'puzzles,calendars,cards', category: 'print' },
-        { title: 'Third Eye Tapestries', url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4973WEB_768653d3-f5fc-42a1-8a97-c2929961780a_600x.jpg?v=1603909864', tags: 'fabric,lifestyle', category: 'home-decor' },
-        { title: 'LogoJET UV Products', url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product5843WEB_fadcaa8c-3b21-462c-b8be-26b402bc6f94_600x.jpg?v=1747320948', tags: 'hard-goods', category: 'hard-goods', is_default: true },
-        { title: 'Grassroots California', url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4389WEB_600x.jpg?v=1603909818', tags: 'apparel,footwear', category: 'apparel' },
-        { title: 'Minute Key', url: 'https://phillewisart.com/cdn/shop/articles/minute-key-collab-hero_600x.jpg?v=1603909120', tags: 'hard-goods,lifestyle', category: 'hard-goods' },
-        { title: 'PAMP Silver Coins', url: 'https://phillewisart.com/cdn/shop/articles/package-open_600x.jpg?v=1623250937', tags: 'hard-goods,lifestyle', category: 'collectibles' },
-      ]
-      for (const s of seeds) {
-        await pool.query(
-          'INSERT INTO art_images (title, url, tags, category, is_default) VALUES ($1,$2,$3,$4,$5)',
-          [s.title, s.url, s.tags, s.category, s.is_default || false]
-        )
-      }
-      console.log('✅ Seeded art gallery with Phil Lewis collaboration images.')
-    }
     console.log('✅ Art gallery table ready.')
   } catch (e) { console.error('Users migration error:', e.message) }
 })()
@@ -1468,9 +1446,36 @@ app.get('/api/pipeline/stuck-count', async (req, res) => {
 
 // ─── ART GALLERY ────────────────────────────────────────────────────────────
 
+const ART_SEEDS = [
+  { title: 'Soulcraft Wake Surf Boards', url: 'https://phillewisart.com/cdn/shop/articles/soulcraft-header2_600x.jpg?v=1630337503', tags: 'skateboard,surf', category: 'boards' },
+  { title: 'Meier Skis', url: 'https://phillewisart.com/cdn/shop/articles/Final_3_wood_demo_8041b6df-1fe3-4780-98f7-802164043715_600x.jpg?v=1645204598', tags: 'snowboard,outdoor', category: 'boards' },
+  { title: 'Epic Water Filters', url: 'https://phillewisart.com/cdn/shop/articles/epic-hero2_600x.jpg?v=1604016747', tags: 'drinkware,camping,fishing', category: 'drinkware' },
+  { title: 'Liberty Puzzles', url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4423WEB_600x.jpg?v=1603909822', tags: 'puzzles,calendars,cards', category: 'print' },
+  { title: 'Third Eye Tapestries', url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4973WEB_768653d3-f5fc-42a1-8a97-c2929961780a_600x.jpg?v=1603909864', tags: 'fabric,lifestyle', category: 'home-decor' },
+  { title: 'LogoJET UV Products', url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product5843WEB_fadcaa8c-3b21-462c-b8be-26b402bc6f94_600x.jpg?v=1747320948', tags: 'hard-goods', category: 'hard-goods', is_default: true },
+  { title: 'Grassroots California', url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4389WEB_600x.jpg?v=1603909818', tags: 'apparel,footwear', category: 'apparel' },
+  { title: 'Minute Key', url: 'https://phillewisart.com/cdn/shop/articles/minute-key-collab-hero_600x.jpg?v=1603909120', tags: 'hard-goods,lifestyle', category: 'hard-goods' },
+  { title: 'PAMP Silver Coins', url: 'https://phillewisart.com/cdn/shop/articles/package-open_600x.jpg?v=1623250937', tags: 'hard-goods,lifestyle', category: 'collectibles' },
+]
+
+async function seedArtIfEmpty() {
+  const { rows } = await pool.query('SELECT COUNT(*)::int AS n FROM art_images')
+  if (rows[0].n === 0) {
+    for (const s of ART_SEEDS) {
+      await pool.query(
+        'INSERT INTO art_images (title, url, tags, category, is_default) VALUES ($1,$2,$3,$4,$5)',
+        [s.title, s.url, s.tags, s.category, s.is_default || false]
+      )
+    }
+  }
+}
+
 app.get('/api/art', async (req, res) => {
-  try { res.json(await all('SELECT * FROM art_images ORDER BY created_at DESC')) }
-  catch (err) { res.status(500).json({ error: err.message }) }
+  try {
+    await migrationReady
+    await seedArtIfEmpty()
+    res.json(await all('SELECT * FROM art_images ORDER BY created_at DESC'))
+  } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
 app.post('/api/art', async (req, res) => {
