@@ -1733,6 +1733,7 @@ async function openQueueDetail(index) {
 
     <div class="queue-detail-actions">
       <button class="btn btn-primary" onclick="sendFromQueueDetail(${item.enrollment_id})">Send Email</button>
+      <button class="btn btn-outline" onclick="previewFromQueueDetail(${item.enrollment_id})">Preview</button>
       <button class="btn btn-outline" onclick="closeModal('modal-queue-detail')">Cancel</button>
     </div>
   `;
@@ -1751,6 +1752,29 @@ async function sendFromQueueDetail(enrollmentId) {
     closeModal('modal-queue-detail');
     loadQueue();
     updateDashboardBadge();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function previewFromQueueDetail(enrollmentId) {
+  const subject = document.getElementById('queue-edit-subject').value;
+  const body = document.getElementById('queue-edit-body').value;
+  try {
+    const preview = await apiFetch(`/api/queue/preview/${enrollmentId}`);
+    let bodyHtml = renderEmailBody(body || preview.body);
+    if (preview.step_number === 1 && preview.company_tags && typeof getArtForTags === 'function') {
+      const artImg = getArtForTags(preview.company_tags);
+      bodyHtml += buildArtPreviewCard(artImg);
+    }
+    document.getElementById('preview-content').innerHTML = `
+      <div class="preview-subject">Subject: ${esc(subject || preview.subject)}</div>
+      <div class="preview-body">${bodyHtml}</div>
+    `;
+    currentEnrollmentIdForPreview = enrollmentId;
+    document.getElementById('preview-send-btn').onclick = () => {
+      closeModal('modal-preview');
+      sendFromQueueDetail(enrollmentId);
+    };
+    openModal('modal-preview');
   } catch(e) { toast(e.message, 'error'); }
 }
 
@@ -2988,6 +3012,7 @@ function applyNewsFilters() {
   }
 
   renderNews(items);
+  applyHeatmapFilter();
 }
 
 function renderNews(items) {
@@ -3036,15 +3061,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ── LEAD HEAT MAP ─────────────────────────────────────────────────────────
 
+let _heatmapCache = null;
+
 async function loadLeadHeatmap() {
   const el = document.getElementById('lead-heatmap');
   if (!el) return;
   try {
-    const leads = await apiFetch('/api/leads/heatmap');
-    renderLeadHeatmap(leads);
+    _heatmapCache = await apiFetch('/api/leads/heatmap');
+    applyHeatmapFilter();
   } catch(e) {
     el.innerHTML = `<div class="empty-state">Could not load heat map: ${esc(e.message)}</div>`;
   }
+}
+
+function applyHeatmapFilter() {
+  if (!_heatmapCache) return;
+  let leads = _heatmapCache;
+  const company = document.getElementById('news-company-search')?.value?.trim().toLowerCase() || '';
+  if (_newsTag) {
+    leads = leads.filter(l => {
+      const tags = (l.tags || '').toLowerCase().split(',').map(t => t.trim());
+      return tags.includes(_newsTag);
+    });
+  }
+  if (company) {
+    leads = leads.filter(l => (l.name || '').toLowerCase().includes(company));
+  }
+  renderLeadHeatmap(leads);
 }
 
 function scoreLeadTemperature(lead) {
@@ -3108,15 +3151,18 @@ function renderLeadHeatmap(leads) {
   const hot  = scored.filter(l => l.cls === 'hot');
   const warm = scored.filter(l => l.cls === 'warm');
   const cold = scored.filter(l => l.cls === 'cold');
+  const sleepers = scored.filter(l => l.emails_sent === 0 && l.reply_count === 0 && l.cls === 'cold');
+  const activeCold = cold.filter(l => l.emails_sent > 0 || l.reply_count > 0);
 
-  function renderSection(title, items, cls) {
-    if (!items.length) return `<div class="heatmap-section heatmap-${cls}"><div class="heatmap-section-title">${title} <span class="heatmap-count">(0)</span></div><div class="heatmap-empty">No ${title.toLowerCase()} leads</div></div>`;
+  function renderSection(title, items, cls, subtitle) {
+    if (!items.length) return `<div class="heatmap-section heatmap-${cls}"><div class="heatmap-section-title">${title} <span class="heatmap-count">(0)</span></div><div class="heatmap-empty">No ${title.toLowerCase().replace(/[^\w\s]/g,'')} leads</div></div>`;
     return `
       <div class="heatmap-section heatmap-${cls}">
         <div class="heatmap-section-title">${title} <span class="heatmap-count">(${items.length})</span></div>
+        ${subtitle ? `<div class="heatmap-section-subtitle">${subtitle}</div>` : ''}
         <div class="heatmap-grid">
           ${items.map(l => `
-            <div class="heatmap-card heatmap-card-${cls}" onclick="openCompanyDetail(${l.id})">
+            <div class="heatmap-card heatmap-card-${cls}" data-tags="${esc((l.tags || '').toLowerCase())}" onclick="openCompanyDetail(${l.id})">
               <div class="heatmap-card-header">
                 <span class="heatmap-dot heatmap-dot-${cls}"></span>
                 <strong>${esc(l.name)}</strong>
@@ -3135,7 +3181,8 @@ function renderLeadHeatmap(leads) {
 
   el.innerHTML = renderSection('🔥 Hot', hot, 'hot')
     + renderSection('🟡 Warm', warm, 'warm')
-    + renderSection('🔵 Cold', cold, 'cold');
+    + renderSection('🔵 Cold', activeCold, 'cold')
+    + renderSection('💤 Sleepers', sleepers, 'sleeper', 'Aligned companies with zero outreach — potential untapped opportunities');
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────
