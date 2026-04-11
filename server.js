@@ -120,36 +120,79 @@ const migrationReady = (async () => {
     `)
     console.log('✅ Art gallery table ready.')
 
-    // Seed Phil's actual art collection (replace company mockups if present)
+    // Seed Phil's art collection — re-seed if fewer than 40 pieces (incomplete previous seed)
     const artCount = await one("SELECT COUNT(*)::int AS n FROM art_images")
-    const hasCompanyArt = artCount.n > 0 ? await one("SELECT COUNT(*)::int AS n FROM art_images WHERE title ILIKE '%PAMP%' OR title ILIKE '%Minute Key%' OR title ILIKE '%Grassroots%' OR title ILIKE '%LogoJET%'") : { n: 0 }
-    if (artCount.n === 0 || hasCompanyArt.n > 0) {
+    if (artCount.n < 40) {
       await pool.query("DELETE FROM art_images")
+      const S = 'https://phillewisart.com/cdn/shop/'
       const ART_SEEDS = [
-        { title: 'Angel Fish', url: 'https://phillewisart.com/cdn/shop/files/Angel-Fish-1500.jpg', tags: 'drinkware,apparel,outdoor,puzzles,cards', category: 'Wildlife', notes: 'Vibrant tropical fish — great for drinkware, apparel, puzzles' },
-        { title: 'Bison', url: 'https://phillewisart.com/cdn/shop/products/Bison-Web.jpg', tags: 'outdoor,hard-goods,apparel,lifestyle', category: 'Wildlife', notes: 'Iconic American bison — strong fit for outdoor brands' },
-        { title: 'Azure Dragon', url: 'https://phillewisart.com/cdn/shop/files/Azure-Dragon-1500.jpg', tags: 'apparel,fabric,skateboard,snowboard,lifestyle', category: 'Fantasy', notes: 'Psychedelic dragon — bold statement piece for board graphics, apparel' },
-        { title: 'Chameleon', url: 'https://phillewisart.com/cdn/shop/products/chameleon.jpg', tags: 'apparel,fabric,lifestyle,cards,puzzles', category: 'Wildlife', notes: 'Colorful chameleon — versatile across product types' },
-        { title: 'Orcas', url: 'https://phillewisart.com/cdn/shop/products/orcas.jpg', tags: 'outdoor,surf,drinkware,apparel,hard-goods', category: 'Wildlife', notes: 'Orca whales — perfect for surf, ocean, outdoor brands' },
-        { title: 'Aspens', url: 'https://phillewisart.com/cdn/shop/products/aspens11x14.jpg', tags: 'outdoor,lifestyle,cards,calendars,fabric', category: 'Nature', notes: 'Colorado aspens landscape — nature brands, cards, calendars' },
-        { title: 'Red Rocks', url: 'https://phillewisart.com/cdn/shop/products/redrocks.jpg', tags: 'outdoor,lifestyle,apparel,cards,puzzles', category: 'Nature', notes: 'Iconic Red Rocks — Colorado lifestyle, outdoor brands' },
-        { title: 'Octopus', url: 'https://phillewisart.com/cdn/shop/products/octopus.jpg', tags: 'surf,drinkware,apparel,skateboard,fabric', category: 'Wildlife', notes: 'Psychedelic octopus — surf culture, bold graphics' },
-        { title: '3rd Eye Chakra Eagle', url: 'https://phillewisart.com/cdn/shop/products/6_39f2a2eb-a929-4150-bffd-f30a69b73c94.jpg', tags: 'apparel,skateboard,snowboard,fabric,lifestyle', category: 'Psychedelic', notes: 'Spiritual eagle mandala — edgy board graphics, apparel' },
-        { title: 'Best Buds', url: 'https://phillewisart.com/cdn/shop/products/gnomes.jpg', tags: 'cards,puzzles,lifestyle,apparel,fabric', category: 'Whimsical', notes: 'Whimsical garden gnomes — greeting cards, puzzles, fun products' },
-        { title: 'Birdhouse', url: 'https://phillewisart.com/cdn/shop/products/birdhouse.jpg', tags: 'cards,outdoor,lifestyle,puzzles,fabric', category: 'Nature', notes: 'Colorful birdhouse scene — cards, home decor, puzzles' },
-        { title: 'Wolf Song', url: 'https://phillewisart.com/cdn/shop/products/wolf.jpg', tags: 'outdoor,hard-goods,apparel,snowboard,lifestyle', category: 'Wildlife', notes: 'Howling wolf — outdoor brands, winter sports, hard goods' },
-        { title: 'Jellyfish Dreamcatcher', url: 'https://phillewisart.com/cdn/shop/products/jelly.jpg', tags: 'surf,fabric,apparel,drinkware,lifestyle', category: 'Fantasy', notes: 'Jellyfish dreamcatcher fusion — surf, bohemian lifestyle' },
-        { title: 'Black Swan', url: 'https://phillewisart.com/cdn/shop/products/blackswan.jpg', tags: 'apparel,fabric,cards,lifestyle,puzzles', category: 'Wildlife', notes: 'Elegant black swan — premium apparel, fabric, stationery' },
-        { title: 'Flatirons', url: 'https://phillewisart.com/cdn/shop/products/flatirons.jpg', tags: 'outdoor,lifestyle,hard-goods,cards,calendars', category: 'Nature', notes: 'Boulder Flatirons landscape — outdoor lifestyle brands' },
-        { title: 'Dolphins', url: 'https://phillewisart.com/cdn/shop/products/dolphins.jpg', tags: 'surf,drinkware,outdoor,apparel,cards', category: 'Wildlife', notes: 'Playful dolphins — surf, ocean, drinkware brands' },
-        { title: 'Confluence', url: 'https://phillewisart.com/cdn/shop/products/Confluence-1500.jpg', tags: 'outdoor,skateboard,snowboard,apparel,fabric', category: 'Nature', notes: 'River confluence — flow-state vibes for board sports, outdoor' },
-        { title: 'Flow Tree', url: 'https://phillewisart.com/cdn/shop/products/flowtree.jpg', tags: 'outdoor,lifestyle,fabric,cards,apparel', category: 'Nature', notes: 'Psychedelic tree of life — versatile nature theme' },
-        { title: 'Bluegrass Mandala', url: 'https://phillewisart.com/cdn/shop/products/bluegrass-mandala-stickercopy.jpg', tags: 'apparel,drinkware,lifestyle,fabric,hard-goods', category: 'Psychedelic', notes: 'Intricate mandala — drinkware wraps, apparel prints, fabric' },
-        { title: 'Alpha Elephant', url: 'https://phillewisart.com/cdn/shop/products/IMG_2506.jpg', tags: 'drinkware,hard-goods,apparel,lifestyle,outdoor', category: 'Wildlife', notes: 'Bold geometric elephant — drinkware, hard goods, lifestyle' },
-        { title: 'Phoenix', url: 'https://phillewisart.com/cdn/shop/products/phoenix.jpg', tags: 'skateboard,snowboard,apparel,fabric,lifestyle', category: 'Fantasy', notes: 'Fiery phoenix — powerful board graphics, apparel' },
-        { title: 'Pelicans', url: 'https://phillewisart.com/cdn/shop/products/pelicans.jpg', tags: 'surf,outdoor,cards,drinkware,apparel', category: 'Wildlife', notes: 'Coastal pelicans — surf, beach, coastal lifestyle brands' },
-        { title: 'Colorado Sand Dunes', url: 'https://phillewisart.com/cdn/shop/products/dunes.jpg', tags: 'outdoor,lifestyle,cards,calendars,puzzles', category: 'Nature', notes: 'Great Sand Dunes — outdoor adventure, travel brands' },
-        { title: 'Boulder Rez', url: 'https://phillewisart.com/cdn/shop/products/res.jpg', tags: 'outdoor,lifestyle,cards,calendars,puzzles', category: 'Nature', notes: 'Boulder Reservoir sunset — local Colorado, outdoor lifestyle' },
+        // ── OCEAN / MARINE ──
+        { title: 'Angel Fish', url: S+'files/Angel-Fish-1500.jpg', tags: 'drinkware,apparel,outdoor,puzzles,cards', category: 'Ocean', notes: 'Vibrant tropical fish' },
+        { title: 'Dolphins', url: S+'files/Dolphins-1500.jpg', tags: 'surf,drinkware,outdoor,apparel,cards', category: 'Ocean', notes: 'Playful dolphins' },
+        { title: 'Orcas', url: S+'files/Orcas-1500.jpg', tags: 'surf,drinkware,outdoor,apparel,hard-goods', category: 'Ocean', notes: 'Orca whales' },
+        { title: 'Octopus', url: S+'files/Octopus-1500.jpg', tags: 'surf,drinkware,apparel,skateboard,fabric', category: 'Ocean', notes: 'Psychedelic octopus' },
+        { title: 'Sharks', url: S+'files/Sharks-1500.jpg', tags: 'surf,skateboard,apparel,hard-goods,drinkware', category: 'Ocean', notes: 'Bold shark composition' },
+        { title: 'Whales', url: S+'files/Whales-1500.jpg', tags: 'surf,outdoor,drinkware,apparel,cards', category: 'Ocean', notes: 'Majestic whales' },
+        { title: 'Sea Turtles', url: S+'files/Sea-Turtles-1500.jpg', tags: 'surf,outdoor,drinkware,apparel,lifestyle', category: 'Ocean', notes: 'Sea turtles' },
+        { title: 'Sea Horses', url: S+'files/Sea-Horses-1500.jpg', tags: 'apparel,fabric,cards,drinkware,lifestyle', category: 'Ocean', notes: 'Ornate sea horses' },
+        { title: 'Sea Lions', url: S+'files/Sea-Lions-1500.jpg', tags: 'surf,outdoor,drinkware,apparel,lifestyle', category: 'Ocean', notes: 'Playful sea lions' },
+        { title: 'Crocodiles', url: S+'files/Crocodile-1500.jpg', tags: 'apparel,skateboard,hard-goods,lifestyle,fabric', category: 'Ocean', notes: 'Psychedelic crocodiles' },
+        { title: 'Sting Rays', url: S+'files/Sting-Rays-1500.jpg', tags: 'surf,drinkware,apparel,outdoor,fabric', category: 'Ocean', notes: 'Sting rays' },
+        { title: 'Pelicans', url: S+'files/Pelicans-1500.jpg', tags: 'surf,outdoor,cards,drinkware,apparel', category: 'Ocean', notes: 'Coastal pelicans' },
+        { title: 'Let It Flow', url: S+'products/fish-1500.jpg', tags: 'surf,drinkware,apparel,cards,puzzles', category: 'Ocean', notes: 'Flowing fish scene' },
+        { title: 'Over the Falls', url: S+'products/ducks.jpg', tags: 'surf,skateboard,apparel,hard-goods,outdoor', category: 'Ocean', notes: 'Dynamic waterfall with fish' },
+        // ── WILDLIFE ──
+        { title: 'Bison', url: S+'products/Bison-Web.jpg', tags: 'outdoor,hard-goods,apparel,lifestyle,cards', category: 'Wildlife', notes: 'Iconic American bison' },
+        { title: 'Buffalo', url: S+'products/buffalo.jpg', tags: 'outdoor,hard-goods,apparel,lifestyle,cards', category: 'Wildlife', notes: 'Psychedelic buffalo' },
+        { title: 'Wolf Song', url: S+'products/wolf.jpg', tags: 'outdoor,hard-goods,apparel,snowboard,lifestyle', category: 'Wildlife', notes: 'Howling wolf' },
+        { title: 'Chameleon', url: S+'products/chameleon.jpg', tags: 'apparel,fabric,lifestyle,cards,puzzles', category: 'Wildlife', notes: 'Colorful chameleon' },
+        { title: 'Black Swan', url: S+'products/blackswan.jpg', tags: 'apparel,fabric,cards,lifestyle,puzzles', category: 'Wildlife', notes: 'Elegant black swan' },
+        { title: 'Electric Fox', url: S+'products/electricfox.jpg', tags: 'apparel,skateboard,snowboard,fabric,lifestyle', category: 'Wildlife', notes: 'Vibrant electric fox' },
+        { title: 'Elephants', url: S+'products/elephants.jpg', tags: 'apparel,fabric,cards,puzzles,lifestyle', category: 'Wildlife', notes: 'Ornate elephants' },
+        { title: 'Foxy', url: S+'products/foxy1.jpg', tags: 'apparel,cards,fabric,lifestyle,puzzles', category: 'Wildlife', notes: 'Psychedelic fox portrait' },
+        { title: 'Jaguar Vision', url: S+'products/LB-PLA-Jaguar-Final-green-IG.jpg', tags: 'apparel,skateboard,hard-goods,fabric,lifestyle', category: 'Wildlife', notes: 'Jaguar vision mandala' },
+        { title: 'Mountain Lion', url: S+'products/mountainlion.jpg', tags: 'outdoor,hard-goods,apparel,snowboard,lifestyle', category: 'Wildlife', notes: 'Mountain lion portrait' },
+        { title: 'Moose on the Loose', url: S+'products/moose1.jpg', tags: 'outdoor,hard-goods,apparel,drinkware,lifestyle', category: 'Wildlife', notes: 'Playful moose' },
+        { title: 'Red Tailed Hawk', url: S+'products/hawk.jpg', tags: 'outdoor,apparel,hard-goods,cards,lifestyle', category: 'Wildlife', notes: 'Red tailed hawk' },
+        { title: 'Rocky Mountain Goats', url: S+'products/goats.jpg', tags: 'outdoor,hard-goods,apparel,drinkware,lifestyle', category: 'Wildlife', notes: 'Mountain goats' },
+        { title: 'Giraffe Project', url: S+'products/giraffes.jpg', tags: 'apparel,cards,puzzles,fabric,lifestyle', category: 'Wildlife', notes: 'Ornate giraffe' },
+        { title: 'Zebra', url: S+'products/zebra.jpg', tags: 'apparel,fabric,cards,lifestyle,puzzles', category: 'Wildlife', notes: 'Psychedelic zebra' },
+        { title: 'Peacocks', url: S+'products/peacocks.jpg', tags: 'apparel,fabric,cards,puzzles,lifestyle', category: 'Wildlife', notes: 'Ornate peacock pair' },
+        { title: 'Night Owls', url: S+'products/nightowls.jpg', tags: 'apparel,cards,puzzles,fabric,lifestyle', category: 'Wildlife', notes: 'Psychedelic owls' },
+        // ── NATURE & LANDSCAPES ──
+        { title: 'Aspens', url: S+'products/aspens11x14.jpg', tags: 'outdoor,lifestyle,cards,calendars,fabric', category: 'Nature', notes: 'Colorado aspens' },
+        { title: 'Red Rocks', url: S+'products/redrocks1.jpg', tags: 'outdoor,lifestyle,apparel,cards,puzzles', category: 'Nature', notes: 'Red Rocks Amphitheatre' },
+        { title: 'Flatirons', url: S+'products/flatirons.jpg', tags: 'outdoor,lifestyle,hard-goods,cards,calendars', category: 'Nature', notes: 'Boulder Flatirons' },
+        { title: 'Colorado Sand Dunes', url: S+'products/dunes.jpg', tags: 'outdoor,lifestyle,cards,calendars,puzzles', category: 'Nature', notes: 'Great Sand Dunes' },
+        { title: 'Boulder Rez', url: S+'products/res.jpg', tags: 'outdoor,lifestyle,cards,calendars,puzzles', category: 'Nature', notes: 'Boulder Reservoir sunset' },
+        { title: 'Confluence', url: S+'products/Confluence-1500.jpg', tags: 'outdoor,skateboard,snowboard,apparel,fabric', category: 'Nature', notes: 'River confluence' },
+        { title: 'Birdhouse', url: S+'products/birdhouse.jpg', tags: 'cards,outdoor,lifestyle,puzzles,fabric', category: 'Nature', notes: 'Colorful birdhouse' },
+        { title: 'High Sierra', url: S+'products/highsierra.jpg', tags: 'outdoor,hard-goods,apparel,lifestyle,drinkware', category: 'Nature', notes: 'High Sierra mountains' },
+        { title: 'Pow Days', url: S+'products/Pow-Days1500.jpg', tags: 'snowboard,outdoor,hard-goods,apparel,lifestyle', category: 'Nature', notes: 'Powder day mountain scene' },
+        { title: 'Pollinate', url: S+'products/pollinate-1000.jpg', tags: 'cards,fabric,apparel,lifestyle,outdoor', category: 'Nature', notes: 'Bee pollination scene' },
+        { title: 'Magnolia Moonrise', url: S+'products/magnolia.jpg', tags: 'cards,fabric,apparel,lifestyle,outdoor', category: 'Nature', notes: 'Magnolia moonrise scene' },
+        { title: 'Up on the Blue Ridge', url: S+'files/Blue-Ridge-1500.jpg', tags: 'outdoor,lifestyle,cards,calendars,puzzles', category: 'Nature', notes: 'Blue Ridge Mountain vista' },
+        { title: 'Lone Cypress', url: S+'products/cypress.jpg', tags: 'outdoor,lifestyle,cards,calendars,puzzles', category: 'Nature', notes: 'Lone Cypress tree' },
+        { title: 'Marshall Mesa', url: S+'products/marshall.jpg', tags: 'outdoor,lifestyle,cards,calendars,apparel', category: 'Nature', notes: 'Marshall Mesa landscape' },
+        // ── PSYCHEDELIC & MANDALA ──
+        { title: '3rd Eye Chakra Eagle', url: S+'products/6_39f2a2eb-a929-4150-bffd-f30a69b73c94.jpg', tags: 'apparel,skateboard,snowboard,fabric,lifestyle', category: 'Psychedelic', notes: 'Spiritual eagle mandala' },
+        { title: 'Crown Chakra Lotus', url: S+'products/7_63003917-b094-4b51-ad52-25a29fa73e8b.jpg', tags: 'apparel,fabric,lifestyle,cards,drinkware', category: 'Psychedelic', notes: 'Lotus mandala' },
+        { title: 'Bluegrass Mandala', url: S+'products/bluegrass-mandala-stickercopy.jpg', tags: 'apparel,drinkware,lifestyle,fabric,hard-goods', category: 'Psychedelic', notes: 'Intricate bluegrass mandala' },
+        { title: 'Magpie Mandala', url: S+'products/mandala.jpg', tags: 'apparel,fabric,cards,lifestyle,outdoor', category: 'Psychedelic', notes: 'Magpie mandala' },
+        { title: 'One Love', url: S+'products/one-love-1200.jpg', tags: 'apparel,fabric,lifestyle,cards,drinkware', category: 'Psychedelic', notes: 'Unity mandala' },
+        { title: 'Frequency 1', url: S+'products/freq1PT-1200.jpg', tags: 'skateboard,snowboard,apparel,fabric,lifestyle', category: 'Psychedelic', notes: 'Abstract frequency wave' },
+        // ── FANTASY & MYTHICAL ──
+        { title: 'Azure Dragon', url: S+'files/Azure-Dragon-1500.jpg', tags: 'apparel,fabric,skateboard,snowboard,lifestyle', category: 'Fantasy', notes: 'Psychedelic dragon' },
+        { title: 'Three Headed Dragon', url: S+'files/story-1920x1080.jpg', tags: 'skateboard,snowboard,apparel,hard-goods,fabric', category: 'Fantasy', notes: 'Three-headed dragon' },
+        { title: 'Phoenix', url: S+'products/phoenix.jpg', tags: 'skateboard,snowboard,apparel,fabric,lifestyle', category: 'Fantasy', notes: 'Fiery phoenix' },
+        { title: 'The Red Dragon', url: S+'products/dragon.jpg', tags: 'skateboard,snowboard,apparel,fabric,hard-goods', category: 'Fantasy', notes: 'Red dragon' },
+        { title: 'Merlin', url: S+'products/merlin.jpg', tags: 'apparel,puzzles,cards,lifestyle,fabric', category: 'Fantasy', notes: 'Merlin wizard' },
+        { title: 'Jellyfish Nimbus', url: S+'products/jellyfishnimbus.jpg', tags: 'surf,fabric,apparel,drinkware,lifestyle', category: 'Fantasy', notes: 'Jellyfish nimbus cloud' },
+        // ── WHIMSICAL ──
+        { title: 'Best Buds', url: S+'products/gnomes.jpg', tags: 'cards,puzzles,lifestyle,apparel,fabric', category: 'Whimsical', notes: 'Garden gnomes' },
+        { title: 'Frog Pond', url: S+'products/frogs1.jpg', tags: 'cards,puzzles,lifestyle,fabric,outdoor', category: 'Whimsical', notes: 'Whimsical frog scene' },
+        { title: 'Parrots in a Palm Tree', url: S+'products/parrots.jpg', tags: 'apparel,cards,fabric,lifestyle,drinkware', category: 'Whimsical', notes: 'Tropical parrots' },
+        { title: 'Woodpeckers', url: S+'products/woodpeckers.jpg', tags: 'cards,outdoor,lifestyle,puzzles,fabric', category: 'Whimsical', notes: 'Woodpecker pair' },
       ]
       for (const a of ART_SEEDS) {
         await run(
