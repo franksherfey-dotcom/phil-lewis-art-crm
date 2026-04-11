@@ -334,19 +334,35 @@ async function loadArtGallery() {
   }
 }
 
+var GALLERY_DISPLAY_NAMES = {
+  'boards':       'Board Sports',
+  'hard-goods':   'Hard Goods',
+  'home-decor':   'Home Decor',
+  'collectibles': 'Collectibles',
+  'apparel':      'Apparel',
+  'print':        'Print & Stationery',
+  'drinkware':    'Drinkware',
+  'kids-games':   'Kids & Games',
+  'accessories':  'Accessories',
+  'barware':      'Barware',
+  'tech':         'Tech',
+  'engraving':    'Custom Engraving',
+  'disc-sports':  'Disc Sports',
+  'stickers':     'Stickers',
+  'pets':         'Pets',
+};
+
 function renderGalleryFilters() {
   const el = document.getElementById('gallery-filter-chips');
   if (!el) return;
   const cats = [...new Set(_artCache.map(a => a.category).filter(Boolean))];
-  const tagSet = new Set();
-  _artCache.forEach(a => (a.tags||'').split(',').forEach(t => { if (t.trim()) tagSet.add(t.trim()); }));
-  const allTags = [...tagSet].sort();
 
   el.innerHTML = `
     <span class="tag-filter-chip ${_galleryFilter===''?'active':''}" onclick="filterGallery('')">All (${_artCache.length})</span>
     ${cats.map(c => {
       const count = _artCache.filter(a => a.category === c).length;
-      return `<span class="tag-filter-chip ${_galleryFilter===c?'active':''}" onclick="filterGallery('${esc(c)}')">${esc(c)} (${count})</span>`;
+      const label = GALLERY_DISPLAY_NAMES[c] || c.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+      return `<span class="tag-filter-chip ${_galleryFilter===c?'active':''}" onclick="filterGallery('${esc(c)}')">${esc(label)} (${count})</span>`;
     }).join('')}
   `;
 }

@@ -540,19 +540,24 @@ async function loadDashboard() {
       actEl.innerHTML = `<div class="empty-state">No activity yet. Add prospects and enroll them in a sequence to get started.</div>`;
       return;
     }
-    actEl.innerHTML = `<div class="activity-list">${d.recentActivity.map(a => `
-      <div class="activity-row">
-        <div class="activity-name">
-          ${a.contact_id
-            ? `<a href="#" class="contact-name-link" onclick="event.preventDefault();openContactDetail(${a.contact_id})">${esc(a.first_name)} ${esc(a.last_name||'')}</a>`
-            : `${esc(a.first_name)} ${esc(a.last_name||'')}`
-          }
+    actEl.innerHTML = `<div class="activity-list">${d.recentActivity.map(a => {
+      const status = a.has_unread ? 'needs-reply' : a.has_reply ? 'replied' : 'sent';
+      const statusLabel = a.has_unread ? 'Needs Reply' : a.has_reply ? 'Replied' : a.type === 'received_email' ? 'Received' : 'Sent';
+      const subj = (a.subject || '—').replace(/^(Re: )+/i, '');
+      return `
+      <div class="activity-row activity-${status}" onclick="openContactDetail(${a.contact_id})" style="cursor:pointer">
+        <div class="activity-status-dot status-${status}" title="${statusLabel}"></div>
+        <div class="activity-main">
+          <div class="activity-top">
+            <span class="activity-name">${esc(a.first_name)} ${esc(a.last_name||'')}</span>
+            <span class="activity-co">${esc(a.company_name||'')}</span>
+            <span class="activity-pill pill-${status}">${statusLabel}</span>
+          </div>
+          <div class="activity-subj">${esc(subj)}</div>
         </div>
-        <div class="activity-co">${esc(a.company_name||'—')}</div>
-        <div class="activity-subj">${esc(a.subject||'—')}</div>
         <div class="activity-date">${fmtDate(a.sent_at)}</div>
-      </div>
-    `).join('')}</div>`;
+      </div>`;
+    }).join('')}</div>`;
   } catch(e) { toast(e.message, 'error'); }
 }
 
