@@ -572,101 +572,94 @@ async function openContactDetail(contactId) {
       apiFetch(`/api/activities?contact_id=${contactId}`),
     ]);
 
-    // Fetch enrollment info from pipeline
-    let enrollmentInfo = null;
-    try {
-      const pipeline = await apiFetch('/api/pipeline');
-      enrollmentInfo = pipeline.find(p => p.id === contactId) || null;
-    } catch(e) { /* ignore */ }
+    // Fetch company detail for context
+    let company = null;
+    if (contact.company_id) {
+      try { company = await apiFetch(`/api/companies/${contact.company_id}`); } catch(e) {}
+    }
 
-    const statusLabel = enrollmentInfo
-      ? (enrollmentInfo.enrollment_status || 'not enrolled')
-      : 'not enrolled';
-    const statusColor = {
-      active: 'var(--primary)',
-      completed: 'var(--success)',
-      replied: 'var(--success)',
-      stopped: 'var(--text-muted)',
-    }[statusLabel] || 'var(--text-muted)';
+    const replies = activities.filter(a => a.type === 'received_email');
+    const sent = activities.filter(a => a.type === 'email');
+    const latestReply = replies[0]; // already sorted newest-first
 
-    const activityRows = activities.length
-      ? activities.map(a => `
-        <tr>
-          <td style="color:var(--text-muted);white-space:nowrap">${fmtDate(a.sent_at)}</td>
-          <td>
-            <span class="status-pill" style="background:var(--primary-pale);color:var(--primary);font-size:10px">
-              ${esc(a.type === 'received_email' ? 'reply received' : a.type)}
-            </span>
-          </td>
-          <td style="font-size:12px">${esc(a.subject||'—')}</td>
-        </tr>
-      `).join('')
-      : `<tr><td colspan="3" style="color:var(--text-muted);text-align:center;padding:12px">No activity recorded yet.</td></tr>`;
+    // Find the latest inbound activity ID for Quick Reply
+    const latestInboundId = latestReply ? latestReply.id : null;
 
     document.getElementById('contact-detail-title').textContent =
       `${contact.first_name} ${contact.last_name || ''}`.trim();
 
-    document.getElementById('contact-detail-body').innerHTML = `
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
-        <div>
-          <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">Name</div>
-          <div style="font-size:14px;font-weight:600">${esc(contact.first_name)} ${esc(contact.last_name||'')}</div>
-        </div>
-        ${contact.title ? `
-        <div>
-          <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">Title</div>
-          <div style="font-size:13px">${esc(contact.title)}</div>
-        </div>` : ''}
-        ${contact.company_name ? `
-        <div>
-          <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">Company</div>
-          <div style="font-size:13px">
-            ${contact.company_id
-              ? `<a href="#" onclick="event.preventDefault();closeModal('modal-contact-detail');openCompanyDetail(${contact.company_id})">${esc(contact.company_name)}</a>`
-              : esc(contact.company_name)
-            }
-          </div>
-        </div>` : ''}
-        ${contact.email ? `
-        <div>
-          <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">Email</div>
-          <div style="font-size:13px"><a href="mailto:${esc(contact.email)}">${esc(contact.email)}</a></div>
-        </div>` : ''}
-        <div>
-          <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">Sequence Status</div>
-          <div style="font-size:13px">
-            <span style="color:${statusColor};font-weight:600;text-transform:capitalize">${esc(statusLabel)}</span>
-            ${enrollmentInfo && enrollmentInfo.sequence_name ? ` — <span style="font-size:12px;color:var(--text-muted)">${esc(enrollmentInfo.sequence_name)}</span>` : ''}
-            ${enrollmentInfo && enrollmentInfo.enrollment_status === 'active' && enrollmentInfo.total_steps
-              ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px">Step ${enrollmentInfo.current_step} of ${enrollmentInfo.total_steps}</div>`
-              : ''}
-          </div>
-        </div>
-      </div>
+    // ── Build the redesigned modal content ──
+    let html = '';
 
-      <div style="margin-bottom:6px;font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">
-        Communications (${activities.length})
-      </div>
-      <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden">
-        <table class="data-table" style="margin:0;font-size:12px">
-          <thead>
-            <tr>
-              <th style="width:110px">Date</th>
-              <th style="width:110px">Type</th>
-              <th>Subject</th>
-            </tr>
-          </thead>
-          <tbody>${activityRows}</tbody>
-        </table>
-      </div>
+    // Top bar: name, title, company, email — compact row
+    html += `<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:4px">`;
+    if (contact.title) html += `<span style="font-size:13px;color:var(--text-muted)">${esc(contact.title)}</span>`;
+    if (contact.company_name) {
+      html += `<span style="font-size:13px">at <strong>${contact.company_id
+        ? `<a href="#" onclick="event.preventDefault();closeModal('modal-contact-detail');openCompanyDetail(${contact.company_id})">${esc(contact.company_name)}</a>`
+        : esc(contact.company_name)}</strong></span>`;
+    }
+    if (contact.email) html += `<span style="font-size:12px;color:var(--text-muted)">· <a href="mailto:${esc(contact.email)}">${esc(contact.email)}</a></span>`;
+    html += `</div>`;
 
-      <div style="margin-top:14px;text-align:right">
-        ${contact.company_id
-          ? `<a href="#" class="btn btn-outline btn-sm" onclick="event.preventDefault();closeModal('modal-contact-detail');showPage('pipeline')">View in Pipeline →</a>`
-          : ''}
-      </div>
-    `;
+    // Company intel bar (if we have company data)
+    if (company) {
+      const chips = [];
+      if (company.pipeline_stage) chips.push(`<span class="cd-chip cd-chip-stage">${esc(company.pipeline_stage)}</span>`);
+      if (company.opportunity_value && parseFloat(company.opportunity_value) > 0) chips.push(`<span class="cd-chip cd-chip-opp">$${parseFloat(company.opportunity_value).toLocaleString(undefined,{maximumFractionDigits:0})}</span>`);
+      if (company.tags) company.tags.split(',').forEach(t => { if(t.trim()) chips.push(`<span class="cd-chip">${esc(t.trim())}</span>`); });
+      if (company.status) chips.push(`<span class="cd-chip">${esc(company.status)}</span>`);
+      html += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">${chips.join('')}</div>`;
+      if (company.notes) {
+        html += `<div style="font-size:12px;color:var(--text-muted);background:var(--bg);border-radius:6px;padding:10px;margin-bottom:14px;line-height:1.5">${esc(company.notes)}</div>`;
+      }
+    }
 
+    // Latest reply — the main event
+    if (latestReply && latestReply.body) {
+      html += `<div style="margin-bottom:14px">`;
+      html += `<div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Their Latest Reply · ${fmtDate(latestReply.sent_at)}</div>`;
+      html += `<div style="background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:6px;padding:12px 14px;font-size:13px;line-height:1.6;max-height:200px;overflow-y:auto;white-space:pre-wrap">${esc(latestReply.body)}</div>`;
+      html += `</div>`;
+    }
+
+    // Quick Reply button
+    if (latestInboundId) {
+      html += `<div style="margin-bottom:16px">`;
+      html += `<button class="btn btn-primary" onclick="closeModal('modal-contact-detail');openQuickReply(${latestInboundId})">Reply to ${esc(contact.first_name)}</button>`;
+      html += `</div>`;
+    }
+
+    // Thread history — compact, expandable
+    html += `<div style="margin-bottom:6px;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em">Thread History (${activities.length})</div>`;
+    html += `<div style="border:1px solid var(--border);border-radius:6px;overflow:hidden;max-height:220px;overflow-y:auto">`;
+    activities.forEach(a => {
+      const isReply = a.type === 'received_email';
+      const icon = isReply ? '←' : '→';
+      const iconColor = isReply ? 'var(--accent)' : 'var(--primary)';
+      const label = isReply ? 'Received' : 'Sent';
+      html += `<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px" class="cd-thread-row" onclick="this.querySelector('.cd-body')?.classList.toggle('hidden')">`;
+      html += `<span style="color:${iconColor};font-weight:700;flex-shrink:0" title="${label}">${icon}</span>`;
+      html += `<div style="flex:1;min-width:0">`;
+      html += `<div style="display:flex;justify-content:space-between;gap:8px"><span style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(a.subject||'(no subject)')}</span><span style="color:var(--text-muted);white-space:nowrap;flex-shrink:0">${fmtDate(a.sent_at)}</span></div>`;
+      if (a.body) {
+        const preview = a.body.replace(/\n/g,' ').substring(0, 100);
+        html += `<div class="cd-body hidden" style="margin-top:4px;color:var(--text-muted);white-space:pre-wrap;line-height:1.5;max-height:150px;overflow-y:auto;cursor:text" onclick="event.stopPropagation()">${esc(a.body)}</div>`;
+        html += `<div style="color:var(--text-muted);margin-top:2px;font-size:11px;cursor:pointer">${esc(preview)}…</div>`;
+      }
+      html += `</div></div>`;
+    });
+    html += `</div>`;
+
+    // Footer actions
+    html += `<div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">`;
+    if (contact.company_id) {
+      html += `<a href="#" class="btn btn-outline btn-sm" onclick="event.preventDefault();closeModal('modal-contact-detail');openCompanyDetail(${contact.company_id})">Company Detail</a>`;
+      html += `<a href="#" class="btn btn-outline btn-sm" onclick="event.preventDefault();closeModal('modal-contact-detail');showPage('pipeline')">Pipeline</a>`;
+    }
+    html += `</div>`;
+
+    document.getElementById('contact-detail-body').innerHTML = html;
     openModal('modal-contact-detail');
   } catch(e) { toast(e.message, 'error'); }
 }

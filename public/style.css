@@ -362,6 +362,14 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
 .contact-detail-notes { font-size: 12px; color: var(--text-muted); margin-top: 6px; font-style: italic; }
 .contact-detail-actions { display: flex; flex-direction: column; gap: 5px; flex-shrink: 0; }
 
+/* Contact detail modal chips */
+.cd-chip { display:inline-block;font-size:11px;padding:2px 8px;border-radius:10px;background:var(--bg);color:var(--text-muted);border:1px solid var(--border); }
+.cd-chip-stage { background:var(--primary-pale);color:var(--primary);border-color:var(--primary-pale);font-weight:600; }
+.cd-chip-opp { background:var(--success-pale);color:var(--success);border-color:var(--success-pale);font-weight:600; }
+.cd-thread-row { cursor:pointer;transition:background 0.1s; }
+.cd-thread-row:hover { background:var(--bg); }
+.cd-thread-row:last-child { border-bottom:none; }
+
 .primary-badge {
   background: #fef3c7;
   color: #92400e;
