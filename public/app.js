@@ -33,6 +33,12 @@ const PRESET_TAGS = [
   'fabric','cards','lifestyle'
 ];
 
+// Phil's core licensing industries — shown as filter chips on the Prospects page
+const INDUSTRY_TAGS = [
+  'apparel', 'hard-goods', 'outdoor', 'surf', 'skateboard', 'snowboard',
+  'drinkware', 'footwear', 'puzzles', 'cards', 'fabric', 'lifestyle'
+];
+
 function tagClass(tag) {
   const slug = tag.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'');
   return PRESET_TAGS.includes(slug) ? `tag-${slug}` : 'tag-default';
@@ -57,8 +63,8 @@ async function loadAllTags() {
 
 function renderTagFilterChips() {
   const el = document.getElementById('tag-filter-chips');
-  if (!el || !allTags.length) return;
-  el.innerHTML = allTags.map(t => `
+  if (!el) return;
+  el.innerHTML = INDUSTRY_TAGS.map(t => `
     <span class="tag-filter-chip ${activeTagFilter===t?'active':''}" onclick="setTagFilter('${esc(t)}')">${esc(t)}</span>
   `).join('');
 }

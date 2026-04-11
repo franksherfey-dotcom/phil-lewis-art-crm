@@ -133,6 +133,12 @@ const migrationReady = (async () => {
       )
     `)
     console.log('✅ Reply templates table ready.')
+
+    // One-time: clean quoted tags in companies (strip literal " characters)
+    await pool.query(`
+      UPDATE companies SET tags = REPLACE(tags, '"', '')
+      WHERE tags LIKE '%"%'
+    `)
   } catch (e) { console.error('Users migration error:', e.message) }
 })()
 
