@@ -200,20 +200,21 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
 .section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 12px; }
 .activity-list { display: flex; flex-direction: column; gap: 2px; }
 .activity-row {
-  display: flex; align-items: center; gap: 12px;
+  display: flex; align-items: flex-start; gap: 12px;
   padding: 10px 14px; background: var(--surface);
   border: 1px solid var(--border); border-radius: 6px;
   font-size: 13px; transition: background 0.15s;
 }
 .activity-row:hover { background: var(--bg); }
 .activity-unread { font-weight: 600; border-left: 3px solid var(--accent); }
-.activity-main { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+.activity-content { flex: 1; min-width: 0; }
+.activity-header { display: flex; align-items: center; gap: 8px; }
 .activity-name { font-weight: 600; white-space: nowrap; }
 .activity-co { color: var(--text-muted); font-size: 12px; white-space: nowrap; }
 .activity-co::before { content: '·'; margin-right: 0; }
-.activity-date { color: var(--text-muted); font-size: 11px; white-space: nowrap; flex-shrink: 0; }
-.activity-reply-btn { opacity: 0; transition: opacity 0.15s; flex-shrink: 0; }
-.activity-row:hover .activity-reply-btn { opacity: 1; }
+.activity-date { color: var(--text-muted); font-size: 11px; white-space: nowrap; margin-left: auto; }
+.activity-snippet { color: var(--text-muted); font-size: 13px; font-style: italic; margin-top: 3px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.activity-reply-btn { flex-shrink: 0; }
 .contact-name-link { color: var(--text); text-decoration: none; font-weight: 600; }
 .contact-name-link:hover { color: var(--primary); text-decoration: underline; }
 

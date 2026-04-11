@@ -301,7 +301,7 @@ app.get('/api/dashboard', async (req, res) => {
       one("SELECT COUNT(*)::int AS n FROM activities WHERE type='email'"),
       all(`
         SELECT DISTINCT ON (a.contact_id)
-          a.id, a.contact_id, a.subject, a.sent_at, a.notes, a.sentiment,
+          a.id, a.contact_id, a.subject, a.body, a.sent_at, a.notes, a.sentiment,
           c.first_name, c.last_name, co.name AS company_name, co.id AS company_id
         FROM activities a
         LEFT JOIN contacts c ON a.contact_id = c.id
