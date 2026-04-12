@@ -155,7 +155,7 @@ function showPage(page) {
 
   if (page === 'dashboard') loadDashboard();
   if (page === 'prospects') { loadAllTags(); renderProspectDropdowns(); loadCompanies(); }
-  if (page === 'contacts') { loadContactCategories(); populateBulkSequenceDropdown(); renderContactsTagChips(); loadContacts(); }
+  if (page === 'contacts') { populateBulkSequenceDropdown(); renderContactsTagChips(); loadContacts(); }
   if (page === 'pipeline') loadPipeline();
   if (page === 'sequences') loadSequences();
   if (page === 'gallery') loadArtGallery();
@@ -1103,10 +1103,8 @@ function clearContactTagFilters() {
 
 async function loadContacts() {
   var search    = document.getElementById('search-contacts')?.value || '';
-  var category  = document.getElementById('filter-category')?.value || '';
   var params    = new URLSearchParams();
   if (search)         params.set('search', search);
-  if (category)       params.set('category', category);
   if (_contactsTagFilters.length) params.set('tag', _contactsTagFilters.join(','));
   if (_notInSeqActive) params.set('not_in_sequence', 'true');
 
@@ -1270,15 +1268,7 @@ async function bulkEnrollSelected() {
   } catch(e) { toast('Enrollment failed: ' + e.message, 'error'); }
 }
 
-async function loadContactCategories() {
-  try {
-    const cats = await apiFetch('/api/contacts/categories');
-    const sel = document.getElementById('filter-category');
-    if (!sel) return;
-    sel.innerHTML = `<option value="">All Verticals</option>` +
-      cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
-  } catch(e) {}
-}
+// loadContactCategories removed — replaced by curated INDUSTRY_TAGS chips
 
 function toggleNotInSequence() {
   _notInSeqActive = !_notInSeqActive;
@@ -1289,9 +1279,7 @@ function toggleNotInSequence() {
 
 function clearContactFilters() {
   var search = document.getElementById('search-contacts');
-  var cat = document.getElementById('filter-category');
   if (search) search.value = '';
-  if (cat) cat.value = '';
   _contactsTagFilters = [];
   _notInSeqActive = false;
   var btn = document.getElementById('btn-not-in-seq');
