@@ -32,10 +32,13 @@ function getArtForTags(tagsStr) {
 
   for (const art of cache) {
     const artTags = (art.tags || '').toLowerCase().split(',').map(t => t.trim());
-    const score = prospectTags.filter(t => artTags.includes(t)).length;
-    if (score > bestScore) {
-      bestScore = score;
-      bestMatch = art;
+    const overlap = prospectTags.filter(t => artTags.includes(t)).length;
+    if (overlap > 0) {
+      const score = overlap * 10 + (art.priority || 0);
+      if (score > bestScore) {
+        bestScore = score;
+        bestMatch = art;
+      }
     }
   }
 
@@ -201,6 +204,168 @@ async function sendQuickReply() {
   } finally {
     btn.disabled = false;
     btn.textContent = 'Send Reply';
+  }
+}
+
+// ── REMOVE FROM SEQUENCE ─────────────────────────────────────────────────
+
+// Stop a single enrollment and refresh the calling context
+async function stopEnrollment(enrollmentId, opts) {
+  opts = opts || {};
+  if (!confirm('Remove this contact from the sequence?')) return;
+  try {
+    await apiFetch('/api/enrollments/' + enrollmentId, { method: 'DELETE' });
+    toast('Removed from sequence', 'success');
+    if (opts.onDone) opts.onDone();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// Stop ALL active enrollments for a company
+async function stopAllCompanySequences(companyId) {
+  if (!confirm('Stop all active sequences for this company? Contacts will no longer receive scheduled emails.')) return;
+  try {
+    var result = await apiFetch('/api/companies/' + companyId + '/stop-sequences', { method: 'POST' });
+    toast('Stopped ' + (result.stopped || 0) + ' active enrollment' + (result.stopped !== 1 ? 's' : ''), 'success');
+    if (typeof currentDetailCompanyId !== 'undefined' && currentDetailCompanyId) {
+      openCompanyDetail(currentDetailCompanyId);
+    }
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// Render inline enrollment status badge + remove button for a contact
+// Returns HTML string; call with the enrollments array from /api/contacts/:id/enrollments
+function renderEnrollmentBadges(enrollments, onDoneJs) {
+  if (!enrollments || !enrollments.length) return '';
+  var active = enrollments.filter(function(e) { return e.status === 'active'; });
+  if (!active.length) return '';
+  return '<div class="enrollment-badges">' + active.map(function(e) {
+    return '<div class="enrollment-badge">' +
+      '<span class="enrollment-badge-name">' + esc(e.sequence_name) + '</span>' +
+      '<span class="enrollment-badge-step">Step ' + e.current_step + '/' + e.total_steps + '</span>' +
+      '<button class="btn btn-danger btn-xs" onclick="event.stopPropagation();stopEnrollment(' + e.id + ',{onDone:function(){' + (onDoneJs || '') + '}})" title="Remove from sequence">✕</button>' +
+    '</div>';
+  }).join('') + '</div>';
+}
+
+// ── SEND PORTFOLIO COMPOSER ──────────────────────────────────────────────
+
+var _portfolioCompanyId = null;
+var _portfolioContact = null;
+var _portfolioPreview = null;
+
+async function openPortfolioComposer(companyId, contactEmail, contactFirstName) {
+  _portfolioCompanyId = companyId;
+  _portfolioContact = { email: contactEmail || '', first_name: contactFirstName || '' };
+
+  // Show loading state
+  var modal = document.getElementById('modal-portfolio');
+  var content = document.getElementById('portfolio-content');
+  content.innerHTML = '<div class="empty-state" style="padding:40px;text-align:center"><div class="loading-dots">Loading portfolio preview...</div></div>';
+  openModal('modal-portfolio');
+
+  try {
+    // Fetch matched products + art from server
+    var preview = await apiFetch('/api/portfolio-preview?company_id=' + (companyId || ''));
+    _portfolioPreview = preview;
+
+    // Pre-fill fields
+    document.getElementById('pf-to').value = _portfolioContact.email;
+    document.getElementById('pf-subject').value = 'Phil Lewis Art \u2014 Portfolio Highlights' + (preview.company_name ? ' for ' + preview.company_name : '');
+
+    var firstName = _portfolioContact.first_name || 'there';
+    document.getElementById('pf-intro').value = 'Hi ' + firstName + ',\n\nI wanted to share some of Phil Lewis\u2019s work that I think would be a great fit for your brand. Phil\u2019s bold, nature-inspired artwork has been licensed across a wide range of product categories \u2014 here are some highlights relevant to you:';
+
+    // Build preview
+    renderPortfolioPreview(preview);
+  } catch(e) {
+    content.innerHTML = '<div class="empty-state" style="padding:40px;text-align:center">Could not load portfolio: ' + esc(e.message) + '</div>';
+  }
+}
+
+function renderPortfolioPreview(preview) {
+  var content = document.getElementById('portfolio-content');
+  var html = '';
+
+  // Product grid preview
+  if (preview.products && preview.products.length) {
+    html += '<div class="pf-section">';
+    html += '<div class="pf-section-title">Product Collaborations <span class="pf-count">(' + preview.products.length + ' matched)</span></div>';
+    html += '<div class="pf-image-grid">';
+    preview.products.forEach(function(p) {
+      var matchLabel = p.score > 0 ? '<span class="pf-match-badge">' + p.score + ' tag match' + (p.score > 1 ? 'es' : '') + '</span>' : '';
+      html += '<div class="pf-image-card">' +
+        '<img src="' + esc(p.url) + '" alt="' + esc(p.title) + '" class="pf-image-thumb" />' +
+        '<div class="pf-image-label">' + esc(p.title) + '</div>' +
+        (p.category ? '<div class="pf-image-cat">' + esc(p.category) + '</div>' : '') +
+        matchLabel +
+        '</div>';
+    });
+    html += '</div></div>';
+  }
+
+  // Art preview
+  if (preview.art && preview.art.length) {
+    html += '<div class="pf-section">';
+    html += '<div class="pf-section-title">Original Artwork <span class="pf-count">(' + preview.art.length + ')</span></div>';
+    html += '<div class="pf-image-grid">';
+    preview.art.forEach(function(a) {
+      html += '<div class="pf-image-card">' +
+        '<img src="' + esc(a.url) + '" alt="' + esc(a.title) + '" class="pf-image-thumb" />' +
+        '<div class="pf-image-label">' + esc(a.title) + '</div>' +
+        '</div>';
+    });
+    html += '</div></div>';
+  }
+
+  // Collaborations link note
+  html += '<div class="pf-collab-note">A link to <strong>phillewisart.com/blogs/collaborations</strong> will be included at the bottom of the email.</div>';
+
+  // PDF attachment placeholder
+  html += '<div class="pf-attachment-section">';
+  html += '<div class="pf-section-title">Attachment <span class="pf-count">(optional)</span></div>';
+  html += '<div class="pf-attachment-placeholder">';
+  html += '<span style="font-size:24px">📎</span>';
+  html += '<div>Portfolio PDF not yet uploaded</div>';
+  html += '<div style="font-size:11px;color:var(--text-muted)">When Phil provides the portfolio deck, you can attach it here</div>';
+  html += '</div></div>';
+
+  content.innerHTML = html;
+}
+
+async function sendPortfolio() {
+  var toEmail = document.getElementById('pf-to').value.trim();
+  var subject = document.getElementById('pf-subject').value.trim();
+  var intro = document.getElementById('pf-intro').value.trim();
+
+  if (!toEmail) { toast('Enter a recipient email', 'error'); return; }
+  if (!intro) { toast('Write an intro message', 'error'); return; }
+
+  var btn = document.getElementById('pf-send-btn');
+  btn.disabled = true;
+  btn.textContent = 'Sending...';
+
+  try {
+    var result = await apiFetch('/api/send-portfolio', {
+      method: 'POST',
+      body: JSON.stringify({
+        company_id: _portfolioCompanyId,
+        contact_email: toEmail,
+        contact_first_name: _portfolioContact.first_name,
+        subject: subject,
+        intro_text: intro,
+      }),
+    });
+    toast('Portfolio sent to ' + result.to + ' (' + result.products + ' products, ' + result.art + ' art pieces)', 'success');
+    closeModal('modal-portfolio');
+    // Refresh underlying detail if open
+    if (typeof currentDetailCompanyId !== 'undefined' && currentDetailCompanyId) {
+      openCompanyDetail(currentDetailCompanyId);
+    }
+  } catch(e) {
+    toast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Send Portfolio';
   }
 }
 
@@ -682,7 +847,7 @@ function openArtModal(id = null) {
       form.querySelector('[name="art_tags"]').value = art.tags || '';
       form.querySelector('[name="art_category"]').value = art.category || '';
       form.querySelector('[name="art_notes"]').value = art.notes || '';
-      // is_default no longer used — art matching is dynamic by tags
+      form.querySelector('[name="art_priority"]').value = art.priority || 0;
       updateArtPreview(art.url);
     }
   }
@@ -711,6 +876,7 @@ async function saveArtImage(e) {
     category: form.querySelector('[name="art_category"]').value,
     notes: form.querySelector('[name="art_notes"]').value,
     is_default: false,
+    priority: parseInt(form.querySelector('[name="art_priority"]').value) || 0,
   };
   try {
     if (id) {

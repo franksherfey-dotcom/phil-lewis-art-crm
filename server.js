@@ -30,10 +30,18 @@ async function getArtForCompany(company) {
     if (company && company.tags) {
       const companyTags = company.tags.toLowerCase().split(',').map(t => t.trim())
       const artRows = await all('SELECT * FROM art_images ORDER BY id')
-      for (const tag of companyTags) {
-        const match = artRows.find(a => a.tags && a.tags.toLowerCase().split(',').some(at => at.trim() === tag))
-        if (match) return { url: match.url, alt: 'Phil Lewis Art × ' + match.title }
+      // Score each art image by tag overlap, weighted by priority
+      let bestMatch = null, bestScore = -1
+      for (const a of artRows) {
+        if (!a.tags) continue
+        const artTags = a.tags.toLowerCase().split(',').map(t => t.trim())
+        const overlap = companyTags.filter(t => artTags.includes(t)).length
+        if (overlap > 0) {
+          const score = overlap * 10 + (a.priority || 0)
+          if (score > bestScore) { bestScore = score; bestMatch = a }
+        }
       }
+      if (bestMatch) return { url: bestMatch.url, alt: 'Phil Lewis Art × ' + bestMatch.title }
       // Fall back to default image
       const defaultImg = artRows.find(a => a.is_default)
       if (defaultImg) return { url: defaultImg.url, alt: 'Phil Lewis Art × ' + defaultImg.title }
@@ -123,6 +131,9 @@ const migrationReady = (async () => {
     // Add type column if missing (art = original art, product = product photos)
     await pool.query(`ALTER TABLE art_images ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'art'`)
 
+    // Add priority column — higher priority images are preferred when multiple match the same tag
+    await pool.query(`ALTER TABLE art_images ADD COLUMN IF NOT EXISTS priority INT NOT NULL DEFAULT 0`)
+
     // Seed Phil's art collection — re-seed if fewer than 40 art pieces
     const artCount = await one("SELECT COUNT(*)::int AS n FROM art_images WHERE type='art'")
     if (artCount.n < 40) {
@@ -165,7 +176,9 @@ const migrationReady = (async () => {
         // ── NATURE & LANDSCAPES ──
         { title: 'Aspens', url: S+'products/aspens11x14.jpg', tags: 'outdoor,lifestyle,cards,calendars,fabric', category: 'Nature', notes: 'Colorado aspens' },
         { title: 'Red Rocks', url: S+'products/redrocks1.jpg', tags: 'outdoor,lifestyle,apparel,cards,puzzles', category: 'Nature', notes: 'Red Rocks Amphitheatre' },
-        { title: 'Flatirons', url: S+'products/flatirons.jpg', tags: 'outdoor,lifestyle,hard-goods,cards,calendars', category: 'Nature', notes: 'Boulder Flatirons' },
+        { title: 'Flatirons', url: S+'products/flatirons.jpg', tags: 'outdoor,lifestyle,hard-goods,cards,calendars', category: 'Nature', notes: 'Boulder Flatirons', priority: 10 },
+        { title: 'River Dance', url: S+'files/River-Dance-1500.jpg', tags: 'outdoor,lifestyle,hard-goods,cards,calendars', category: 'Nature', notes: 'Colorado river landscape', priority: 10 },
+        { title: 'Sanitas', url: S+'files/Sanitas-1500.jpg', tags: 'outdoor,lifestyle,hard-goods,cards,calendars', category: 'Nature', notes: 'Mount Sanitas, Boulder CO', priority: 10 },
         { title: 'Colorado Sand Dunes', url: S+'products/dunes.jpg', tags: 'outdoor,lifestyle,cards,calendars,puzzles', category: 'Nature', notes: 'Great Sand Dunes' },
         { title: 'Boulder Rez', url: S+'products/res.jpg', tags: 'outdoor,lifestyle,cards,calendars,puzzles', category: 'Nature', notes: 'Boulder Reservoir sunset' },
         { title: 'Confluence', url: S+'products/Confluence-1500.jpg', tags: 'outdoor,skateboard,snowboard,apparel,fabric', category: 'Nature', notes: 'River confluence' },
@@ -199,8 +212,8 @@ const migrationReady = (async () => {
       ]
       for (const a of ART_SEEDS) {
         await run(
-          "INSERT INTO art_images (title, url, tags, category, notes, is_default, type) VALUES ($1,$2,$3,$4,$5,FALSE,'art')",
-          [a.title, a.url, a.tags, a.category, a.notes]
+          "INSERT INTO art_images (title, url, tags, category, notes, is_default, type, priority) VALUES ($1,$2,$3,$4,$5,FALSE,'art',$6)",
+          [a.title, a.url, a.tags, a.category, a.notes, a.priority || 0]
         )
       }
       console.log('✅ Seeded Phil Lewis art collection (' + ART_SEEDS.length + ' pieces)')
@@ -870,6 +883,30 @@ app.delete('/api/enrollments/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
+// Get active enrollments for a contact
+app.get('/api/contacts/:id/enrollments', async (req, res) => {
+  try {
+    const rows = await all(`
+      SELECT e.id, e.status, e.current_step, e.started_at, s.name AS sequence_name,
+             (SELECT COUNT(*)::int FROM sequence_steps WHERE sequence_id=e.sequence_id) AS total_steps
+      FROM enrollments e JOIN sequences s ON e.sequence_id = s.id
+      WHERE e.contact_id = $1 ORDER BY e.started_at DESC
+    `, [req.params.id])
+    res.json(rows)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// Stop all active enrollments for a company
+app.post('/api/companies/:id/stop-sequences', async (req, res) => {
+  try {
+    const result = await run(`
+      UPDATE enrollments SET status='stopped'
+      WHERE status='active' AND contact_id IN (SELECT id FROM contacts WHERE company_id=$1)
+    `, [req.params.id])
+    res.json({ ok: true, stopped: result.rowCount || 0 })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
 app.patch('/api/enrollments/:id/reply', async (req, res) => {
   try {
     await run("UPDATE enrollments SET status='replied', completed_at=NOW() WHERE id=$1", [req.params.id])
@@ -909,6 +946,11 @@ async function autoSetNextStep(companyId, type, detail) {
       await run(
         "UPDATE companies SET next_step=$1, next_step_date=$2, updated_at=NOW() WHERE id=$3",
         ['Sequence complete — review and decide next move', new Date(Date.now() + 3*86400000).toISOString().slice(0,10), companyId]
+      )
+    } else if (type === 'portfolio_sent') {
+      await run(
+        "UPDATE companies SET next_step=$1, next_step_date=$2, updated_at=NOW() WHERE id=$3",
+        ['Follow up on portfolio email', new Date(Date.now() + 5*86400000).toISOString().slice(0,10), companyId]
       )
     }
   } catch(e) { console.error('autoSetNextStep error:', e.message) }
@@ -1898,13 +1940,13 @@ app.get('/api/art', async (req, res) => {
 
 app.post('/api/art', async (req, res) => {
   try {
-    const { title, url, tags, category, notes, is_default } = req.body
+    const { title, url, tags, category, notes, is_default, priority } = req.body
     if (!title || !url) return res.status(400).json({ error: 'Title and URL are required' })
     // If marking as default, clear others
     if (is_default) await run('UPDATE art_images SET is_default=FALSE WHERE is_default=TRUE')
     const row = await one(
-      'INSERT INTO art_images (title, url, tags, category, notes, is_default) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
-      [title, url, tags || '', category || '', notes || '', is_default || false]
+      'INSERT INTO art_images (title, url, tags, category, notes, is_default, priority) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
+      [title, url, tags || '', category || '', notes || '', is_default || false, priority || 0]
     )
     res.json(row)
   } catch (err) { res.status(500).json({ error: err.message }) }
@@ -1912,11 +1954,11 @@ app.post('/api/art', async (req, res) => {
 
 app.put('/api/art/:id', async (req, res) => {
   try {
-    const { title, url, tags, category, notes, is_default } = req.body
+    const { title, url, tags, category, notes, is_default, priority } = req.body
     if (is_default) await run('UPDATE art_images SET is_default=FALSE WHERE is_default=TRUE')
     const row = await one(
-      'UPDATE art_images SET title=$1, url=$2, tags=$3, category=$4, notes=$5, is_default=$6 WHERE id=$7 RETURNING *',
-      [title, url, tags || '', category || '', notes || '', is_default || false, req.params.id]
+      'UPDATE art_images SET title=$1, url=$2, tags=$3, category=$4, notes=$5, is_default=$6, priority=$7 WHERE id=$8 RETURNING *',
+      [title, url, tags || '', category || '', notes || '', is_default || false, priority || 0, req.params.id]
     )
     res.json(row)
   } catch (err) { res.status(500).json({ error: err.message }) }
@@ -2108,6 +2150,175 @@ app.delete('/api/reply-templates/:id', async (req, res) => {
   try {
     await run('DELETE FROM reply_templates WHERE id=$1', [req.params.id])
     res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ─── SEND PORTFOLIO (curated product + art email matched to prospect) ───────
+
+app.post('/api/send-portfolio', async (req, res) => {
+  try {
+    const { company_id, contact_email, contact_first_name, subject, intro_text } = req.body
+    if (!contact_email) return res.status(400).json({ error: 'contact_email required' })
+
+    // Get company for tag matching
+    let company = null
+    if (company_id) {
+      company = await one('SELECT * FROM companies WHERE id=$1', [company_id])
+    }
+    const companyTags = company && company.tags
+      ? company.tags.toLowerCase().split(',').map(t => t.trim())
+      : []
+
+    // Get all art + product images from DB
+    const artRows = await all('SELECT * FROM art_images ORDER BY id')
+    const products = artRows.filter(a => a.type === 'product')
+    const artPieces = artRows.filter(a => a.type !== 'product')
+
+    // Score products by tag overlap — pick top 6
+    function scoreByTags(img) {
+      if (!img.tags || !companyTags.length) return 0
+      const imgTags = img.tags.toLowerCase().split(',').map(t => t.trim())
+      const overlap = companyTags.filter(t => imgTags.includes(t)).length
+      return overlap > 0 ? overlap * 10 + (img.priority || 0) : 0
+    }
+
+    const scoredProducts = products
+      .map(p => ({ ...p, score: scoreByTags(p) }))
+      .sort((a, b) => b.score - a.score || a.id - b.id)
+    const topProducts = scoredProducts.slice(0, 6)
+
+    // Best art match
+    const scoredArt = artPieces
+      .map(a => ({ ...a, score: scoreByTags(a) }))
+      .sort((a, b) => b.score - a.score || a.id - b.id)
+    const topArt = scoredArt.slice(0, 2)
+
+    // Build email HTML
+    const firstName = contact_first_name || 'there'
+    const introText = intro_text || `Hi ${firstName},\n\nI wanted to share some of Phil Lewis's work that I think would be a great fit for your brand. Phil's bold, nature-inspired artwork has been licensed across a wide range of product categories — here are some highlights relevant to you:`
+
+    let html = `<div style="font-family:Arial,sans-serif;color:#333;max-width:640px;margin:0 auto">`
+    html += `<div style="font-size:14px;line-height:1.6;white-space:pre-wrap;margin-bottom:24px">${introText.replace(/\n/g, '<br>')}</div>`
+
+    // Product showcase grid (2-column)
+    if (topProducts.length) {
+      html += `<div style="margin-bottom:24px">`
+      html += `<div style="font-size:16px;font-weight:700;color:#1a1a1a;margin-bottom:12px;border-bottom:2px solid #4f46e5;padding-bottom:6px">Product Collaborations</div>`
+      html += `<table cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse"><tr>`
+      topProducts.forEach((p, i) => {
+        if (i > 0 && i % 2 === 0) html += `</tr><tr>`
+        html += `<td width="50%" style="padding:8px;vertical-align:top;text-align:center">`
+        html += `<img src="${p.url}" alt="${p.title}" style="max-width:100%;width:280px;border-radius:8px;border:1px solid #e0e0e0" />`
+        html += `<div style="font-size:12px;color:#666;margin-top:4px">${p.title}</div>`
+        if (p.category) html += `<div style="font-size:11px;color:#999">${p.category}</div>`
+        html += `</td>`
+      })
+      if (topProducts.length % 2 === 1) html += `<td width="50%"></td>`
+      html += `</tr></table></div>`
+    }
+
+    // Art showcase
+    if (topArt.length) {
+      html += `<div style="margin-bottom:24px">`
+      html += `<div style="font-size:16px;font-weight:700;color:#1a1a1a;margin-bottom:12px;border-bottom:2px solid #4f46e5;padding-bottom:6px">Original Artwork</div>`
+      html += `<table cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse"><tr>`
+      topArt.forEach((a, i) => {
+        html += `<td width="${topArt.length === 1 ? '100' : '50'}%" style="padding:8px;vertical-align:top;text-align:center">`
+        html += `<img src="${a.url}" alt="${a.title}" style="max-width:100%;width:${topArt.length === 1 ? '480' : '280'}px;border-radius:8px;border:1px solid #e0e0e0" />`
+        html += `<div style="font-size:12px;color:#666;margin-top:4px">${a.title}</div>`
+        html += `</td>`
+      })
+      html += `</tr></table></div>`
+    }
+
+    // Collaborations link
+    html += `<div style="text-align:center;margin:24px 0;padding:16px;background:#f8f7ff;border-radius:8px">`
+    html += `<a href="https://phillewisart.com/blogs/collaborations" style="font-size:14px;color:#4f46e5;text-decoration:none;font-weight:600">View All Collaborations on PhilLewisArt.com →</a>`
+    html += `</div>`
+    html += `</div>`
+
+    // Get SMTP settings
+    const settings = {}
+    const sRows = await all('SELECT key, value FROM settings')
+    sRows.forEach(r => { settings[r.key] = r.value })
+
+    if (!settings.smtp_host || !settings.smtp_user || !settings.smtp_pass) {
+      return res.status(400).json({ error: 'SMTP not configured. Set up email in Settings first.' })
+    }
+
+    const nodemailer = require('nodemailer')
+    const transport = nodemailer.createTransport({
+      host: settings.smtp_host,
+      port: parseInt(settings.smtp_port || '587'),
+      secure: (settings.smtp_port || '587') === '465',
+      auth: { user: settings.smtp_user, pass: settings.smtp_pass },
+    })
+
+    const fromName = settings.from_name || 'Phil Lewis Art'
+    const fromEmail = settings.smtp_user
+
+    const emailSubject = subject || `Phil Lewis Art — Portfolio Highlights for ${company ? company.name : 'Your Brand'}`
+
+    await transport.sendMail({
+      from: `"${fromName}" <${fromEmail}>`,
+      to: contact_email,
+      subject: emailSubject,
+      html: html,
+    })
+
+    // Log as activity
+    // Find the contact by email
+    const contact = await one('SELECT id FROM contacts WHERE email=$1', [contact_email])
+    if (contact) {
+      await one(
+        'INSERT INTO activities (contact_id, type, subject, body, status, sent_at) VALUES ($1,$2,$3,$4,$5,NOW()) RETURNING id',
+        [contact.id, 'email', emailSubject, html, 'sent']
+      )
+    }
+
+    // Auto-set next step
+    if (company_id) {
+      try { await autoSetNextStep(company_id, 'portfolio_sent', 'Portfolio email sent') } catch(e) {}
+    }
+
+    res.json({ ok: true, to: contact_email, products: topProducts.length, art: topArt.length })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ─── PORTFOLIO PREVIEW (get curated images without sending) ─────────────────
+
+app.get('/api/portfolio-preview', async (req, res) => {
+  try {
+    const companyId = req.query.company_id
+    let companyTags = []
+    let companyName = ''
+    if (companyId) {
+      const company = await one('SELECT * FROM companies WHERE id=$1', [companyId])
+      if (company) {
+        companyTags = company.tags ? company.tags.toLowerCase().split(',').map(t => t.trim()) : []
+        companyName = company.name
+      }
+    }
+
+    const artRows = await all('SELECT * FROM art_images ORDER BY id')
+    const products = artRows.filter(a => a.type === 'product')
+    const artPieces = artRows.filter(a => a.type !== 'product')
+
+    function scoreByTags(img) {
+      if (!img.tags || !companyTags.length) return 0
+      const imgTags = img.tags.toLowerCase().split(',').map(t => t.trim())
+      const overlap = companyTags.filter(t => imgTags.includes(t)).length
+      return overlap > 0 ? overlap * 10 + (img.priority || 0) : 0
+    }
+
+    const scoredProducts = products.map(p => ({ ...p, score: scoreByTags(p) })).sort((a, b) => b.score - a.score || a.id - b.id)
+    const scoredArt = artPieces.map(a => ({ ...a, score: scoreByTags(a) })).sort((a, b) => b.score - a.score || a.id - b.id)
+
+    res.json({
+      company_name: companyName,
+      products: scoredProducts.slice(0, 6),
+      art: scoredArt.slice(0, 2),
+    })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 

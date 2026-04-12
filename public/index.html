@@ -888,8 +888,10 @@
           <label>Notes</label>
           <textarea name="art_notes" rows="2" placeholder="Optional notes about this piece"></textarea>
         </div>
-        <div class="form-group" style="font-size:12px;color:var(--text-muted)">
-          Art images are auto-matched to prospects by tag overlap — no default needed.
+        <div class="form-group">
+          <label>Priority</label>
+          <input type="number" name="art_priority" min="0" max="99" value="0" style="width:80px">
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Higher priority images are shown first when multiple match the same tags. Default is 0.</div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline" onclick="closeModal('modal-art')">Cancel</button>
@@ -1030,6 +1032,35 @@
         <button class="modal-close" onclick="closeModal('modal-contact-detail')">✕</button>
       </div>
       <div id="contact-detail-body" style="padding:0 4px 4px"></div>
+    </div>
+  </div>
+
+  <!-- Portfolio Composer Modal -->
+  <div id="modal-portfolio" class="modal-overlay hidden">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <h2>Send Portfolio</h2>
+        <button class="modal-close" onclick="closeModal('modal-portfolio')">×</button>
+      </div>
+      <div style="padding:0 24px">
+        <div class="form-group">
+          <label>To</label>
+          <input type="email" id="pf-to" class="form-input" placeholder="prospect@company.com" />
+        </div>
+        <div class="form-group">
+          <label>Subject</label>
+          <input type="text" id="pf-subject" class="form-input" />
+        </div>
+        <div class="form-group">
+          <label>Intro Message</label>
+          <textarea id="pf-intro" rows="5" class="form-input" style="font-family:inherit;font-size:13px;line-height:1.5"></textarea>
+        </div>
+      </div>
+      <div id="portfolio-content" style="padding:0 24px 16px"></div>
+      <div class="modal-footer" style="padding:16px 24px">
+        <button class="btn btn-outline" onclick="closeModal('modal-portfolio')">Cancel</button>
+        <button class="btn btn-primary" id="pf-send-btn" onclick="sendPortfolio()">Send Portfolio</button>
+      </div>
     </div>
   </div>
 

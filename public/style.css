@@ -347,9 +347,10 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
 
 .company-meta { font-size: 12px; color: var(--text-muted); display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
 .company-meta span { display: inline-flex; align-items: center; gap: 3px; }
-.company-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.company-footer { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
 .contact-count { font-size: 11px; color: var(--text-muted); }
-.card-actions { display: flex; gap: 6px; }
+.card-actions { display: flex; gap: 4px; flex-wrap: wrap; }
+.card-actions .btn-sm { font-size: 11px; padding: 3px 8px; white-space: nowrap; }
 
 /* ── DATA TABLE ── */
 .data-table { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
@@ -2316,6 +2317,86 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
   min-height: 2px;
 }
 
+/* ── Enrollment Badges (Remove from Sequence) ──────────────────────── */
+.enrollment-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.enrollment-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--primary-pale, #eef2ff); border: 1px solid var(--primary, #4f46e5);
+  border-radius: 6px; padding: 5px 10px; font-size: 12px;
+}
+.enrollment-badge-name { font-weight: 600; color: var(--text); }
+.enrollment-badge-step { color: var(--text-muted); font-size: 11px; }
+.btn-xs { font-size: 10px; padding: 1px 6px; border-radius: 4px; line-height: 1.4; }
+/* ── Portfolio Composer ──────────────────────────────────────────────── */
+.pf-section { margin-bottom: 20px; }
+.pf-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+}
+.pf-count { font-weight: 400; font-size: 12px; }
+.pf-image-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.pf-image-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  text-align: center;
+  background: var(--bg);
+  transition: box-shadow .15s;
+}
+.pf-image-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+.pf-image-thumb {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 6px;
+  margin-bottom: 6px;
+}
+.pf-image-label { font-size: 12px; font-weight: 600; line-height: 1.3; }
+.pf-image-cat { font-size: 11px; color: var(--text-muted); }
+.pf-match-badge {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #16a34a;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
+  padding: 1px 8px;
+}
+.pf-collab-note {
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+}
+.pf-attachment-section { margin-bottom: 8px; }
+.pf-attachment-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 20px;
+  border: 2px dashed var(--border);
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
 @media (max-width: 768px) {
   .login-card { padding: 28px 20px; }
   .users-table th, .users-table td { padding: 9px 10px; font-size: 13px; }
@@ -2325,4 +2406,5 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
   .deal-aging-grid { grid-template-columns: repeat(2, 1fr); }
   .report-attention-grid { grid-template-columns: 1fr; }
   .seq-stats-grid { grid-template-columns: 1fr; }
+  .pf-image-grid { grid-template-columns: repeat(2, 1fr); }
 }

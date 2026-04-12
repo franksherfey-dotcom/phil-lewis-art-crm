@@ -723,9 +723,10 @@ function updateBadge(id, count) {
 // ── CONTACT DETAIL MODAL ──────────────────────────────────────────────────
 async function openContactDetail(contactId) {
   try {
-    const [contact, activities] = await Promise.all([
+    const [contact, activities, enrollments] = await Promise.all([
       apiFetch(`/api/contacts/${contactId}`),
       apiFetch(`/api/activities?contact_id=${contactId}`),
+      apiFetch(`/api/contacts/${contactId}/enrollments`),
     ]);
 
     // Fetch company detail for context
@@ -779,12 +780,18 @@ async function openContactDetail(contactId) {
       html += `</div>`;
     }
 
-    // Quick Reply button
+    // Action buttons row
+    html += `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">`;
     if (latestInboundId) {
-      html += `<div style="margin-bottom:16px">`;
       html += `<button class="btn btn-primary" onclick="closeModal('modal-contact-detail');openQuickReply(${latestInboundId})">Reply to ${esc(contact.first_name)}</button>`;
-      html += `</div>`;
     }
+    if (contact.email) {
+      html += `<button class="btn btn-outline" onclick="closeModal('modal-contact-detail');openPortfolioComposer(${contact.company_id || 'null'}, '${esc(contact.email)}', '${esc(contact.first_name)}')">📨 Send Portfolio</button>`;
+    }
+    html += `</div>`;
+
+    // Active sequence enrollments with remove buttons
+    html += renderEnrollmentBadges(enrollments, 'openContactDetail(' + contactId + ')');
 
     // Thread history — compact, expandable
     html += `<div style="margin-bottom:6px;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em">Thread History (${activities.length})</div>`;
@@ -863,14 +870,14 @@ async function loadCompanies() {
           ${c.category ? `<span>${esc(c.category)}</span>` : ''}
         </div>
         <div class="company-footer">
-          <span class="status-pill status-${c.status.replace(/\s/g,'-')}">${esc(c.status)}</span>
           <div style="display:flex;align-items:center;gap:8px">
+            <span class="status-pill status-${c.status.replace(/\s/g,'-')}">${esc(c.status)}</span>
             <span class="contact-count">${c.contact_count} contact${c.contact_count!==1?'s':''}</span>
-            <div class="card-actions" onclick="event.stopPropagation()">
-              <button class="btn btn-outline btn-sm campaign-btn" onclick="openEnrollModal(${c.id})" title="Add contacts to a campaign">＋ Campaign</button>
-              <button class="btn btn-ghost btn-sm" onclick="openCompanyModal(${c.id})">Edit</button>
-              <button class="btn btn-danger btn-sm" onclick="deleteCompany(${c.id})">Delete</button>
-            </div>
+          </div>
+          <div class="card-actions" onclick="event.stopPropagation()">
+            <button class="btn btn-outline btn-sm" onclick="openEnrollModal(${c.id})" title="Add contacts to a campaign">+ Campaign</button>
+            <button class="btn btn-ghost btn-sm" onclick="openCompanyModal(${c.id})">Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteCompany(${c.id})">Del</button>
           </div>
         </div>
       </div>
@@ -954,8 +961,10 @@ async function openCompanyDetail(id) {
               </div>
             `).join('')}
           </div>
-          <div class="enroll-btn-row" style="margin-top:14px;position:relative">
+          <div class="enroll-btn-row" style="margin-top:14px;position:relative;display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn btn-outline btn-sm" onclick="toggleEnrollDropdown(${c.id}, this)">＋ Add to Campaign ▾</button>
+            <button class="btn btn-primary btn-sm" onclick="closeModal('modal-company-detail');openPortfolioComposer(${c.id}, '${esc((c.contacts[0] && c.contacts[0].email) || '')}', '${esc((c.contacts[0] && c.contacts[0].first_name) || '')}')">📨 Send Portfolio</button>
+            <button class="btn btn-danger-outline btn-sm" onclick="stopAllCompanySequences(${c.id})">⏹ Stop All Sequences</button>
           </div>
         ` : `
           <div class="empty-state" style="padding:24px;text-align:center">
@@ -2650,9 +2659,19 @@ async function openInboxMessage(index) {
       ${m.company_id ? `<button class="btn btn-outline" onclick="openCompanyDetail(${m.company_id})">View Company</button>` : ''}
       <button class="btn btn-danger-outline" onclick="deleteInboxMessage(${index})">&#128465; Delete</button>
     </div>
+    <div id="inbox-enrollment-badges"></div>
     <div id="inbox-compose-area" style="display:none"></div>
   `;
   pane.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  // Load active enrollments for this contact and show remove buttons
+  if (m.contact_id) {
+    try {
+      var enrollments = await apiFetch('/api/contacts/' + m.contact_id + '/enrollments');
+      var badgesEl = document.getElementById('inbox-enrollment-badges');
+      if (badgesEl) badgesEl.innerHTML = renderEnrollmentBadges(enrollments, 'openInboxMessage(' + index + ')');
+    } catch(e) {}
+  }
 }
 
 // ── EMAIL SIGNATURE ───────────────────────────────────────────────────────
