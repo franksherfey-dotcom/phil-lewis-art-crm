@@ -444,95 +444,182 @@ function renderLeadHeatmap(leads) {
 
 // ── ART GALLERY ──────────────────────────────────────────────────────────
 var _artCache = [];
-let _galleryFilter = '';
+var _galleryTopics = [];   // active topic filters (multi-select)
+var _galleryView = 'topic'; // 'topic' or 'style'
 
 // Pre-load art cache at startup so getArtForTags works from any page
 (async function() {
   try { _artCache = await apiFetch('/api/art'); } catch(e) {}
 })();
 
+// Industry topics — each maps to one or more tag values in art_images.tags
+var GALLERY_TOPICS = [
+  { key: 'surf',        label: 'Surf',          icon: '🏄' },
+  { key: 'boardsports', label: 'Board Sports',  icon: '🛹', match: ['skateboard','snowboard','surf'] },
+  { key: 'outdoor',     label: 'Outdoors',      icon: '⛰️' },
+  { key: 'apparel',     label: 'Apparel',       icon: '👕' },
+  { key: 'drinkware',   label: 'Drinkware',     icon: '🥤' },
+  { key: 'hard-goods',  label: 'Hard Goods',    icon: '🔧' },
+  { key: 'kids',        label: 'Kids & Games',  icon: '🧩', match: ['puzzles','cards'] },
+  { key: 'fabric',      label: 'Fabric & Home', icon: '🧵', match: ['fabric','lifestyle'] },
+  { key: 'footwear',    label: 'Footwear',      icon: '👟' },
+];
+
+// Art-style categories (from the DB category field)
+var GALLERY_STYLE_NAMES = {
+  'Ocean':       'Ocean & Marine',
+  'Wildlife':    'Wildlife',
+  'Nature':      'Nature & Landscapes',
+  'Psychedelic': 'Psychedelic & Mandala',
+  'Fantasy':     'Fantasy & Mythical',
+  'Whimsical':   'Whimsical',
+};
+
+function artMatchesTopic(art, topicKey) {
+  var topic = GALLERY_TOPICS.find(function(t) { return t.key === topicKey; });
+  if (!topic) return false;
+  var tags = (art.tags || '').toLowerCase().split(',').map(function(t) { return t.trim(); });
+  var matchTags = topic.match || [topic.key];
+  for (var i = 0; i < matchTags.length; i++) {
+    if (tags.indexOf(matchTags[i]) !== -1) return true;
+  }
+  return false;
+}
+
 async function loadArtGallery() {
   try {
     _artCache = await apiFetch('/api/art');
-    renderGalleryFilters();
-    renderArtGallery();
+    renderGalleryTopicBar();
+    renderGallerySections();
   } catch(e) {
-    const el = document.getElementById('gallery-grid');
-    if (el) el.innerHTML = `<div class="empty-state">Could not load gallery: ${esc(e.message)}</div>`;
+    var el = document.getElementById('gallery-sections');
+    if (el) el.innerHTML = '<div class="empty-state">Could not load gallery: ' + esc(e.message) + '</div>';
   }
 }
 
-var GALLERY_DISPLAY_NAMES = {
-  'Wildlife':     'Wildlife',
-  'Nature':       'Nature & Landscapes',
-  'Psychedelic':  'Psychedelic & Mandala',
-  'Fantasy':      'Fantasy & Mythical',
-  'Whimsical':    'Whimsical',
-  'boards':       'Board Sports',
-  'hard-goods':   'Hard Goods',
-  'home-decor':   'Home Decor',
-  'collectibles': 'Collectibles',
-  'apparel':      'Apparel',
-  'print':        'Print & Stationery',
-  'drinkware':    'Drinkware',
-  'kids-games':   'Kids & Games',
-  'accessories':  'Accessories',
-  'barware':      'Barware',
-  'tech':         'Tech',
-  'engraving':    'Custom Engraving',
-  'disc-sports':  'Disc Sports',
-  'stickers':     'Stickers',
-  'pets':         'Pets',
-};
-
-function renderGalleryFilters() {
-  const el = document.getElementById('gallery-filter-chips');
+function renderGalleryTopicBar() {
+  var el = document.getElementById('gallery-topic-bar');
   if (!el) return;
-  const cats = [...new Set(_artCache.map(a => a.category).filter(Boolean))];
-
-  el.innerHTML = `
-    <span class="tag-filter-chip ${_galleryFilter===''?'active':''}" onclick="filterGallery('')">All (${_artCache.length})</span>
-    ${cats.map(c => {
-      const count = _artCache.filter(a => a.category === c).length;
-      const label = GALLERY_DISPLAY_NAMES[c] || c.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-      return `<span class="tag-filter-chip ${_galleryFilter===c?'active':''}" onclick="filterGallery('${esc(c)}')">${esc(label)} (${count})</span>`;
-    }).join('')}
-  `;
+  var allCount = _artCache.length;
+  var html = '<span class="gallery-topic-chip ' + (_galleryTopics.length === 0 ? 'active' : '') + '" onclick="clearGalleryTopics()">All (' + allCount + ')</span>';
+  GALLERY_TOPICS.forEach(function(t) {
+    var count = _artCache.filter(function(a) { return artMatchesTopic(a, t.key); }).length;
+    if (count === 0) return;
+    var isActive = _galleryTopics.indexOf(t.key) !== -1;
+    html += '<span class="gallery-topic-chip ' + (isActive ? 'active' : '') + '" onclick="toggleGalleryTopic(\'' + esc(t.key) + '\')">' + t.icon + ' ' + esc(t.label) + ' (' + count + ')</span>';
+  });
+  el.innerHTML = html;
 }
 
-function filterGallery(val) {
-  _galleryFilter = _galleryFilter === val ? '' : val;
-  renderGalleryFilters();
-  renderArtGallery();
+function toggleGalleryTopic(key) {
+  var idx = _galleryTopics.indexOf(key);
+  if (idx === -1) { _galleryTopics.push(key); } else { _galleryTopics.splice(idx, 1); }
+  renderGalleryTopicBar();
+  renderGallerySections();
 }
 
-function renderArtGallery() {
-  const el = document.getElementById('gallery-grid');
+function clearGalleryTopics() {
+  _galleryTopics = [];
+  renderGalleryTopicBar();
+  renderGallerySections();
+}
+
+function setGalleryView(view) {
+  _galleryView = view;
+  document.querySelectorAll('.gallery-view-btn').forEach(function(b) {
+    b.classList.toggle('active', b.getAttribute('data-view') === view);
+  });
+  renderGallerySections();
+}
+
+function getFilteredArt() {
+  if (_galleryTopics.length === 0) return _artCache;
+  return _artCache.filter(function(a) {
+    for (var i = 0; i < _galleryTopics.length; i++) {
+      if (artMatchesTopic(a, _galleryTopics[i])) return true;
+    }
+    return false;
+  });
+}
+
+function renderGallerySections() {
+  var el = document.getElementById('gallery-sections');
   if (!el) return;
-  let items = _artCache;
-  if (_galleryFilter) {
-    items = items.filter(a => a.category === _galleryFilter || (a.tags||'').includes(_galleryFilter));
-  }
+  var items = getFilteredArt();
+
   if (!items.length) {
-    el.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><div style="font-size:32px;margin-bottom:8px">🎨</div><p>No art images yet. Click "+ Add Art" to get started.</p></div>`;
+    el.innerHTML = '<div class="empty-state"><div style="font-size:32px;margin-bottom:8px">🎨</div><p>No art matches those filters.</p></div>';
     return;
   }
-  el.innerHTML = items.map(a => `
-    <div class="gallery-card">
-      <div class="gallery-card-img-wrap">
-        <img src="${esc(a.url)}" alt="${esc(a.title)}" class="gallery-card-img" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 200 150%22><rect fill=%22%23f0f0f0%22 width=%22200%22 height=%22150%22/><text x=%2250%25%22 y=%2250%25%22 fill=%22%23999%22 text-anchor=%22middle%22 dy=%22.3em%22>Image Error</text></svg>'">
-      </div>
-      <div class="gallery-card-body">
-        <div class="gallery-card-title">${esc(a.title)}</div>
-        ${a.tags ? `<div class="gallery-card-tags">${a.tags.split(',').map(t => `<span class="tag-chip tag-default">${esc(t.trim())}</span>`).join('')}</div>` : ''}
-        ${a.category ? `<div class="gallery-card-cat">${esc(a.category)}</div>` : ''}
-        <div class="gallery-card-actions">
-          <button class="btn btn-ghost btn-sm" onclick="openArtModal(${a.id})">Edit</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteArtImage(${a.id})">Delete</button>
-        </div>
-      </div>
-    </div>
-  `).join('');
+
+  // Group items
+  var groups = {};
+  var groupOrder = [];
+  if (_galleryView === 'topic' && _galleryTopics.length > 0) {
+    // Group by active topics
+    _galleryTopics.forEach(function(key) {
+      var topic = GALLERY_TOPICS.find(function(t) { return t.key === key; });
+      if (!topic) return;
+      var matching = _artCache.filter(function(a) { return artMatchesTopic(a, key); });
+      if (matching.length) {
+        groups[key] = { label: topic.icon + ' ' + topic.label, items: matching };
+        groupOrder.push(key);
+      }
+    });
+  } else if (_galleryView === 'style' || _galleryTopics.length === 0) {
+    // Group by art style (category)
+    items.forEach(function(a) {
+      var cat = a.category || 'Uncategorized';
+      if (!groups[cat]) {
+        groups[cat] = { label: GALLERY_STYLE_NAMES[cat] || cat, items: [] };
+        groupOrder.push(cat);
+      }
+      groups[cat].items.push(a);
+    });
+  }
+
+  var html = '';
+  groupOrder.forEach(function(key) {
+    var g = groups[key];
+    html += '<div class="gallery-section">';
+    html += '<div class="gallery-section-header">';
+    html += '<h3 class="gallery-section-title">' + esc(g.label) + '</h3>';
+    html += '<span class="gallery-section-count">' + g.items.length + ' pieces</span>';
+    html += '</div>';
+    html += '<div class="gallery-grid">';
+    g.items.forEach(function(a) {
+      html += renderGalleryCard(a);
+    });
+    html += '</div></div>';
+  });
+
+  el.innerHTML = html;
+}
+
+function renderGalleryCard(a) {
+  var tagChips = '';
+  if (a.tags) {
+    tagChips = a.tags.split(',').map(function(t) {
+      var tag = t.trim();
+      var isHighlighted = _galleryTopics.length > 0 && _galleryTopics.some(function(tk) {
+        var topic = GALLERY_TOPICS.find(function(tp) { return tp.key === tk; });
+        var matchTags = topic ? (topic.match || [topic.key]) : [];
+        return matchTags.indexOf(tag) !== -1;
+      });
+      return '<span class="tag-chip ' + (isHighlighted ? 'tag-primary' : 'tag-default') + '">' + esc(tag) + '</span>';
+    }).join('');
+  }
+  return '<div class="gallery-card">' +
+    '<div class="gallery-card-img-wrap">' +
+    '<img src="' + esc(a.url) + '" alt="' + esc(a.title) + '" class="gallery-card-img" loading="lazy" onerror="this.src=\'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 200 150%22><rect fill=%22%23f0f0f0%22 width=%22200%22 height=%22150%22/><text x=%2250%25%22 y=%2250%25%22 fill=%22%23999%22 text-anchor=%22middle%22 dy=%22.3em%22>No Image</text></svg>\'">' +
+    '</div>' +
+    '<div class="gallery-card-body">' +
+    '<div class="gallery-card-title">' + esc(a.title) + '</div>' +
+    (tagChips ? '<div class="gallery-card-tags">' + tagChips + '</div>' : '') +
+    '<div class="gallery-card-actions">' +
+    '<button class="btn btn-ghost btn-sm" onclick="openArtModal(' + a.id + ')">Edit</button>' +
+    '<button class="btn btn-danger btn-sm" onclick="deleteArtImage(' + a.id + ')">Delete</button>' +
+    '</div></div></div>';
 }
 
 function openArtModal(id = null) {

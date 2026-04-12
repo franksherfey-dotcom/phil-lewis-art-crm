@@ -263,11 +263,16 @@
             <button class="btn btn-primary" onclick="openArtModal()">+ Add Art</button>
           </div>
         </div>
-        <div style="font-size:13px;color:var(--text-muted);margin-bottom:16px">
-          Phil's art collection. Tagged to auto-match with prospect industries in Quick Reply emails.
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:8px">
+          Browse Phil's collection by industry. Click a topic to see matching art for outreach.
         </div>
-        <div id="gallery-filter-chips" style="margin-bottom:16px;display:flex;flex-wrap:wrap;gap:6px"></div>
-        <div id="gallery-grid" class="gallery-grid"></div>
+        <div id="gallery-topic-bar" class="gallery-topic-bar"></div>
+        <div id="gallery-view-toggle" class="gallery-view-toggle">
+          <span class="gallery-view-label">Group by:</span>
+          <button class="btn btn-ghost btn-sm gallery-view-btn active" data-view="topic" onclick="setGalleryView('topic')">Topic</button>
+          <button class="btn btn-ghost btn-sm gallery-view-btn" data-view="style" onclick="setGalleryView('style')">Art Style</button>
+        </div>
+        <div id="gallery-sections"></div>
       </section>
 
       <!-- OUTREACH QUEUE -->
