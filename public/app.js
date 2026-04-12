@@ -976,6 +976,29 @@ async function savePipelineField(companyId, field, value) {
   } catch(e) { toast(e.message, 'error'); }
 }
 
+async function markNextStepDone(companyId) {
+  try {
+    await apiFetch('/api/companies/' + companyId, {
+      method: 'PATCH',
+      body: JSON.stringify({ next_step: null, next_step_date: null })
+    });
+    toast('Step marked done!', 'success');
+    loadReports(); // refresh
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function snoozeNextStep(companyId, days) {
+  var newDate = new Date(Date.now() + days * 86400000).toISOString().slice(0,10);
+  try {
+    await apiFetch('/api/companies/' + companyId, {
+      method: 'PATCH',
+      body: JSON.stringify({ next_step_date: newDate })
+    });
+    toast('Snoozed ' + days + ' day' + (days !== 1 ? 's' : ''), 'success');
+    loadReports();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
 function openContactModalFromDetail(contactId, companyId) {
   currentDetailCompanyId = companyId;
   openContactModal(contactId, companyId);
@@ -3377,7 +3400,11 @@ async function loadReports() {
             '<strong style="min-width:120px">' + esc(c.name) + '</strong>' +
             '<span class="report-overdue-step">' + esc(c.next_step) + '</span>' +
             '<span style="color:var(--danger);font-size:12px;font-weight:600">Due ' + fmtDate(c.next_step_date) + '</span>' +
-            '<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();openCompanyDetail(' + c.id + ')" style="margin-left:auto;white-space:nowrap">Take Action</button>' +
+            '<div style="display:flex;gap:4px;margin-left:auto;flex-shrink:0">' +
+              '<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();openCompanyDetail(' + c.id + ')" style="white-space:nowrap">Take Action</button>' +
+              '<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();snoozeNextStep(' + c.id + ',7)" title="Snooze 7 days" style="white-space:nowrap">Snooze</button>' +
+              '<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();markNextStepDone(' + c.id + ')" title="Mark as done" style="white-space:nowrap">✓ Done</button>' +
+            '</div>' +
           '</div>';
         });
         html += '</div>';

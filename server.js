@@ -868,9 +868,46 @@ app.delete('/api/enrollments/:id', async (req, res) => {
 app.patch('/api/enrollments/:id/reply', async (req, res) => {
   try {
     await run("UPDATE enrollments SET status='replied', completed_at=NOW() WHERE id=$1", [req.params.id])
+    // Auto-set next step: reply to this prospect
+    const enr = await one(`
+      SELECT c.company_id FROM enrollments e
+      JOIN contacts c ON e.contact_id = c.id
+      WHERE e.id=$1
+    `, [req.params.id])
+    if (enr && enr.company_id) await autoSetNextStep(enr.company_id, 'reply_received')
     res.json({ ok: true })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
+
+// ─── AUTO NEXT-STEP TRACKING ────────────────────────────────────────────────
+
+async function autoSetNextStep(companyId, type, detail) {
+  if (!companyId) return
+  try {
+    if (type === 'email_sent') {
+      // After sending: next step = wait for reply or send next step
+      const { nextStep, nextStepDate } = detail || {}
+      if (nextStep) {
+        await run(
+          "UPDATE companies SET next_step=$1, next_step_date=$2, updated_at=NOW() WHERE id=$3",
+          [nextStep, nextStepDate || null, companyId]
+        )
+      }
+    } else if (type === 'reply_received') {
+      // Prospect replied → next step is to respond
+      const today = new Date().toISOString().slice(0,10)
+      await run(
+        "UPDATE companies SET next_step=$1, next_step_date=$2, updated_at=NOW() WHERE id=$3",
+        ['Reply to prospect', today, companyId]
+      )
+    } else if (type === 'sequence_completed') {
+      await run(
+        "UPDATE companies SET next_step=$1, next_step_date=$2, updated_at=NOW() WHERE id=$3",
+        ['Sequence complete — review and decide next move', new Date(Date.now() + 3*86400000).toISOString().slice(0,10), companyId]
+      )
+    }
+  } catch(e) { console.error('autoSetNextStep error:', e.message) }
+}
 
 // ─── OUTREACH QUEUE ───────────────────────────────────────────────────────────
 
@@ -985,8 +1022,17 @@ app.post('/api/queue/send', async (req, res) => {
 
     if (enr.current_step >= totalSteps) {
       await run("UPDATE enrollments SET status='completed', completed_at=NOW() WHERE id=$1", [enrollment_id])
+      await autoSetNextStep(enr.company_id, 'sequence_completed')
     } else {
       await run("UPDATE enrollments SET current_step=current_step+1 WHERE id=$1", [enrollment_id])
+      // Figure out what the next step is and when it's due
+      const nextStepNum = enr.current_step + 1
+      const nextStepRow = await one('SELECT * FROM sequence_steps WHERE sequence_id=$1 AND step_number=$2', [enr.sequence_id, nextStepNum])
+      const nextDate = nextStepRow ? new Date(Date.now() + (nextStepRow.delay_days||0) * 86400000).toISOString().slice(0,10) : null
+      await autoSetNextStep(enr.company_id, 'email_sent', {
+        nextStep: nextStepRow ? 'Send Step ' + nextStepNum + ': ' + (nextStepRow.subject || '').slice(0, 60) : 'Continue sequence',
+        nextStepDate: nextDate
+      })
     }
 
     res.json({ ok: true, subject: resolvedSubject })
@@ -1045,8 +1091,16 @@ app.post('/api/queue/send-all', async (req, res) => {
 
         if (enr.current_step >= totalSteps) {
           await run("UPDATE enrollments SET status='completed', completed_at=NOW() WHERE id=$1", [item.enrollment_id])
+          await autoSetNextStep(enr.company_id, 'sequence_completed')
         } else {
           await run("UPDATE enrollments SET current_step=current_step+1 WHERE id=$1", [item.enrollment_id])
+          const nextStepNum = enr.current_step + 1
+          const nextStepRow = await one('SELECT * FROM sequence_steps WHERE sequence_id=$1 AND step_number=$2', [enr.sequence_id, nextStepNum])
+          const nextDate = nextStepRow ? new Date(Date.now() + (nextStepRow.delay_days||0) * 86400000).toISOString().slice(0,10) : null
+          await autoSetNextStep(enr.company_id, 'email_sent', {
+            nextStep: nextStepRow ? 'Send Step ' + nextStepNum + ': ' + (nextStepRow.subject || '').slice(0, 60) : 'Continue sequence',
+            nextStepDate: nextDate
+          })
         }
 
         results.push({ enrollment_id: item.enrollment_id, ok: true, subject: resolvedSubject })
@@ -1380,6 +1434,8 @@ app.post('/api/inbox/sync', async (req, res) => {
         )
         autoStopped++
       }
+      // Auto-set next step: reply to this prospect
+      if (contact.company_id) await autoSetNextStep(contact.company_id, 'reply_received')
       // Auto-create opportunity on reply — $5k placeholder if company has no opp value
       if (contact.company_id) {
         const co = await one('SELECT opportunity_value, status FROM companies WHERE id=$1', [contact.company_id])
