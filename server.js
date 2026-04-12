@@ -1049,12 +1049,21 @@ app.delete('/api/enrollments/:id', async (req, res) => {
 // Get active enrollments for a contact
 app.get('/api/contacts/:id/enrollments', async (req, res) => {
   try {
-    const rows = await all(`
-      SELECT e.id, e.status, e.current_step, e.started_at, s.name AS sequence_name,
+    var rows = await all(`
+      SELECT e.id, e.status, e.current_step, e.started_at, e.completed_at,
+             e.sequence_id, s.name AS sequence_name,
              (SELECT COUNT(*)::int FROM sequence_steps WHERE sequence_id=e.sequence_id) AS total_steps
       FROM enrollments e JOIN sequences s ON e.sequence_id = s.id
       WHERE e.contact_id = $1 ORDER BY e.started_at DESC
     `, [req.params.id])
+    // Attach activity timeline for each enrollment
+    for (var enr of rows) {
+      enr.activities = await all(`
+        SELECT id, type, subject, status, sent_at, created_at
+        FROM activities WHERE enrollment_id=$1
+        ORDER BY sent_at ASC NULLS LAST, created_at ASC
+      `, [enr.id])
+    }
     res.json(rows)
   } catch (err) { res.status(500).json({ error: err.message }) }
 })

@@ -316,6 +316,81 @@ function renderEnrollmentBadges(enrollments, onDoneJs) {
   }).join('') + '</div>';
 }
 
+// Render full enrollment history for contact detail — all statuses with timeline
+function renderEnrollmentHistory(enrollments, contactId) {
+  if (!enrollments || !enrollments.length) {
+    return '<div class="eh-section"><div class="eh-header">Sequence History</div><div class="eh-empty">No sequences yet</div></div>';
+  }
+  var statusColors = {
+    active: 'var(--primary)',
+    replied: 'var(--success, #22c55e)',
+    completed: 'var(--text-muted)',
+    stopped: 'var(--danger, #ef4444)',
+    paused: '#f59e0b'
+  };
+  var statusLabels = {
+    active: 'Active',
+    replied: 'Replied',
+    completed: 'Completed',
+    stopped: 'Stopped',
+    paused: 'Paused'
+  };
+
+  var h = '<div class="eh-section">';
+  h += '<div class="eh-header">Sequence History (' + enrollments.length + ')</div>';
+
+  for (var i = 0; i < enrollments.length; i++) {
+    var e = enrollments[i];
+    var color = statusColors[e.status] || 'var(--text-muted)';
+    var label = statusLabels[e.status] || e.status;
+    var isActive = e.status === 'active';
+    var toggleId = 'eh-toggle-' + e.id;
+
+    h += '<div class="eh-card' + (isActive ? ' eh-card-active' : '') + '">';
+    // Header row — always visible
+    h += '<div class="eh-card-header" onclick="document.getElementById(\'' + toggleId + '\').classList.toggle(\'hidden\')">';
+    h += '<div class="eh-card-title">';
+    h += '<span class="eh-status-dot" style="background:' + color + '"></span>';
+    h += '<span class="eh-seq-name">' + esc(e.sequence_name) + '</span>';
+    h += '<span class="eh-status-label" style="color:' + color + '">' + label + '</span>';
+    h += '</div>';
+    h += '<div class="eh-card-meta">';
+    h += '<span>Step ' + e.current_step + '/' + e.total_steps + '</span>';
+    if (e.started_at) h += '<span>Started ' + fmtDate(e.started_at) + '</span>';
+    if (e.completed_at) h += '<span>Ended ' + fmtDate(e.completed_at) + '</span>';
+    h += '</div>';
+    // Action buttons on active enrollments
+    if (isActive) {
+      h += '<button class="btn btn-danger btn-xs eh-remove-btn" onclick="event.stopPropagation();stopEnrollment(' + e.id + ',{onDone:function(){openContactDetail(' + contactId + ')}})" title="Remove from sequence">Remove</button>';
+    }
+    h += '</div>';
+
+    // Expandable activity timeline
+    var activities = e.activities || [];
+    h += '<div id="' + toggleId + '" class="eh-timeline' + (isActive ? '' : ' hidden') + '">';
+    if (activities.length === 0) {
+      h += '<div class="eh-timeline-empty">No emails sent yet</div>';
+    } else {
+      for (var j = 0; j < activities.length; j++) {
+        var a = activities[j];
+        var isInbound = a.type === 'received_email';
+        var stepIcon = isInbound ? '← Reply' : '→ Step ' + (j + 1);
+        var stepColor = isInbound ? 'var(--accent)' : 'var(--primary)';
+        h += '<div class="eh-timeline-row">';
+        h += '<div class="eh-timeline-dot" style="border-color:' + stepColor + '"></div>';
+        h += '<div class="eh-timeline-content">';
+        h += '<span class="eh-timeline-label" style="color:' + stepColor + '">' + stepIcon + '</span>';
+        h += '<span class="eh-timeline-subject">' + esc(a.subject || '(no subject)') + '</span>';
+        h += '<span class="eh-timeline-date">' + fmtDate(a.sent_at || a.created_at) + '</span>';
+        h += '</div></div>';
+      }
+    }
+    h += '</div></div>';
+  }
+  h += '</div>';
+  return h;
+}
+
 // ── SEND PORTFOLIO COMPOSER ──────────────────────────────────────────────
 
 var _portfolioCompanyId = null;

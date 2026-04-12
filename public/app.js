@@ -791,8 +791,8 @@ async function openContactDetail(contactId) {
     }
     html += `</div>`;
 
-    // Active sequence enrollments with remove buttons
-    html += renderEnrollmentBadges(enrollments, 'openContactDetail(' + contactId + ')');
+    // Enrollment history — all sequences (active, replied, completed, stopped)
+    html += renderEnrollmentHistory(enrollments, contactId);
 
     // Thread history — compact, expandable
     html += `<div style="margin-bottom:6px;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em">Thread History (${activities.length})</div>`;
