@@ -2854,11 +2854,15 @@ function resetDefaultSignature() {
   if (el) el.value = DEFAULT_SIGNATURE;
 }
 
+var _icSelectedArt = null; // selected art for inbox compose
+
 async function openReplyCompose(index, isForward) {
   const m = _inboxCache[index];
   if (!m) return;
   const area = document.getElementById('inbox-compose-area');
   if (!area) return;
+
+  _icSelectedArt = null;
 
   const sig = await getSignature();
   const reSubject = isForward
@@ -2872,6 +2876,15 @@ async function openReplyCompose(index, isForward) {
   // Strip HTML tags for the textarea preview (signature is injected as HTML at send time)
   const sigPlain = sig.replace(/<[^>]+>/g, '').replace(/\n{3,}/g, '\n\n').trim();
   const bodyWithSig = `\n\n${sigPlain}${quotedBody}`;
+
+  // Get company tags for auto-matching art suggestion
+  var companyTags = '';
+  if (m.company_id) {
+    try {
+      var co = await apiFetch('/api/companies/' + m.company_id);
+      companyTags = co.tags || '';
+    } catch(e) {}
+  }
 
   area.style.display = 'block';
   area.innerHTML = `
@@ -2888,9 +2901,12 @@ async function openReplyCompose(index, isForward) {
         <label class="inbox-compose-label">Message</label>
         <textarea id="ic-body" class="inbox-compose-textarea" rows="10">${esc(bodyWithSig)}</textarea>
       </div>
-      <div class="inbox-sig-note">✉ Your email signature will be appended automatically</div>
+      <div id="ic-art-preview"></div>
+      <div id="ic-art-picker"></div>
+      <div class="inbox-sig-note">\u2709 Your email signature will be appended automatically</div>
       <div class="inbox-compose-actions">
         <button class="btn btn-primary" onclick="sendInboxReply(${index}, ${isForward})">Send</button>
+        <button class="btn btn-outline" onclick="openIcArtPicker('${esc(companyTags)}')">Add Art</button>
         <button class="btn btn-outline" onclick="closeReplyCompose()">Cancel</button>
         <span id="ic-status" style="margin-left:12px;font-size:13px;color:#666"></span>
       </div>
@@ -2899,6 +2915,83 @@ async function openReplyCompose(index, isForward) {
   // Place cursor at very top (before signature/quote)
   const ta = document.getElementById('ic-body');
   if (ta) { ta.focus(); ta.setSelectionRange(0, 0); ta.scrollTop = 0; }
+}
+
+function openIcArtPicker(companyTags) {
+  var pickerEl = document.getElementById('ic-art-picker');
+  if (!pickerEl) return;
+
+  var cache = (typeof _artCache !== 'undefined' && _artCache.length) ? _artCache : [];
+  if (!cache.length) { toast('Art gallery not loaded yet', 'error'); return; }
+
+  // Score by tag overlap for sorting
+  var prospectTags = (companyTags || '').toLowerCase().split(',').map(function(t) { return t.trim(); }).filter(Boolean);
+  var scored = cache.map(function(art) {
+    var artTags = (art.tags || '').toLowerCase().split(',').map(function(t) { return t.trim(); });
+    var overlap = prospectTags.filter(function(t) { return artTags.indexOf(t) !== -1; }).length;
+    return { art: art, score: overlap * 10 + (art.priority || 0) };
+  }).sort(function(a, b) { return b.score - a.score; });
+
+  var html = '<div class="qr-art-picker-wrap">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
+      '<span style="font-size:12px;font-weight:600">Choose Art to Embed</span>' +
+      '<button class="btn btn-ghost btn-sm" onclick="document.getElementById(\'ic-art-picker\').innerHTML=\'\'" style="font-size:11px">Close</button>' +
+    '</div>';
+
+  if (prospectTags.length) {
+    html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Sorted by match to prospect tags: ' + prospectTags.join(', ') + '</div>';
+  }
+
+  html += '<div class="qr-art-picker-grid">';
+  scored.forEach(function(item) {
+    var a = item.art;
+    var matchBadge = item.score > 0 ? '<div style="font-size:9px;color:var(--success);font-weight:600">' + Math.floor(item.score / 10) + ' tag match' + (Math.floor(item.score / 10) !== 1 ? 'es' : '') + '</div>' : '';
+    html += '<div class="qr-art-picker-item" onclick="selectIcArt(' + a.id + ')">' +
+      '<img src="' + esc(a.url) + '" alt="' + esc(a.title) + '" />' +
+      '<div class="qr-art-picker-label">' + esc(a.title) + '</div>' +
+      matchBadge +
+    '</div>';
+  });
+  html += '</div></div>';
+
+  pickerEl.innerHTML = html;
+}
+
+function selectIcArt(artId) {
+  var cache = (typeof _artCache !== 'undefined') ? _artCache : [];
+  var art = cache.find(function(a) { return a.id === artId; });
+  if (!art) return;
+  _icSelectedArt = _artToImage(art);
+  document.getElementById('ic-art-picker').innerHTML = '';
+  renderIcArtPreview();
+}
+
+function removeIcArt() {
+  _icSelectedArt = null;
+  renderIcArtPreview();
+}
+
+function renderIcArtPreview() {
+  var el = document.getElementById('ic-art-preview');
+  if (!el) return;
+  if (!_icSelectedArt || !_icSelectedArt.url) {
+    el.innerHTML = '';
+    return;
+  }
+  el.innerHTML =
+    '<div style="border:1px solid var(--border);border-radius:8px;padding:12px;background:var(--bg);margin-bottom:12px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
+        '<span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted)">Art \u2014 will be embedded in email</span>' +
+        '<div style="display:flex;gap:6px">' +
+          '<button class="btn btn-outline btn-sm" onclick="openIcArtPicker(\'\')" style="font-size:11px">Change</button>' +
+          '<button class="btn btn-ghost btn-sm" onclick="removeIcArt()" style="font-size:11px;color:var(--text-muted)">Remove</button>' +
+        '</div>' +
+      '</div>' +
+      '<div style="text-align:center">' +
+        '<img src="' + esc(_icSelectedArt.url) + '" alt="' + esc(_icSelectedArt.alt) + '" style="max-width:100%;width:400px;border-radius:6px" />' +
+        '<div style="font-size:12px;color:var(--text-muted);margin-top:6px">' + esc(_icSelectedArt.alt) + '</div>' +
+      '</div>' +
+    '</div>';
 }
 
 function closeReplyCompose() {
@@ -2918,9 +3011,18 @@ async function sendInboxReply(index, isForward) {
     toast('To, Subject, and Message are all required.', 'error'); return;
   }
 
-  // Build HTML body: user text + HTML signature
+  // Build HTML body: user text + art (if selected) + HTML signature
   const sig = await getSignature();
-  const bodyHtml = body.replace(/\n/g, '<br>') + '<br><br>' + sig;
+  var artBlock = '';
+  if (_icSelectedArt && _icSelectedArt.url) {
+    artBlock = '<div style="margin:24px 0;text-align:center">' +
+      '<div style="margin-bottom:8px;font-size:13px;color:#666;font-style:italic">' + esc(_icSelectedArt.label || '') + ' \u2014 Recent Collaboration</div>' +
+      '<img src="' + _icSelectedArt.url + '" alt="' + esc(_icSelectedArt.alt) + '" style="max-width:100%;width:480px;border-radius:8px;border:1px solid #e0e0e0" />' +
+      '<div style="margin-top:8px;font-size:12px;color:#999">' + esc(_icSelectedArt.alt) + '</div>' +
+      '<div style="margin-top:4px"><a href="https://phillewisart.com/blogs/collaborations" style="font-size:12px;color:#4f46e5;text-decoration:none">View more collaborations \u2192</a></div>' +
+    '</div>';
+  }
+  const bodyHtml = body.replace(/\n/g, '<br>') + artBlock + '<br><br>' + sig;
 
   const btn = document.querySelector('#inbox-compose-area .btn-primary');
   if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
