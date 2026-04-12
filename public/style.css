@@ -899,6 +899,48 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
 .pipe-compact-company a:hover { color: var(--primary); }
 .pipe-compact-email { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* ── ACTIVITY LOG ── */
+.activity-stats {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px; margin-bottom: 20px;
+}
+.activity-stat-card {
+  background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px;
+  padding: 14px; text-align: center;
+}
+.activity-stat-reply { border-color: var(--success); background: var(--success-pale, #f0fdf4); }
+.activity-stat-num { font-size: 24px; font-weight: 700; color: var(--text); line-height: 1.1; }
+.activity-stat-reply .activity-stat-num { color: var(--success); }
+.activity-stat-label { font-size: 11px; color: var(--text-muted); margin-top: 4px; text-transform: uppercase; letter-spacing: .3px; }
+
+.activity-day { margin-bottom: 4px; }
+.activity-day-header {
+  display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+  background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px;
+  cursor: pointer; user-select: none;
+}
+.activity-day-header:hover { background: #f9f9f6; }
+.activity-day-date { font-weight: 700; font-size: 13px; min-width: 120px; }
+.activity-day-summary { display: flex; gap: 8px; flex: 1; }
+.day-stat { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 10px; }
+.day-stat-sent { background: var(--primary-pale); color: var(--primary); }
+.day-stat-reply { background: var(--success-pale, #f0fdf4); color: var(--success); }
+.activity-day-chevron { font-size: 12px; color: var(--text-muted); }
+.activity-day-body { padding: 4px 0 4px 16px; }
+
+.activity-item {
+  display: flex; gap: 10px; align-items: flex-start; padding: 8px 12px;
+  border-radius: 6px; cursor: pointer; transition: background .1s;
+}
+.activity-item:hover { background: #f5f5f0; }
+.activity-item-reply { background: var(--success-pale, #f0fdf4); border-left: 3px solid var(--success); }
+.activity-item-reply:hover { background: #e8f8e8; }
+.activity-item-icon { font-size: 14px; min-width: 20px; text-align: center; margin-top: 2px; }
+.activity-item-content { flex: 1; min-width: 0; }
+.activity-item-who { font-size: 13px; }
+.activity-item-names { font-size: 11px; color: var(--text-muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.activity-item-subject { font-size: 11px; color: var(--text-muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
 /* ── UTILITIES ── */
 .empty-state { text-align: center; padding: 60px 20px; color: var(--text-muted); font-size: 13px; }
 .empty-state p { margin-top: 8px; }
@@ -1985,10 +2027,288 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
   margin-top: 8px; font-size: 11px; color: #999;
 }
 
+/* ── REPORTS: Deal Aging ── */
+.deal-aging-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-top: 8px;
+}
+.deal-aging-bucket {
+  background: var(--card-bg, #fff);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+}
+.deal-aging-header {
+  margin-bottom: 10px;
+}
+.deal-aging-count {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+.deal-aging-title {
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 2px;
+  color: var(--text);
+}
+.deal-aging-opp {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+.deal-aging-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 0;
+  font-size: 13px;
+  border-top: 1px solid var(--border-light, #eef0f3);
+}
+.deal-aging-row a {
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 500;
+}
+.deal-aging-row a:hover {
+  color: var(--primary);
+}
+.deal-aging-more {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding-top: 6px;
+  text-align: center;
+}
+
+/* ── REPORTS: Attention Needed ── */
+.report-card-attention {
+  border-color: #fecaca;
+  background: #fff5f5;
+}
+.report-subsection {
+  margin-bottom: 16px;
+}
+.report-subsection-title {
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 8px;
+  color: var(--text);
+}
+.report-attention-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+}
+.report-attention-card {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.report-attn-name {
+  font-weight: 600;
+  font-size: 13px;
+}
+.report-attn-name a {
+  color: var(--text);
+  text-decoration: none;
+}
+.report-attn-name a:hover {
+  color: var(--primary);
+}
+.report-attn-company {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.report-attn-subject {
+  font-size: 12px;
+  font-style: italic;
+  color: var(--text-muted);
+  margin-top: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.report-attn-date {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* ── REPORTS: Overdue & Upcoming Rows ── */
+.report-overdue-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border-light, #eef0f3);
+}
+.report-overdue-row:last-child { border-bottom: none; }
+.report-overdue-row a {
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+  min-width: 120px;
+}
+.report-overdue-row a:hover { color: var(--primary); }
+.report-overdue-step {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.report-upcoming-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border-light, #eef0f3);
+}
+.report-upcoming-row:last-child { border-bottom: none; }
+.report-upcoming-row a {
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+  min-width: 120px;
+}
+.report-upcoming-row a:hover { color: var(--primary); }
+.report-upcoming-step {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ── REPORTS: Charts ── */
+.report-chart-section {
+  margin-top: 12px;
+}
+.report-bar-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  height: 120px;
+  padding: 0 4px;
+}
+.report-bar-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  gap: 4px;
+}
+.report-bar-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  width: 100%;
+  height: 100px;
+  justify-content: center;
+}
+.report-bar {
+  width: 18px;
+  min-height: 2px;
+  border-radius: 3px 3px 0 0;
+  transition: height .3s;
+  position: relative;
+}
+.report-bar:hover::after {
+  content: attr(data-val);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--text);
+  color: #fff;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.report-bar-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 60px;
+}
+.report-chart-legend {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.report-legend-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+/* ── REPORTS: Sequence Stats ── */
+.seq-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  margin-top: 8px;
+}
+.seq-stat-card {
+  background: var(--card-bg, #fff);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+}
+.seq-stat-name {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+.seq-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  padding: 3px 0;
+}
+.seq-stat-bar-bg {
+  height: 6px;
+  background: var(--border-light, #eef0f3);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+.seq-stat-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width .3s;
+}
+.seq-stat-mini-chart {
+  display: flex;
+  gap: 2px;
+  align-items: flex-end;
+  height: 24px;
+  margin-top: 6px;
+}
+.seq-stat-mini-bar {
+  flex: 1;
+  border-radius: 2px 2px 0 0;
+  min-height: 2px;
+}
+
 @media (max-width: 768px) {
   .login-card { padding: 28px 20px; }
   .users-table th, .users-table td { padding: 9px 10px; font-size: 13px; }
   .art-preview-img { width: 100%; }
   .gallery-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
   .gallery-card-img-wrap { height: 120px; }
+  .deal-aging-grid { grid-template-columns: repeat(2, 1fr); }
+  .report-attention-grid { grid-template-columns: 1fr; }
+  .seq-stats-grid { grid-template-columns: 1fr; }
 }

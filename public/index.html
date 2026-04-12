@@ -221,6 +221,15 @@
           <button class="btn btn-ghost btn-sm" onclick="clearContactSelection()" style="margin-left:auto;color:var(--text-muted)">✕ Clear selection</button>
         </div>
 
+        <!-- Mass enroll bar — shown when filters narrow down enrollable contacts -->
+        <div id="mass-enroll-bar" class="bulk-action-bar" style="display:none;background:#f0fdf4;border-color:#bbf7d0">
+          <span id="mass-enroll-count" class="bulk-count" style="color:var(--success)">0 contacts</span>
+          <select id="mass-enroll-seq-select" class="filter-select bulk-seq-select">
+            <option value="">— Choose sequence —</option>
+          </select>
+          <button class="btn btn-primary btn-sm" onclick="massEnrollFiltered()">Enroll All Filtered</button>
+        </div>
+
         <!-- Industry tag filter chips -->
         <div id="contacts-tag-chips" class="tag-filter-chips" style="margin-bottom:12px"></div>
 
@@ -384,20 +393,8 @@
         <div class="page-header">
           <h1>Activity Log</h1>
         </div>
-        <div id="activity-table-wrap">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Contact</th>
-                <th>Company</th>
-                <th>Subject</th>
-                <th>Type</th>
-              </tr>
-            </thead>
-            <tbody id="activity-tbody"></tbody>
-          </table>
-        </div>
+        <div id="activity-stats" class="activity-stats"></div>
+        <div id="activity-timeline"></div>
       </section>
 
       <!-- SETTINGS -->

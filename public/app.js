@@ -155,7 +155,7 @@ function showPage(page) {
 
   if (page === 'dashboard') loadDashboard();
   if (page === 'prospects') { loadAllTags(); renderProspectDropdowns(); loadCompanies(); }
-  if (page === 'contacts') { populateBulkSequenceDropdown(); renderContactsTagChips(); loadContacts(); }
+  if (page === 'contacts') { populateBulkSequenceDropdown(); populateMassEnrollDropdown(); renderContactsTagChips(); loadContacts(); }
   if (page === 'pipeline') loadPipeline();
   if (page === 'sequences') loadSequences();
   if (page === 'gallery') loadArtGallery();
@@ -1072,8 +1072,9 @@ async function deleteCompany(id) {
 
 // ── CONTACTS ──────────────────────────────────────────────────────────────
 // Track selected contact IDs for bulk actions
-let _selectedContactIds = new Set();
-let _notInSeqActive = false;
+var _selectedContactIds = new Set();
+var _notInSeqActive = false;
+var _lastFilteredContacts = []; // store last loaded contacts for mass enrollment
 
 var _contactsTagFilters = [];
 
@@ -1110,9 +1111,11 @@ async function loadContacts() {
 
   try {
     var contacts = await apiFetch('/api/contacts?' + params.toString());
+    _lastFilteredContacts = contacts;
     var container = document.getElementById('contacts-grouped');
     _selectedContactIds.clear();
     updateBulkBar();
+    updateMassEnrollBar(contacts);
 
     if (!contacts.length) {
       container.innerHTML = '<div class="empty-state">No contacts found.</div>';
@@ -1288,6 +1291,52 @@ function clearContactFilters() {
   loadContacts();
 }
 
+function updateMassEnrollBar(contacts) {
+  var bar = document.getElementById('mass-enroll-bar');
+  if (!bar) return;
+  // Show mass enroll bar when filters are active and there are enrollable contacts
+  var hasFilters = _contactsTagFilters.length > 0 || _notInSeqActive;
+  var enrollable = contacts.filter(function(c) {
+    return c.email && c.enrollment_status !== 'active';
+  });
+  if (hasFilters && enrollable.length > 0) {
+    bar.style.display = 'flex';
+    document.getElementById('mass-enroll-count').textContent = enrollable.length + ' contact' + (enrollable.length !== 1 ? 's' : '') + ' can be enrolled';
+  } else {
+    bar.style.display = 'none';
+  }
+}
+
+async function massEnrollFiltered() {
+  var seqId = document.getElementById('mass-enroll-seq-select').value;
+  if (!seqId) { toast('Please choose a sequence first.', 'error'); return; }
+  var enrollable = _lastFilteredContacts.filter(function(c) {
+    return c.email && c.enrollment_status !== 'active';
+  });
+  if (!enrollable.length) { toast('No contacts available to enroll.', 'error'); return; }
+  var ids = enrollable.map(function(c) { return c.id; });
+  if (!confirm('Enroll ' + ids.length + ' contact' + (ids.length !== 1 ? 's' : '') + ' into this sequence?')) return;
+  try {
+    var r = await apiFetch('/api/enrollments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contact_ids: ids, sequence_id: parseInt(seqId) }),
+    });
+    toast(r.enrolled + ' contact' + (r.enrolled !== 1 ? 's' : '') + ' added to sequence!', 'success');
+    loadContacts();
+  } catch(e) { toast('Enrollment failed: ' + e.message, 'error'); }
+}
+
+async function populateMassEnrollDropdown() {
+  try {
+    var seqs = await apiFetch('/api/sequences');
+    var sel = document.getElementById('mass-enroll-seq-select');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">— Choose sequence —</option>' +
+      seqs.map(function(s) { return '<option value="' + s.id + '">' + esc(s.name) + '</option>'; }).join('');
+  } catch(e) {}
+}
+
 async function openContactModal(id = null, companyId = null) {
   const form = document.getElementById('contact-form');
   form.reset();
@@ -1373,31 +1422,65 @@ async function loadSequences() {
       el.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><div style="font-size:32px;margin-bottom:8px">◈</div><p>No sequences yet. Create one to start automating your outreach.</p></div>`;
       return;
     }
-    el.innerHTML = seqs.map(s => `
-      <div class="seq-card">
-        <div class="seq-card-header">
-          <div class="seq-name">${esc(s.name)}</div>
-          <div style="display:flex;gap:6px">
-            <button class="btn btn-ghost btn-sm" onclick="openSequenceModal(${s.id})">Edit</button>
-            <button class="btn btn-danger btn-sm" onclick="deleteSequence(${s.id})">Delete</button>
-          </div>
-        </div>
-        ${s.description ? `<div class="seq-desc">${esc(s.description)}</div>` : ''}
-        <div class="seq-steps-preview">
-          ${s.steps.map(st => `
-            <div class="seq-step-row">
-              <div class="seq-step-num">${st.step_number}</div>
-              <div class="seq-step-info">${esc(st.subject)}</div>
-              <div class="seq-step-delay">${st.step_number===1 ? 'Day 0 (immediate)' : `+${st.delay_days} day${st.delay_days!==1?'s':''}`}</div>
-            </div>
-          `).join('')}
-        </div>
-        <div class="seq-footer">
-          <button class="enrolled-count enrolled-count-btn" onclick="openSequenceRoster(${s.id}, ${JSON.stringify(esc(s.name))})">${s.enrollment_count} contact${s.enrollment_count!==1?'s':''} enrolled</button>
-          <button class="btn btn-primary btn-sm" onclick="openEnrollModalForSeq(${s.id})">Enroll Contacts</button>
-        </div>
-      </div>
-    `).join('');
+    el.innerHTML = seqs.map(function(s) {
+      var st = s.stats || { active:0, replied:0, completed:0, stopped:0, total:0 };
+      var replyRate = st.total > 0 ? Math.round((st.replied / st.total) * 100) : 0;
+      var completionRate = st.total > 0 ? Math.round(((st.completed + st.replied) / st.total) * 100) : 0;
+
+      // Mini stats bar segments
+      var barHtml = '';
+      if (st.total > 0) {
+        var segs = [
+          { n: st.replied, color: 'var(--success)', label: 'Replied' },
+          { n: st.active, color: 'var(--primary)', label: 'Active' },
+          { n: st.completed, color: '#6b7280', label: 'Completed' },
+          { n: st.stopped || 0, color: 'var(--danger)', label: 'Stopped' }
+        ];
+        barHtml = '<div style="display:flex;height:6px;border-radius:3px;overflow:hidden;background:var(--border-light,#eef0f3);margin:8px 0">';
+        segs.forEach(function(seg) {
+          if (seg.n > 0) {
+            var pct = Math.round((seg.n / st.total) * 100);
+            barHtml += '<div style="width:' + pct + '%;background:' + seg.color + '" title="' + seg.label + ': ' + seg.n + '"></div>';
+          }
+        });
+        barHtml += '</div>';
+      }
+
+      var statsLine = st.total > 0
+        ? '<div style="display:flex;gap:12px;font-size:12px;color:var(--text-muted);margin-top:4px;flex-wrap:wrap">' +
+            '<span><strong style="color:var(--text)">' + st.total + '</strong> enrolled</span>' +
+            '<span><strong style="color:var(--primary)">' + st.active + '</strong> active</span>' +
+            '<span><strong style="color:var(--success)">' + st.replied + '</strong> replied</span>' +
+            '<span>Reply rate: <strong style="color:' + (replyRate > 5 ? 'var(--success)' : 'var(--text)') + '">' + replyRate + '%</strong></span>' +
+            (st.stopped > 0 ? '<span style="color:var(--danger)"><strong>' + st.stopped + '</strong> stopped</span>' : '') +
+          '</div>'
+        : '<div style="font-size:12px;color:var(--text-muted);margin-top:4px">No enrollments yet</div>';
+
+      return '<div class="seq-card">' +
+        '<div class="seq-card-header">' +
+          '<div class="seq-name">' + esc(s.name) + '</div>' +
+          '<div style="display:flex;gap:6px">' +
+            '<button class="btn btn-ghost btn-sm" onclick="openSequenceModal(' + s.id + ')">Edit</button>' +
+            '<button class="btn btn-danger btn-sm" onclick="deleteSequence(' + s.id + ')">Delete</button>' +
+          '</div>' +
+        '</div>' +
+        (s.description ? '<div class="seq-desc">' + esc(s.description) + '</div>' : '') +
+        barHtml + statsLine +
+        '<div class="seq-steps-preview">' +
+          s.steps.map(function(step) {
+            return '<div class="seq-step-row">' +
+              '<div class="seq-step-num">' + step.step_number + '</div>' +
+              '<div class="seq-step-info">' + esc(step.subject) + '</div>' +
+              '<div class="seq-step-delay">' + (step.step_number===1 ? 'Day 0 (immediate)' : '+' + step.delay_days + ' day' + (step.delay_days!==1?'s':'')) + '</div>' +
+            '</div>';
+          }).join('') +
+        '</div>' +
+        '<div class="seq-footer">' +
+          '<button class="enrolled-count enrolled-count-btn" onclick="openSequenceRoster(' + s.id + ', ' + JSON.stringify(esc(s.name)) + ')">' + s.enrollment_count + ' contact' + (s.enrollment_count!==1?'s':'') + ' enrolled</button>' +
+          '<button class="btn btn-primary btn-sm" onclick="openEnrollModalForSeq(' + s.id + ')">Enroll Contacts</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
   } catch(e) { toast(e.message, 'error'); }
 }
 
@@ -1451,6 +1534,23 @@ async function openSequenceRoster(seqId, seqName) {
           </tr>`).join('')
       : `<tr><td colspan="6" class="empty-state" style="padding:16px">All contacts with emails are already enrolled.</td></tr>`;
 
+    // Compute roster stats
+    var rosterActive = enrolled.filter(function(c) { return c.enrollment_status === 'active'; }).length;
+    var rosterReplied = enrolled.filter(function(c) { return c.enrollment_status === 'replied'; }).length;
+    var rosterCompleted = enrolled.filter(function(c) { return c.enrollment_status === 'completed'; }).length;
+    var rosterStopped = enrolled.filter(function(c) { return c.enrollment_status === 'stopped' || c.enrollment_status === 'paused'; }).length;
+    var rosterReplyRate = enrolled.length > 0 ? Math.round((rosterReplied / enrolled.length) * 100) : 0;
+
+    var rosterStatsHtml = enrolled.length > 0
+      ? `<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:13px;margin:8px 0 12px">
+          <span><strong style="color:var(--primary)">${rosterActive}</strong> active</span>
+          <span><strong style="color:var(--success)">${rosterReplied}</strong> replied</span>
+          <span><strong>${rosterCompleted}</strong> completed</span>
+          ${rosterStopped > 0 ? `<span style="color:var(--danger)"><strong>${rosterStopped}</strong> stopped</span>` : ''}
+          <span>Reply rate: <strong style="color:${rosterReplyRate > 5 ? 'var(--success)' : 'var(--text)'}">${rosterReplyRate}%</strong></span>
+        </div>`
+      : '';
+
     panel.innerHTML = `
       <div class="seq-roster-header">
         <div>
@@ -1459,6 +1559,7 @@ async function openSequenceRoster(seqId, seqName) {
         </div>
         <button class="inbox-rp-close" onclick="document.getElementById('seq-roster-panel').remove()">✕</button>
       </div>
+      ${rosterStatsHtml}
 
       <div class="seq-roster-section-title">Currently Enrolled (${enrolled.length})</div>
       <div class="table-scroll-wrapper" style="margin-bottom:24px">
@@ -2047,26 +2148,136 @@ let _activityCache = [];
 
 async function loadActivity() {
   try {
-    const activities = await apiFetch('/api/activities?limit=100');
+    var activities = await apiFetch('/api/activities?limit=200');
     _activityCache = activities;
-    const tbody = document.getElementById('activity-tbody');
+
     if (!activities.length) {
-      tbody.innerHTML = `<tr><td colspan="5" class="empty-state">No activity yet.</td></tr>`;
+      document.getElementById('activity-stats').innerHTML = '';
+      document.getElementById('activity-timeline').innerHTML = '<div class="empty-state">No activity yet.</div>';
       return;
     }
-    tbody.innerHTML = activities.map((a, i) => `
-      <tr class="activ-row" onclick="openActivityDetail(${i})" title="Click to view full message">
-        <td class="text-muted" style="white-space:nowrap">${fmtDate(a.sent_at)}</td>
-        <td>
-          <span class="contact-name-link">${esc(a.first_name||'')} ${esc(a.last_name||'')}</span>
-          ${a.title ? `<div style="font-size:11px;color:var(--text-muted)">${esc(a.title)}</div>` : ''}
-        </td>
-        <td>${esc(a.company_name||'—')}</td>
-        <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.subject||'—')}</td>
-        <td><span class="status-pill" style="background:var(--primary-pale);color:var(--primary)">${esc(a.type)}</span></td>
-      </tr>
-    `).join('');
+
+    // ── Compute stats ──
+    var now = new Date();
+    var weekAgo = new Date(now - 7 * 86400000);
+    var monthAgo = new Date(now - 30 * 86400000);
+
+    var thisWeek = activities.filter(function(a) { return new Date(a.sent_at) >= weekAgo; });
+    var thisMonth = activities.filter(function(a) { return new Date(a.sent_at) >= monthAgo; });
+
+    var sentWeek = thisWeek.filter(function(a) { return a.type === 'email'; }).length;
+    var repliesWeek = thisWeek.filter(function(a) { return a.type === 'received_email'; }).length;
+    var sentMonth = thisMonth.filter(function(a) { return a.type === 'email'; }).length;
+    var repliesMonth = thisMonth.filter(function(a) { return a.type === 'received_email'; }).length;
+    var uniqueCompaniesWeek = new Set(thisWeek.map(function(a) { return a.company_name; }).filter(Boolean)).size;
+    var responseRate = sentMonth > 0 ? Math.round((repliesMonth / sentMonth) * 100) : 0;
+
+    var statsHtml = '<div class="activity-stat-card"><div class="activity-stat-num">' + sentWeek + '</div><div class="activity-stat-label">Sent This Week</div></div>' +
+      '<div class="activity-stat-card activity-stat-reply"><div class="activity-stat-num">' + repliesWeek + '</div><div class="activity-stat-label">Replies This Week</div></div>' +
+      '<div class="activity-stat-card"><div class="activity-stat-num">' + uniqueCompaniesWeek + '</div><div class="activity-stat-label">Companies Reached</div></div>' +
+      '<div class="activity-stat-card"><div class="activity-stat-num">' + responseRate + '%</div><div class="activity-stat-label">30-Day Response Rate</div></div>' +
+      '<div class="activity-stat-card"><div class="activity-stat-num">' + sentMonth + '</div><div class="activity-stat-label">Sent (30 Days)</div></div>' +
+      '<div class="activity-stat-card activity-stat-reply"><div class="activity-stat-num">' + repliesMonth + '</div><div class="activity-stat-label">Replies (30 Days)</div></div>';
+    document.getElementById('activity-stats').innerHTML = statsHtml;
+
+    // ── Group by day ──
+    var dayGroups = {};
+    var dayOrder = [];
+    activities.forEach(function(a, idx) {
+      a._idx = idx;
+      var d = new Date(a.sent_at);
+      var key = d.toISOString().slice(0, 10);
+      if (!dayGroups[key]) { dayGroups[key] = []; dayOrder.push(key); }
+      dayGroups[key].push(a);
+    });
+
+    var timelineHtml = '';
+    dayOrder.forEach(function(dayKey) {
+      var items = dayGroups[dayKey];
+      var d = new Date(dayKey + 'T12:00:00');
+      var dayLabel = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+      var sent = items.filter(function(a) { return a.type === 'email'; }).length;
+      var received = items.filter(function(a) { return a.type === 'received_email'; }).length;
+
+      // Group items by company for compact display
+      var companyGroups = {};
+      items.forEach(function(a) {
+        var co = a.company_name || '—';
+        if (!companyGroups[co]) companyGroups[co] = { sent: [], received: [] };
+        if (a.type === 'received_email') companyGroups[co].received.push(a);
+        else companyGroups[co].sent.push(a);
+      });
+
+      var daySummary = '';
+      if (sent > 0) daySummary += '<span class="day-stat day-stat-sent">' + sent + ' sent</span>';
+      if (received > 0) daySummary += '<span class="day-stat day-stat-reply">' + received + ' replies</span>';
+
+      timelineHtml += '<div class="activity-day">';
+      timelineHtml += '<div class="activity-day-header" onclick="toggleActivityDay(this)">';
+      timelineHtml += '<div class="activity-day-date">' + esc(dayLabel) + '</div>';
+      timelineHtml += '<div class="activity-day-summary">' + daySummary + '</div>';
+      timelineHtml += '<span class="activity-day-chevron">▾</span>';
+      timelineHtml += '</div>';
+      timelineHtml += '<div class="activity-day-body">';
+
+      // Show replies first (they're more important)
+      Object.keys(companyGroups).sort().forEach(function(co) {
+        var g = companyGroups[co];
+        if (g.received.length > 0) {
+          g.received.forEach(function(a) {
+            timelineHtml += '<div class="activity-item activity-item-reply" onclick="openActivityDetail(' + a._idx + ')">' +
+              '<div class="activity-item-icon">↩</div>' +
+              '<div class="activity-item-content">' +
+                '<div class="activity-item-who"><strong>' + esc(a.first_name || '') + ' ' + esc(a.last_name || '') + '</strong> at ' + esc(co) + ' replied</div>' +
+                '<div class="activity-item-subject">' + esc(a.subject || '—') + '</div>' +
+              '</div>' +
+            '</div>';
+          });
+        }
+      });
+
+      // Then group sent emails by company
+      Object.keys(companyGroups).sort().forEach(function(co) {
+        var g = companyGroups[co];
+        if (g.sent.length > 0) {
+          if (g.sent.length === 1) {
+            var a = g.sent[0];
+            timelineHtml += '<div class="activity-item" onclick="openActivityDetail(' + a._idx + ')">' +
+              '<div class="activity-item-icon">✉</div>' +
+              '<div class="activity-item-content">' +
+                '<div class="activity-item-who">Emailed <strong>' + esc(a.first_name || '') + ' ' + esc(a.last_name || '') + '</strong> at ' + esc(co) + '</div>' +
+                '<div class="activity-item-subject">' + esc(a.subject || '—') + '</div>' +
+              '</div>' +
+            '</div>';
+          } else {
+            // Multiple contacts at same company — show compact
+            var names = g.sent.map(function(a) { return esc(a.first_name || '') + ' ' + esc(a.last_name || ''); }).join(', ');
+            timelineHtml += '<div class="activity-item" onclick="openActivityDetail(' + g.sent[0]._idx + ')">' +
+              '<div class="activity-item-icon">✉</div>' +
+              '<div class="activity-item-content">' +
+                '<div class="activity-item-who">Emailed <strong>' + g.sent.length + ' contacts</strong> at ' + esc(co) + '</div>' +
+                '<div class="activity-item-names">' + names + '</div>' +
+                '<div class="activity-item-subject">' + esc(g.sent[0].subject || '—') + '</div>' +
+              '</div>' +
+            '</div>';
+          }
+        }
+      });
+
+      timelineHtml += '</div></div>';
+    });
+
+    document.getElementById('activity-timeline').innerHTML = timelineHtml;
   } catch(e) { toast(e.message, 'error'); }
+}
+
+function toggleActivityDay(header) {
+  var body = header.nextElementSibling;
+  var chevron = header.querySelector('.activity-day-chevron');
+  if (!body) return;
+  var isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : '';
+  if (chevron) chevron.textContent = isOpen ? '▸' : '▾';
 }
 
 function openActivityDetail(index) {
@@ -2980,168 +3191,304 @@ function scrollToStage(slug) {
 
 // ── REPORTS ───────────────────────────────────────────────────────────────
 async function loadReports() {
-  const el = document.getElementById('reports-content');
+  var el = document.getElementById('reports-content');
   if (!el) return;
   el.innerHTML = '<div class="empty-state">Loading…</div>';
 
-  const stalledDays = parseInt(document.getElementById('stalled-days')?.value || '30', 10);
-
   try {
-    const [stats, pipeline, activity, companies] = await Promise.all([
+    var results = await Promise.all([
       apiFetch('/api/dashboard'),
       apiFetch('/api/pipeline'),
-      apiFetch('/api/activities?limit=200'),
+      apiFetch('/api/activities?limit=300'),
       apiFetch('/api/companies'),
+      apiFetch('/api/sequences'),
     ]);
+    var stats = results[0], pipeline = results[1], activity = results[2], companies = results[3], sequences = results[4];
+    var now = Date.now();
+    var today = new Date().toISOString().slice(0,10);
 
-    // ── Weekly Activity (contacts/accounts reached per week) ──────────────
-    const weekMap = {};
-    (activity || []).forEach(a => {
-      const d = new Date(a.created_at || a.timestamp);
+    // ── Deal Aging Buckets ──
+    function ageDays(c) {
+      var d = c.created_at || c.updated_at;
+      return d ? Math.floor((now - new Date(d).getTime()) / 86400000) : 999;
+    }
+    var allCompanies = companies || [];
+    var newDeals = allCompanies.filter(function(c) { return ageDays(c) <= 30; });
+    var midDeals = allCompanies.filter(function(c) { var d = ageDays(c); return d > 30 && d <= 60; });
+    var oldDeals = allCompanies.filter(function(c) { var d = ageDays(c); return d > 60 && d <= 90; });
+    var ancientDeals = allCompanies.filter(function(c) { return ageDays(c) > 90; });
+
+    // ── Attention Needed: unreplied replies, overdue next steps, stalled ──
+    // Contacts who replied but we haven't followed up
+    var replies = (activity || []).filter(function(a) { return a.type === 'received_email'; });
+    var repliedCompanyIds = new Set();
+    replies.forEach(function(a) { if (a.company_id) repliedCompanyIds.add(a.company_id); });
+
+    // Sent after reply?
+    var sentAfterReply = new Set();
+    replies.forEach(function(r) {
+      var laterSent = (activity || []).find(function(a) {
+        return a.type === 'email' && a.contact_id === r.contact_id && new Date(a.sent_at) > new Date(r.sent_at);
+      });
+      if (laterSent) sentAfterReply.add(r.contact_id);
+    });
+    var unrepliedContacts = replies.filter(function(r) { return !sentAfterReply.has(r.contact_id); });
+    // Deduplicate by contact_id (keep most recent)
+    var seenContacts = {};
+    unrepliedContacts = unrepliedContacts.filter(function(r) {
+      if (seenContacts[r.contact_id]) return false;
+      seenContacts[r.contact_id] = true;
+      return true;
+    });
+
+    // Overdue next steps
+    var overdueSteps = allCompanies.filter(function(c) {
+      return c.next_step && c.next_step_date && c.next_step_date < today;
+    });
+
+    // Upcoming next steps (due within 7 days)
+    var weekFromNow = new Date(now + 7 * 86400000).toISOString().slice(0,10);
+    var upcomingSteps = allCompanies.filter(function(c) {
+      return c.next_step && c.next_step_date && c.next_step_date >= today && c.next_step_date <= weekFromNow;
+    });
+
+    // ── Weekly Activity ──
+    var weekMap = {};
+    (activity || []).forEach(function(a) {
+      var d = new Date(a.created_at || a.sent_at);
       if (isNaN(d)) return;
-      const monday = new Date(d);
+      var monday = new Date(d);
       monday.setDate(d.getDate() - ((d.getDay()+6)%7));
-      const key = monday.toISOString().slice(0,10);
-      if (!weekMap[key]) weekMap[key] = { emails:0, companies:new Set() };
-      weekMap[key].emails++;
+      var key = monday.toISOString().slice(0,10);
+      if (!weekMap[key]) weekMap[key] = { sent:0, received:0, companies:new Set() };
+      if (a.type === 'received_email') weekMap[key].received++;
+      else weekMap[key].sent++;
       if (a.company_id) weekMap[key].companies.add(a.company_id);
     });
-    const weeks = Object.entries(weekMap).sort((a,b)=>b[0].localeCompare(a[0])).slice(0,8);
+    var weeks = Object.entries(weekMap).sort(function(a,b) { return b[0].localeCompare(a[0]); }).slice(0,6);
 
-    // ── Stage breakdown ────────────────────────────────────────────────────
-    const stageCounts = {};
-    const stageOpps = {};
-    (pipeline || []).forEach(c => {
-      const s = c.pipeline_stage || 'Prospect';
-      stageCounts[s] = (stageCounts[s] || 0) + 1;
-      stageOpps[s] = (stageOpps[s] || 0) + (parseFloat(c.opportunity_value)||0);
+    // ── Total opp value ──
+    var totalOpp = allCompanies.reduce(function(s,c) { return s + (parseFloat(c.opportunity_value)||0); }, 0);
+    var totalReplies = replies.length;
+    var totalSent = (activity || []).filter(function(a) { return a.type === 'email'; }).length;
+    var responseRate = totalSent > 0 ? Math.round((totalReplies / totalSent) * 100) : 0;
+
+    var html = '';
+
+    // ── KPI Row ──
+    html += '<div class="report-kpi-row">';
+    html += reportKPI(allCompanies.length, 'Total Prospects', '');
+    html += reportKPI(totalSent, 'Emails Sent', '');
+    html += reportKPI(totalReplies, 'Replies', 'highlight');
+    html += reportKPI(responseRate + '%', 'Response Rate', responseRate > 5 ? 'highlight' : '');
+    html += reportKPI('$' + totalOpp.toLocaleString(undefined,{maximumFractionDigits:0}), 'Pipeline Value', totalOpp > 0 ? 'highlight' : '');
+    html += reportKPI(unrepliedContacts.length, 'Need Your Reply', unrepliedContacts.length > 0 ? 'warn' : '');
+    html += '</div>';
+
+    // ── NEEDS ATTENTION (top priority) ──
+    if (unrepliedContacts.length > 0 || overdueSteps.length > 0) {
+      html += '<div class="report-card report-card-wide report-card-attention">';
+      html += '<div class="report-card-title" style="color:var(--danger)">⚡ Needs Your Attention</div>';
+
+      if (unrepliedContacts.length > 0) {
+        html += '<div class="report-subsection"><div class="report-subsection-title">Prospects replied — you haven\'t responded (' + unrepliedContacts.length + ')</div>';
+        html += '<div class="report-attention-grid">';
+        unrepliedContacts.slice(0, 10).forEach(function(r) {
+          html += '<div class="report-attention-card">' +
+            '<div class="report-attn-name"><a href="#" onclick="event.preventDefault();openContactDetail(' + r.contact_id + ')">' + esc(r.first_name || '') + ' ' + esc(r.last_name || '') + '</a></div>' +
+            '<div class="report-attn-company">' + esc(r.company_name || '—') + '</div>' +
+            '<div class="report-attn-subject">"' + esc((r.subject || '').slice(0, 50)) + '"</div>' +
+            '<div class="report-attn-date">' + fmtDate(r.sent_at) + '</div>' +
+          '</div>';
+        });
+        html += '</div></div>';
+      }
+
+      if (overdueSteps.length > 0) {
+        html += '<div class="report-subsection"><div class="report-subsection-title">Overdue next steps (' + overdueSteps.length + ')</div>';
+        overdueSteps.forEach(function(c) {
+          html += '<div class="report-overdue-row">' +
+            '<a href="#" onclick="event.preventDefault();openCompanyDetail(' + c.id + ')">' + esc(c.name) + '</a>' +
+            '<span class="report-overdue-step">' + esc(c.next_step) + '</span>' +
+            '<span style="color:var(--danger);font-size:12px;font-weight:600">Due ' + fmtDate(c.next_step_date) + '</span>' +
+          '</div>';
+        });
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+
+    // ── DEAL AGING BUCKETS ──
+    html += '<div class="report-card report-card-wide">';
+    html += '<div class="report-card-title">Deal Aging</div>';
+    html += '<div class="deal-aging-grid">';
+    html += dealAgingBucket('New (0–30 days)', newDeals, 'var(--success)');
+    html += dealAgingBucket('Warming (31–60 days)', midDeals, 'var(--primary)');
+    html += dealAgingBucket('Aging (61–90 days)', oldDeals, '#f59e0b');
+    html += dealAgingBucket('Stale (90+ days)', ancientDeals, 'var(--danger)');
+    html += '</div></div>';
+
+    // ── WEEKLY OUTREACH CHART ──
+    html += '<div class="report-grid">';
+    html += '<div class="report-card">';
+    html += '<div class="report-card-title">Weekly Outreach</div>';
+    if (weeks.length) {
+      var maxWeekVal = Math.max.apply(null, weeks.map(function(w) { return Math.max(w[1].sent, w[1].received); })) || 1;
+      html += '<div class="report-bar-chart">';
+      weeks.slice().reverse().forEach(function(w) {
+        var sentH = Math.max(2, Math.round((w[1].sent / maxWeekVal) * 90));
+        var recvH = Math.max(2, Math.round((w[1].received / maxWeekVal) * 90));
+        var weekLabel = w[0].slice(5); // MM-DD
+        html += '<div class="report-bar-group">' +
+          '<div class="report-bar-bars">' +
+            '<div class="report-bar" data-val="' + w[1].sent + ' sent" style="height:' + sentH + 'px;background:var(--primary)"></div>' +
+            '<div class="report-bar" data-val="' + w[1].received + ' replies" style="height:' + recvH + 'px;background:var(--success)"></div>' +
+          '</div>' +
+          '<div class="report-bar-label">' + weekLabel + '</div>' +
+        '</div>';
+      });
+      html += '</div>';
+      html += '<div class="report-chart-legend">' +
+        '<span><span class="report-legend-dot" style="background:var(--primary)"></span>Sent</span>' +
+        '<span><span class="report-legend-dot" style="background:var(--success)"></span>Replies</span>' +
+      '</div>';
+      // Keep table too but compact
+      html += '<table class="report-table" style="margin-top:12px"><thead><tr><th>Week</th><th>Sent</th><th>Replies</th><th>Companies</th></tr></thead><tbody>';
+      weeks.forEach(function(w) {
+        html += '<tr><td>' + w[0] + '</td><td><strong>' + w[1].sent + '</strong></td><td style="color:var(--success);font-weight:600">' + w[1].received + '</td><td>' + w[1].companies.size + '</td></tr>';
+      });
+      html += '</tbody></table>';
+    } else {
+      html += '<div style="color:var(--text-muted);padding:12px 0;font-size:13px">No activity yet</div>';
+    }
+    html += '</div>';
+
+    // ── UPCOMING NEXT STEPS ──
+    html += '<div class="report-card">';
+    html += '<div class="report-card-title">Coming Up This Week</div>';
+    if (upcomingSteps.length) {
+      upcomingSteps.forEach(function(c) {
+        html += '<div class="report-upcoming-row">' +
+          '<a href="#" onclick="event.preventDefault();openCompanyDetail(' + c.id + ')">' + esc(c.name) + '</a>' +
+          '<span class="report-upcoming-step">' + esc(c.next_step) + '</span>' +
+          '<span style="font-size:11px;color:var(--text-muted)">' + fmtDate(c.next_step_date) + '</span>' +
+        '</div>';
+      });
+    } else {
+      html += '<div style="color:var(--text-muted);padding:12px 0;font-size:13px">No upcoming tasks this week.</div>';
+    }
+    html += '</div></div>';
+
+    // ── SEQUENCE PERFORMANCE ──
+    if (sequences && sequences.length) {
+      html += '<div class="report-card report-card-wide">';
+      html += '<div class="report-card-title">Sequence Performance</div>';
+      html += '<div class="seq-stats-grid">';
+      sequences.forEach(function(seq) {
+        var st = seq.stats || { active:0, replied:0, completed:0, stopped:0, total:0 };
+        var replyRate = st.total > 0 ? Math.round(((st.replied) / st.total) * 100) : 0;
+        var completionRate = st.total > 0 ? Math.round(((st.completed + st.replied) / st.total) * 100) : 0;
+        var stalled = st.stopped || 0;
+
+        html += '<div class="seq-stat-card">';
+        html += '<div class="seq-stat-name">' + esc(seq.name) + '</div>';
+
+        // Mini funnel bar
+        if (st.total > 0) {
+          var segments = [
+            { label: 'Replied', count: st.replied, color: 'var(--success)' },
+            { label: 'Active', count: st.active, color: 'var(--primary)' },
+            { label: 'Completed', count: st.completed, color: '#6b7280' },
+            { label: 'Stopped', count: stalled, color: 'var(--danger)' }
+          ];
+          html += '<div class="seq-stat-bar-bg" style="height:10px;display:flex;overflow:hidden;border-radius:5px">';
+          segments.forEach(function(seg) {
+            if (seg.count > 0) {
+              var pct = Math.round((seg.count / st.total) * 100);
+              html += '<div style="width:' + pct + '%;background:' + seg.color + ';height:100%" title="' + seg.label + ': ' + seg.count + '"></div>';
+            }
+          });
+          html += '</div>';
+        }
+
+        html += '<div class="seq-stat-row"><span>Total enrolled</span><strong>' + st.total + '</strong></div>';
+        html += '<div class="seq-stat-row"><span>Active</span><strong>' + st.active + '</strong></div>';
+        html += '<div class="seq-stat-row"><span>Replied</span><strong style="color:var(--success)">' + st.replied + '</strong></div>';
+        html += '<div class="seq-stat-row"><span>Reply rate</span><strong style="color:' + (replyRate > 5 ? 'var(--success)' : 'var(--text)') + '">' + replyRate + '%</strong></div>';
+        html += '<div class="seq-stat-row"><span>Completion rate</span><strong>' + completionRate + '%</strong></div>';
+        if (stalled > 0) {
+          html += '<div class="seq-stat-row"><span style="color:var(--danger)">Stopped/Stalled</span><strong style="color:var(--danger)">' + stalled + '</strong></div>';
+        }
+
+        // Steps info
+        html += '<div style="margin-top:6px;font-size:11px;color:var(--text-muted)">' + (seq.steps ? seq.steps.length : 0) + ' steps in sequence</div>';
+        html += '</div>';
+      });
+      html += '</div></div>';
+    }
+
+    // ── PIPELINE FUNNEL CHART ──
+    var pipeActive = pipeline ? pipeline.filter(function(c) { return c.enrollment_status === 'active'; }).length : 0;
+    var pipeReplied = pipeline ? pipeline.filter(function(c) { return c.enrollment_status === 'replied'; }).length : 0;
+    var pipeCompleted = pipeline ? pipeline.filter(function(c) { return c.enrollment_status === 'completed'; }).length : 0;
+    var pipeNotEnrolled = pipeline ? pipeline.filter(function(c) { return !c.enrollment_status; }).length : 0;
+    var pipeTotal = pipeline ? pipeline.length : 0;
+
+    if (pipeTotal > 0) {
+      html += '<div class="report-card report-card-wide">';
+      html += '<div class="report-card-title">Pipeline Funnel</div>';
+      var funnelStages = [
+        { label: 'Not Enrolled', count: pipeNotEnrolled, color: '#9ca3af' },
+        { label: 'Active', count: pipeActive, color: 'var(--primary)' },
+        { label: 'Replied', count: pipeReplied, color: 'var(--success)' },
+        { label: 'Completed', count: pipeCompleted, color: '#6b7280' }
+      ];
+      var maxFunnel = Math.max.apply(null, funnelStages.map(function(s) { return s.count; })) || 1;
+      html += '<div class="report-bar-chart" style="height:80px">';
+      funnelStages.forEach(function(s) {
+        var h = Math.max(2, Math.round((s.count / maxFunnel) * 70));
+        html += '<div class="report-bar-group">' +
+          '<div class="report-bar-bars">' +
+            '<div class="report-bar" data-val="' + s.count + '" style="height:' + h + 'px;background:' + s.color + ';width:32px"></div>' +
+          '</div>' +
+          '<div class="report-bar-label">' + s.label + '</div>' +
+        '</div>';
+      });
+      html += '</div></div>';
+    }
+
+    el.innerHTML = html;
+  } catch(e) { el.innerHTML = '<div class="empty-state">Error loading reports: ' + esc(e.message) + '</div>'; }
+}
+
+function reportKPI(value, label, cls) {
+  return '<div class="report-kpi ' + cls + '"><div class="report-kpi-value">' + value + '</div><div class="report-kpi-label">' + label + '</div></div>';
+}
+
+function dealAgingBucket(title, deals, color) {
+  var topDeals = deals.sort(function(a,b) { return (parseFloat(b.opportunity_value)||0) - (parseFloat(a.opportunity_value)||0); }).slice(0, 5);
+  var totalOpp = deals.reduce(function(s,c) { return s + (parseFloat(c.opportunity_value)||0); }, 0);
+
+  var html = '<div class="deal-aging-bucket" style="border-top:3px solid ' + color + '">';
+  html += '<div class="deal-aging-header">';
+  html += '<div class="deal-aging-count" style="color:' + color + '">' + deals.length + '</div>';
+  html += '<div class="deal-aging-title">' + title + '</div>';
+  if (totalOpp > 0) html += '<div class="deal-aging-opp">$' + totalOpp.toLocaleString(undefined,{maximumFractionDigits:0}) + '</div>';
+  html += '</div>';
+
+  if (topDeals.length) {
+    topDeals.forEach(function(c) {
+      html += '<div class="deal-aging-row">' +
+        '<a href="#" onclick="event.preventDefault();openCompanyDetail(' + c.id + ')">' + esc(c.name) + '</a>' +
+        (c.status ? '<span class="status-pill status-' + (c.status||'').replace(/\s/g,'-').toLowerCase() + '">' + esc(c.status) + '</span>' : '') +
+      '</div>';
     });
-
-    // ── Next Steps ─────────────────────────────────────────────────────────
-    const nextSteps = (companies || [])
-      .filter(c => c.next_step && c.next_step.trim())
-      .sort((a,b) => (a.next_step_date||'9999') > (b.next_step_date||'9999') ? 1 : -1)
-      .slice(0, 15);
-
-    // ── Stalled Deals ──────────────────────────────────────────────────────
-    const now = Date.now();
-    const stalledMs = stalledDays * 86400000;
-    const stalled = (companies || []).filter(c => {
-      if (!c.last_activity_at && !c.updated_at) return false;
-      const lastActive = new Date(c.last_activity_at || c.updated_at).getTime();
-      const inPipeline = c.pipeline_stage && c.pipeline_stage !== 'Prospect' && c.pipeline_stage !== 'Closed Lost';
-      return inPipeline && (now - lastActive) > stalledMs;
-    });
-
-    // ── Total opportunity ──────────────────────────────────────────────────
-    const totalOpp = (companies || []).reduce((s,c)=>s+(parseFloat(c.opportunity_value)||0),0);
-
-    el.innerHTML = `
-      <!-- KPI Row -->
-      <div class="report-kpi-row">
-        <div class="report-kpi">
-          <div class="report-kpi-value">${stats.totalCompanies||0}</div>
-          <div class="report-kpi-label">Total Prospects</div>
-        </div>
-        <div class="report-kpi">
-          <div class="report-kpi-value">${stats.totalContacts||0}</div>
-          <div class="report-kpi-label">Contacts Identified</div>
-        </div>
-        <div class="report-kpi">
-          <div class="report-kpi-value">${stats.emailsSent||0}</div>
-          <div class="report-kpi-label">Emails Sent</div>
-        </div>
-        <div class="report-kpi highlight">
-          <div class="report-kpi-value">$${totalOpp.toLocaleString(undefined,{maximumFractionDigits:0})}</div>
-          <div class="report-kpi-label">Total Opp Value</div>
-        </div>
-        <div class="report-kpi ${stalled.length>0?'warn':''}">
-          <div class="report-kpi-value">${stalled.length}</div>
-          <div class="report-kpi-label">Stalled (&gt;${stalledDays}d)</div>
-        </div>
-      </div>
-
-      <div class="report-grid">
-
-        <!-- Weekly Activity -->
-        <div class="report-card">
-          <div class="report-card-title">Weekly Outreach Activity</div>
-          <table class="report-table">
-            <thead><tr><th>Week of</th><th>Emails Sent</th><th>Accounts Reached</th></tr></thead>
-            <tbody>
-              ${weeks.length ? weeks.map(([wk,v])=>`
-                <tr>
-                  <td>${wk}</td>
-                  <td><strong>${v.emails}</strong></td>
-                  <td>${v.companies.size}</td>
-                </tr>`).join('') : '<tr><td colspan="3" style="color:var(--text-muted);text-align:center">No activity yet</td></tr>'}
-            </tbody>
-          </table>
-        </div>
-
-        <!-- Stage Breakdown -->
-        <div class="report-card">
-          <div class="report-card-title">Pipeline Stages</div>
-          <table class="report-table">
-            <thead><tr><th>Stage</th><th>Count</th><th>Opp Value</th></tr></thead>
-            <tbody>
-              ${Object.entries(stageCounts).length ? Object.entries(stageCounts).map(([s,cnt])=>`
-                <tr>
-                  <td><span class="status-pill status-${s.toLowerCase().replace(/\s/g,'-')}">${esc(s)}</span></td>
-                  <td><strong>${cnt}</strong></td>
-                  <td>$${(stageOpps[s]||0).toLocaleString(undefined,{maximumFractionDigits:0})}</td>
-                </tr>`).join('') : '<tr><td colspan="3" style="color:var(--text-muted);text-align:center">No pipeline data</td></tr>'}
-            </tbody>
-          </table>
-        </div>
-
-        <!-- Next Steps -->
-        <div class="report-card report-card-wide">
-          <div class="report-card-title">Next Steps</div>
-          ${nextSteps.length ? `
-          <table class="report-table">
-            <thead><tr><th>Company</th><th>Stage</th><th>Next Step</th><th>Due Date</th><th>Opp Value</th></tr></thead>
-            <tbody>
-              ${nextSteps.map(c=>`
-                <tr>
-                  <td><a href="#" onclick="event.preventDefault();openCompanyDetail(${c.id})">${esc(c.name)}</a></td>
-                  <td><span class="status-pill status-${(c.pipeline_stage||'prospect').toLowerCase().replace(/\s/g,'-')}">${esc(c.pipeline_stage||'Prospect')}</span></td>
-                  <td>${esc(c.next_step)}</td>
-                  <td style="color:${c.next_step_date && c.next_step_date < new Date().toISOString().slice(0,10) ? 'var(--danger)' : 'var(--text-muted)'}">${c.next_step_date ? fmtDate(c.next_step_date) : '—'}</td>
-                  <td>$${(parseFloat(c.opportunity_value)||0).toLocaleString(undefined,{maximumFractionDigits:0})}</td>
-                </tr>`).join('')}
-            </tbody>
-          </table>` : '<div style="color:var(--text-muted);padding:12px 0;font-size:13px">No next steps recorded yet. Add them from company detail cards.</div>'}
-        </div>
-
-        <!-- Stalled Deals -->
-        <div class="report-card report-card-wide">
-          <div class="report-card-title" style="display:flex;justify-content:space-between;align-items:center">
-            <span>Stalled Deals <span style="font-size:11px;color:var(--text-muted);font-weight:400">(no activity in ${stalledDays}+ days)</span></span>
-            ${stalled.length ? `<span class="report-badge-warn">${stalled.length} stalled</span>` : ''}
-          </div>
-          ${stalled.length ? `
-          <table class="report-table">
-            <thead><tr><th>Company</th><th>Stage</th><th>Last Activity</th><th>Days Stalled</th><th>Opp Value</th></tr></thead>
-            <tbody>
-              ${stalled.map(c=>{
-                const lastActive = new Date(c.last_activity_at||c.updated_at);
-                const daysStalled = Math.floor((now - lastActive.getTime())/86400000);
-                return `<tr>
-                  <td><a href="#" onclick="event.preventDefault();openCompanyDetail(${c.id})">${esc(c.name)}</a></td>
-                  <td><span class="status-pill status-${(c.pipeline_stage||'prospect').toLowerCase().replace(/\s/g,'-')}">${esc(c.pipeline_stage||'Prospect')}</span></td>
-                  <td>${fmtDate(lastActive.toISOString())}</td>
-                  <td style="color:var(--danger);font-weight:600">${daysStalled}d</td>
-                  <td>$${(parseFloat(c.opportunity_value)||0).toLocaleString(undefined,{maximumFractionDigits:0})}</td>
-                </tr>`;
-              }).join('')}
-            </tbody>
-          </table>` : `<div style="color:var(--success);padding:12px 0;font-size:13px">✓ No stalled deals — great work!</div>`}
-        </div>
-
-      </div>`;
-
-  } catch(e) { el.innerHTML = `<div class="empty-state">Error loading reports: ${esc(e.message)}</div>`; }
+    if (deals.length > 5) html += '<div class="deal-aging-more">+' + (deals.length - 5) + ' more</div>';
+  } else {
+    html += '<div style="font-size:12px;color:var(--text-muted);padding:8px 0">None</div>';
+  }
+  html += '</div>';
+  return html;
 }
 
 // ── NEWS ───────────────────────────────────────────────────────────────────

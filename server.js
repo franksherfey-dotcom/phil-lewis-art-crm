@@ -732,11 +732,14 @@ app.get('/api/sequences', async (req, res) => {
         'SELECT * FROM sequence_steps WHERE sequence_id=$1 ORDER BY step_number ASC',
         [s.id]
       )
-      const { n } = await one(
-        "SELECT COUNT(*)::int AS n FROM enrollments WHERE sequence_id=$1 AND status='active'",
+      // Enrollment stats by status
+      const stats = await all(
+        "SELECT status, COUNT(*)::int AS n FROM enrollments WHERE sequence_id=$1 GROUP BY status",
         [s.id]
       )
-      s.enrollment_count = n
+      s.stats = { active: 0, replied: 0, completed: 0, stopped: 0, paused: 0, total: 0 }
+      stats.forEach(r => { s.stats[r.status] = r.n; s.stats.total += r.n })
+      s.enrollment_count = s.stats.active
     }))
     res.json(seqs)
   } catch (err) { res.status(500).json({ error: err.message }) }
