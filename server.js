@@ -876,14 +876,39 @@ app.post('/api/enrollments', async (req, res) => {
     if (!contact_ids || !sequence_id) return res.status(400).json({ error: 'contact_ids and sequence_id required' })
     const ids = Array.isArray(contact_ids) ? contact_ids : [contact_ids]
     let enrolled = 0
-    await Promise.all(ids.map(async cid => {
-      const r = await run(`
-        INSERT INTO enrollments (contact_id, sequence_id, current_step, status)
-        VALUES ($1,$2,1,'active')
-        ON CONFLICT (contact_id, sequence_id) DO NOTHING
-      `, [cid, sequence_id])
-      if (r.rowCount > 0) enrolled++
-    }))
+    for (const cid of ids) {
+      try {
+        // Check if there's an existing enrollment
+        const existing = await one(
+          'SELECT id, status FROM enrollments WHERE contact_id=$1 AND sequence_id=$2',
+          [cid, sequence_id]
+        )
+        if (existing) {
+          if (existing.status === 'active') continue // already active, skip
+          // Re-activate stopped/completed/replied enrollment
+          await run(
+            "UPDATE enrollments SET status='active', current_step=1, started_at=NOW(), completed_at=NULL WHERE id=$1",
+            [existing.id]
+          )
+          enrolled++
+        } else {
+          await run(
+            "INSERT INTO enrollments (contact_id, sequence_id, current_step, status) VALUES ($1,$2,1,'active')",
+            [cid, sequence_id]
+          )
+          enrolled++
+        }
+      } catch(e) {
+        // If unique constraint or exclusion constraint fires, try update instead
+        try {
+          await run(
+            "UPDATE enrollments SET status='active', current_step=1, started_at=NOW(), completed_at=NULL WHERE contact_id=$1 AND sequence_id=$2 AND status != 'active'",
+            [cid, sequence_id]
+          )
+          enrolled++
+        } catch(e2) { /* skip this contact */ }
+      }
+    }
     res.json({ enrolled })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })

@@ -535,7 +535,8 @@ function toast(msg, type = '') {
   el.textContent = msg;
   el.className = `toast ${type}`;
   clearTimeout(toastTimeout);
-  toastTimeout = setTimeout(() => { el.className = 'toast hidden'; }, 3500);
+  var duration = type === 'error' ? 8000 : 3500;
+  toastTimeout = setTimeout(() => { el.className = 'toast hidden'; }, duration);
 }
 
 // ── MODAL ──────────────────────────────────────────────────────────────────
