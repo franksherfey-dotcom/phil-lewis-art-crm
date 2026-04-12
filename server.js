@@ -566,10 +566,22 @@ app.get('/api/companies/:id', async (req, res) => {
   try {
     const company = await one('SELECT * FROM companies WHERE id=$1', [req.params.id])
     if (!company) return res.status(404).json({ error: 'Not found' })
-    const contacts = await all(
-      'SELECT * FROM contacts WHERE company_id=$1 ORDER BY is_primary DESC, first_name ASC',
-      [req.params.id]
-    )
+    const contacts = await all(`
+      SELECT c.*,
+        e.id AS enrollment_id, e.status AS enrollment_status, e.current_step,
+        s.name AS sequence_name,
+        (SELECT COUNT(*)::int FROM sequence_steps WHERE sequence_id = e.sequence_id) AS sequence_total_steps
+      FROM contacts c
+      LEFT JOIN LATERAL (
+        SELECT e2.id, e2.status, e2.current_step, e2.sequence_id
+        FROM enrollments e2 WHERE e2.contact_id = c.id
+        ORDER BY CASE e2.status WHEN 'active' THEN 0 WHEN 'replied' THEN 1 ELSE 2 END, e2.started_at DESC
+        LIMIT 1
+      ) e ON true
+      LEFT JOIN sequences s ON e.sequence_id = s.id
+      WHERE c.company_id = $1
+      ORDER BY c.is_primary DESC, c.first_name ASC
+    `, [req.params.id])
     res.json({ ...company, contacts })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })

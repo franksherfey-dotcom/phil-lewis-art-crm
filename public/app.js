@@ -939,7 +939,23 @@ async function openCompanyDetail(id) {
         </div>
         ${c.contacts.length ? `
           <div class="contact-rows">
-            ${c.contacts.map(ct => `
+            ${c.contacts.map(ct => {
+              var seqBadge = '';
+              if (ct.sequence_name && ct.enrollment_status) {
+                var seqColor = ct.enrollment_status === 'active' ? 'var(--primary)' :
+                  ct.enrollment_status === 'replied' ? 'var(--success)' :
+                  ct.enrollment_status === 'completed' ? '#6b7280' : 'var(--danger)';
+                var seqBg = ct.enrollment_status === 'active' ? 'var(--primary-pale,#eef2ff)' :
+                  ct.enrollment_status === 'replied' ? 'var(--success-pale,#f0fdf4)' :
+                  ct.enrollment_status === 'completed' ? 'var(--bg)' : 'var(--danger-pale,#fef2f2)';
+                var stepLabel = ct.current_step ? ' · Step ' + ct.current_step + (ct.sequence_total_steps ? '/' + ct.sequence_total_steps : '') : '';
+                seqBadge = '<div class="cd-seq-badge" style="color:' + seqColor + ';background:' + seqBg + ';border-color:' + seqColor + '">' +
+                  '<span class="cd-seq-badge-name">' + esc(ct.sequence_name) + '</span>' +
+                  '<span class="cd-seq-badge-status">' + esc(ct.enrollment_status) + stepLabel + '</span>' +
+                  (ct.enrollment_status === 'active' ? '<button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();stopEnrollment(' + ct.enrollment_id + ',{onDone:function(){openCompanyDetail(' + c.id + ')}})" style="color:' + seqColor + ';padding:0 4px" title="Remove from sequence">✕</button>' : '') +
+                '</div>';
+              }
+              return `
               <div class="contact-detail-row">
                 <div class="contact-detail-main">
                   <div class="contact-detail-name">
@@ -947,6 +963,7 @@ async function openCompanyDetail(id) {
                     <strong>${esc(ct.first_name)} ${esc(ct.last_name||'')}</strong>
                     ${ct.title ? `<span class="contact-detail-title">${esc(ct.title)}</span>` : ''}
                   </div>
+                  ${seqBadge}
                   <div class="contact-detail-links">
                     ${ct.email ? `<a href="mailto:${esc(ct.email)}" class="contact-link email-link">✉ ${esc(ct.email)}</a>` : ''}
                     ${ct.phone ? `<span class="contact-link phone-link">✆ ${esc(ct.phone)}</span>` : ''}
@@ -959,7 +976,7 @@ async function openCompanyDetail(id) {
                   <button class="btn btn-danger btn-sm" onclick="deleteContactFromDetail(${ct.id}, ${c.id})">Delete</button>
                 </div>
               </div>
-            `).join('')}
+            `}).join('')}
           </div>
           <div class="enroll-btn-row" style="margin-top:14px;position:relative;display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn btn-outline btn-sm" onclick="toggleEnrollDropdown(${c.id}, this)">＋ Add to Campaign ▾</button>
