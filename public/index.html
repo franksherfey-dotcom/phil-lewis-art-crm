@@ -260,11 +260,23 @@
             <button class="btn btn-primary" onclick="openArtModal()">+ Add Art</button>
           </div>
         </div>
-        <div style="font-size:13px;color:var(--text-muted);margin-bottom:8px">
-          Click an industry to browse matching art for outreach. These match your prospect sequence tags.
+        <div class="gallery-tabs">
+          <button class="gallery-tab active" data-tab="products" onclick="switchGalleryTab('products')">Product Collections</button>
+          <button class="gallery-tab" data-tab="art" onclick="switchGalleryTab('art')">Original Art</button>
         </div>
-        <div id="gallery-topic-bar" class="gallery-topic-bar"></div>
-        <div id="gallery-sections"></div>
+        <div id="gallery-tab-products" class="gallery-tab-content">
+          <div style="font-size:13px;color:var(--text-muted);margin-bottom:10px">
+            Phil's art on real products — grab these for prospect outreach to show what licensing looks like.
+          </div>
+          <div id="gallery-product-sections"></div>
+        </div>
+        <div id="gallery-tab-art" class="gallery-tab-content" style="display:none">
+          <div style="font-size:13px;color:var(--text-muted);margin-bottom:8px">
+            Phil's original art collection, organized by style. Click an industry tag to filter.
+          </div>
+          <div id="gallery-topic-bar" class="gallery-topic-bar"></div>
+          <div id="gallery-sections"></div>
+        </div>
       </section>
 
       <!-- OUTREACH QUEUE -->

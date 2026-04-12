@@ -120,10 +120,13 @@ const migrationReady = (async () => {
     `)
     console.log('✅ Art gallery table ready.')
 
-    // Seed Phil's art collection — re-seed if fewer than 40 pieces (incomplete previous seed)
-    const artCount = await one("SELECT COUNT(*)::int AS n FROM art_images")
+    // Add type column if missing (art = original art, product = product photos)
+    await pool.query(`ALTER TABLE art_images ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'art'`)
+
+    // Seed Phil's art collection — re-seed if fewer than 40 art pieces
+    const artCount = await one("SELECT COUNT(*)::int AS n FROM art_images WHERE type='art'")
     if (artCount.n < 40) {
-      await pool.query("DELETE FROM art_images")
+      await pool.query("DELETE FROM art_images WHERE type='art'")
       const S = 'https://phillewisart.com/cdn/shop/'
       const ART_SEEDS = [
         // ── OCEAN / MARINE ──
@@ -196,11 +199,92 @@ const migrationReady = (async () => {
       ]
       for (const a of ART_SEEDS) {
         await run(
-          "INSERT INTO art_images (title, url, tags, category, notes, is_default) VALUES ($1,$2,$3,$4,$5,FALSE)",
+          "INSERT INTO art_images (title, url, tags, category, notes, is_default, type) VALUES ($1,$2,$3,$4,$5,FALSE,'art')",
           [a.title, a.url, a.tags, a.category, a.notes]
         )
       }
       console.log('✅ Seeded Phil Lewis art collection (' + ART_SEEDS.length + ' pieces)')
+    }
+
+    // Seed product photos — Phil's art on actual products for prospect outreach
+    const prodCount = await one("SELECT COUNT(*)::int AS n FROM art_images WHERE type='product'")
+    if (prodCount.n < 20) {
+      await pool.query("DELETE FROM art_images WHERE type='product'")
+      const S = 'https://phillewisart.com/cdn/shop/'
+      const PRODUCT_SEEDS = [
+        // ── DRINKWARE ──
+        { title: 'Prism Tumblers', url: S+'files/2_28b0a853-eb82-4cfb-ab66-a995f5e1c229.jpg', category: 'Drinkware', notes: 'Limited-edition prism tumblers' },
+        { title: 'Insulated Wine Tumblers', url: S+'products/IMG_1886.jpg', category: 'Drinkware', notes: 'Wine tumblers with art wrap' },
+        { title: 'Ceramic Mugs', url: S+'files/IMG_1657.jpg', category: 'Drinkware', notes: 'Ceramic mugs with art' },
+        { title: 'Alpha Elephant Bottle', url: S+'products/IMG_2491.jpg', category: 'Drinkware', notes: '32oz Polar Camel bottle' },
+        { title: 'Alpha Grizzly Bottle', url: S+'products/IMG_2349.jpg', category: 'Drinkware', notes: '32oz Polar Camel bottle' },
+        { title: 'Jellyfish Flask', url: S+'products/IMG_2273.jpg', category: 'Drinkware', notes: 'Laser/UV combo 32oz flask' },
+        { title: 'Octopus Flask', url: S+'products/PhilLewisProduct6556.jpg', category: 'Drinkware', notes: '32oz stainless steel flask' },
+        { title: 'Owl Eyes Flask', url: S+'products/PhilLewisProduct6552.jpg', category: 'Drinkware', notes: '32oz stainless steel flask' },
+        { title: 'Red Rocks Flask', url: S+'products/red-rocks-bottle.jpg', category: 'Drinkware', notes: '32oz stainless steel flask' },
+        { title: 'Frequency 1 Flask', url: S+'products/IMG_2783.jpg', category: 'Drinkware', notes: '32oz stainless steel flask' },
+        { title: 'Jaguar Vision Flask', url: S+'products/20210715_PhilLewis0280.jpg', category: 'Drinkware', notes: '32oz stainless steel flask' },
+        { title: 'Sea Turtles Nalgene', url: S+'files/7E4607EF-AE84-4CDC-B418-410C646532EB.jpg', category: 'Drinkware', notes: '24oz Nalgene water bottle' },
+        { title: 'Pollinate Flask', url: S+'products/pollinatebottle-2.jpg', category: 'Drinkware', notes: 'Laser/UV combo flask' },
+        // ── APPAREL ──
+        { title: 'Pollinate Sun Hoodie', url: S+'files/PollinateUPFMockup.jpg', category: 'Apparel', notes: 'UPF 50+ sun hoodie' },
+        { title: 'Let it Flow Sun Hoodie', url: S+'files/LetitFlowUPFMockup.jpg', category: 'Apparel', notes: 'UPF 50+ sun hoodie' },
+        { title: 'Three Headed Dragon Hoodie', url: S+'files/DragonUPFMockup.jpg', category: 'Apparel', notes: 'UPF 50+ sun hoodie' },
+        { title: 'Octopus Sun Hoodie', url: S+'files/OctopusUPFMockup.jpg', category: 'Apparel', notes: 'UPF 50+ sun hoodie' },
+        { title: 'Sea Turtles Sun Hoodie', url: S+'files/TurtlesUPFMockup.jpg', category: 'Apparel', notes: 'UPF 50+ sun hoodie' },
+        { title: 'Sting Rays Sun Hoodie', url: S+'files/StingRaysUPFMockup.jpg', category: 'Apparel', notes: 'UPF 50+ sun hoodie' },
+        { title: 'Ice Fox Hoodie', url: S+'products/PhilLewisProduct4905WEB.jpg', category: 'Apparel', notes: 'Full print zip hoodie' },
+        { title: 'Grizzly Hoodie', url: S+'products/PhilLewisProduct4889WEB.jpg', category: 'Apparel', notes: 'Full print zip hoodie' },
+        { title: 'Let it Flow Boardshorts', url: S+'files/Shorts3.jpg', category: 'Apparel', notes: 'Boardshorts by Nomadic Movement' },
+        // ── BOARD SPORTS ──
+        { title: 'Skateboard Decks', url: S+'products/skateboard-mock-up-frequency.jpg', category: 'Board Sports', notes: 'Custom skateboard deck graphics' },
+        { title: 'Dragon Grip Tape', url: S+'files/three-headed-dragon_3903ccd9-da88-4bf2-86d5-2feabf344e40.jpg', category: 'Board Sports', notes: 'Skateboard grip tape' },
+        { title: 'Custom Surfboards', url: S+'products/surfboard2.jpg', category: 'Board Sports', notes: 'Soulcraft custom surfboards' },
+        { title: 'Custom Skis & Snowboards', url: S+'products/Lion_b6cb10a9-5a27-4689-9e32-8f7711633841.jpg', category: 'Board Sports', notes: 'Meier custom skis & snowboards' },
+        { title: 'Custom Traction Pads', url: S+'files/10-cropped.jpg', category: 'Board Sports', notes: 'Surf/snow traction pads' },
+        // ── GREETING CARDS ──
+        { title: 'Sea Turtles Card', url: S+'files/sea-turtles-card-mockup.jpg', category: 'Cards & Stationery', notes: 'Greeting card mockup' },
+        { title: 'Orcas Card', url: S+'files/orcas-card-mockup.jpg', category: 'Cards & Stationery', notes: 'Greeting card mockup' },
+        { title: 'Dolphins Card', url: S+'files/dolphins-card-mockup.jpg', category: 'Cards & Stationery', notes: 'Greeting card mockup' },
+        { title: 'Sharks Card', url: S+'files/sharks-card-mockup.jpg', category: 'Cards & Stationery', notes: 'Greeting card mockup' },
+        { title: 'Angel Fish Card', url: S+'files/angel-fish-card-mockup.jpg', category: 'Cards & Stationery', notes: 'Greeting card mockup' },
+        { title: 'Octopus Card', url: S+'files/octopus-card-mockup.jpg', category: 'Cards & Stationery', notes: 'Greeting card mockup' },
+        { title: 'Pelicans Card', url: S+'files/pelicans-card-mockup.jpg', category: 'Cards & Stationery', notes: 'Greeting card mockup' },
+        { title: 'Crocodiles Card', url: S+'files/crocodiles-card-mockup.jpg', category: 'Cards & Stationery', notes: 'Greeting card mockup' },
+        // ── BOOKS ──
+        { title: 'Coloring Book Combo (5 editions)', url: S+'products/PhilLewisProduct4501WEB.jpg', category: 'Books', notes: 'Coloring book combo set' },
+        { title: 'Coloring Book - 5th Edition', url: S+'products/cover1-1200x1200.jpg', category: 'Books', notes: 'Latest coloring book edition' },
+        { title: 'Animal Friends Children\'s Book', url: S+'products/PhilLewisProduct4451WEB_e363927b-ffe8-41d0-ac28-c75e7d59f548.jpg', category: 'Books', notes: 'Children\'s book' },
+        { title: 'Journals', url: S+'products/IMG_2981.jpg', category: 'Books', notes: 'Art journals' },
+        // ── HOME & LIFESTYLE ──
+        { title: 'Jellyfish Nimbus Tapestry', url: S+'products/Lewis_Jellyfish_T.png', category: 'Home & Lifestyle', notes: 'Wall tapestry' },
+        { title: 'Red Rocks Tapestry', url: S+'products/Lewis_Redrocks_T.png', category: 'Home & Lifestyle', notes: 'Wall tapestry' },
+        { title: 'Phoenix Tapestry', url: S+'products/Lewis_Phoenix_T.png', category: 'Home & Lifestyle', notes: 'Wall tapestry' },
+        { title: 'Elephants Tapestry', url: S+'products/Lewis_Elephants_T.png', category: 'Home & Lifestyle', notes: 'Wall tapestry' },
+        { title: 'Lion Sherpa Blanket', url: S+'products/IMG_0851.jpg', category: 'Home & Lifestyle', notes: 'Sherpa blanket' },
+        { title: 'Lotus Sherpa Blanket', url: S+'products/IMG_0844.jpg', category: 'Home & Lifestyle', notes: 'Sherpa blanket' },
+        { title: 'XL Desk Mat - Lion', url: S+'files/Lion.jpg', category: 'Home & Lifestyle', notes: 'Extra-large desk mat' },
+        { title: 'XL Desk Mat - Let it Flow', url: S+'files/Let-it-Flow_35b1bfb4-66c7-4e02-9066-dfc01ce50357.jpg', category: 'Home & Lifestyle', notes: 'Extra-large desk mat' },
+        // ── DISC SPORTS ──
+        { title: 'Octopus Golf Disc', url: S+'files/octopus-canyon.jpg', category: 'Disc Sports', notes: 'Canyon golf disc' },
+        { title: 'Azure Dragon Golf Disc', url: S+'files/dragon2.jpg', category: 'Disc Sports', notes: 'Canyon golf disc' },
+        { title: 'Elephant Golf Disc', url: S+'files/elephant1.jpg', category: 'Disc Sports', notes: 'Canyon golf disc' },
+        { title: 'Jellyfish Nimbus Golf Disc', url: S+'files/IMG_2006.jpg', category: 'Disc Sports', notes: 'Canyon golf disc' },
+        { title: 'Rainbow Vortex Foil Disc', url: S+'products/20210715_PhilLewis0397.jpg', category: 'Disc Sports', notes: 'Full foil golf disc' },
+        { title: 'Pollinate Foil Disc', url: S+'products/pollinate-foil-mock-up.jpg', category: 'Disc Sports', notes: 'Full foil golf disc' },
+        // ── STICKERS ──
+        { title: 'XXL Octopus Foil Sticker', url: S+'files/XXL-Oxtopus-Foil-Sticker.jpg', category: 'Stickers', notes: 'Oversized foil sticker' },
+        { title: 'Go Fish Sticker Sheets', url: S+'files/1-web.jpg', category: 'Stickers', notes: 'Multi-sticker sheets' },
+        { title: 'Lotus Glitter Sticker', url: S+'files/Lotus-Foil-Sticker1500.jpg', category: 'Stickers', notes: 'Glitter foil sticker' },
+        { title: '7 Chakras Sticker Pack', url: S+'products/stickerpack3.jpg', category: 'Stickers', notes: 'Chakra sticker set' },
+      ]
+      for (const p of PRODUCT_SEEDS) {
+        await run(
+          "INSERT INTO art_images (title, url, tags, category, notes, is_default, type) VALUES ($1,$2,$3,$4,$5,FALSE,'product')",
+          [p.title, p.url, '', p.category, p.notes]
+        )
+      }
+      console.log('✅ Seeded product collection (' + PRODUCT_SEEDS.length + ' pieces)')
     }
 
     // Reply templates table

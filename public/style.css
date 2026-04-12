@@ -1864,6 +1864,20 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
 }
 
 /* ── ART GALLERY ── */
+/* ── GALLERY TABS ── */
+.gallery-tabs {
+  display: flex; gap: 0; margin-bottom: 16px; border-bottom: 2px solid var(--border);
+}
+.gallery-tab {
+  padding: 10px 20px; font-size: 14px; font-weight: 600; cursor: pointer;
+  background: none; border: none; border-bottom: 2px solid transparent;
+  margin-bottom: -2px; color: var(--text-muted); transition: all .15s;
+}
+.gallery-tab:hover { color: var(--text); }
+.gallery-tab.active {
+  color: var(--primary); border-bottom-color: var(--primary);
+}
+
 /* ── GALLERY TOPIC BAR ── */
 .gallery-topic-bar {
   display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;

@@ -444,11 +444,17 @@ function renderLeadHeatmap(leads) {
 
 // ── ART GALLERY ──────────────────────────────────────────────────────────
 var _artCache = [];
+var _productCache = [];
 var _galleryTopics = [];   // active topic filters (multi-select)
+var _galleryTab = 'products'; // 'products' or 'art'
 
 // Pre-load art cache at startup so getArtForTags works from any page
 (async function() {
-  try { _artCache = await apiFetch('/api/art'); } catch(e) {}
+  try {
+    var all = await apiFetch('/api/art');
+    _artCache = all.filter(function(a) { return a.type !== 'product'; });
+    _productCache = all.filter(function(a) { return a.type === 'product'; });
+  } catch(e) {}
 })();
 
 // Industry topics — 1:1 with INDUSTRY_TAGS used in prospect sequences
@@ -484,13 +490,70 @@ function artMatchesTopic(art, topicKey) {
 
 async function loadArtGallery() {
   try {
-    _artCache = await apiFetch('/api/art');
+    var all = await apiFetch('/api/art');
+    _artCache = all.filter(function(a) { return a.type !== 'product'; });
+    _productCache = all.filter(function(a) { return a.type === 'product'; });
     renderGalleryTopicBar();
     renderGallerySections();
+    renderProductSections();
   } catch(e) {
     var el = document.getElementById('gallery-sections');
     if (el) el.innerHTML = '<div class="empty-state">Could not load gallery: ' + esc(e.message) + '</div>';
   }
+}
+
+function switchGalleryTab(tab) {
+  _galleryTab = tab;
+  document.querySelectorAll('.gallery-tab').forEach(function(t) {
+    t.classList.toggle('active', t.getAttribute('data-tab') === tab);
+  });
+  var prodEl = document.getElementById('gallery-tab-products');
+  var artEl = document.getElementById('gallery-tab-art');
+  if (prodEl) prodEl.style.display = tab === 'products' ? '' : 'none';
+  if (artEl) artEl.style.display = tab === 'art' ? '' : 'none';
+}
+
+function renderProductSections() {
+  var el = document.getElementById('gallery-product-sections');
+  if (!el) return;
+  if (!_productCache.length) {
+    el.innerHTML = '<div class="empty-state">No product images yet.</div>';
+    return;
+  }
+  // Group by category
+  var groups = {};
+  var groupOrder = [];
+  _productCache.forEach(function(p) {
+    var cat = p.category || 'Other';
+    if (!groups[cat]) { groups[cat] = []; groupOrder.push(cat); }
+    groups[cat].push(p);
+  });
+
+  var html = '';
+  groupOrder.forEach(function(cat) {
+    var items = groups[cat];
+    html += '<div class="gallery-section">';
+    html += '<div class="gallery-section-header">';
+    html += '<h3 class="gallery-section-title">' + esc(cat) + '</h3>';
+    html += '<span class="gallery-section-count">' + items.length + ' products</span>';
+    html += '</div>';
+    html += '<div class="gallery-grid">';
+    items.forEach(function(p) {
+      html += '<div class="gallery-card">' +
+        '<div class="gallery-card-img-wrap">' +
+        '<img src="' + esc(p.url) + '" alt="' + esc(p.title) + '" class="gallery-card-img" loading="lazy" onerror="this.src=\'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 200 150%22><rect fill=%22%23f0f0f0%22 width=%22200%22 height=%22150%22/><text x=%2250%25%22 y=%2250%25%22 fill=%22%23999%22 text-anchor=%22middle%22 dy=%22.3em%22>No Image</text></svg>\'">' +
+        '</div>' +
+        '<div class="gallery-card-body">' +
+        '<div class="gallery-card-title">' + esc(p.title) + '</div>' +
+        (p.notes ? '<div class="gallery-card-cat">' + esc(p.notes) + '</div>' : '') +
+        '<div class="gallery-card-actions">' +
+        '<button class="btn btn-ghost btn-sm" onclick="openArtModal(' + p.id + ')">Edit</button>' +
+        '<button class="btn btn-danger btn-sm" onclick="deleteArtImage(' + p.id + ')">Delete</button>' +
+        '</div></div></div>';
+    });
+    html += '</div></div>';
+  });
+  el.innerHTML = html;
 }
 
 function renderGalleryTopicBar() {
