@@ -71,9 +71,11 @@ var _replyTemplates = [];
 var _qrActivityId = null;
 var _qrContactTags = '';
 var _qrContext = {};
+var _qrArtOverride = null; // if set, use this art instead of auto-match
 
 async function openQuickReply(activityId) {
   _qrActivityId = activityId;
+  _qrArtOverride = null;
   try {
     // Load templates if not cached
     if (!_replyTemplates.length) {
@@ -156,22 +158,89 @@ function applyReplyTemplate(templateId) {
   event.target.classList.add('btn-primary');
 }
 
+function getQuickReplyArt() {
+  if (_qrArtOverride) return _qrArtOverride;
+  return getArtForTags(_qrContactTags);
+}
+
+function clearQrArt() {
+  _qrArtOverride = { url: '', alt: '', label: '' };
+  renderQuickReplyArt();
+}
+
+function resetQrArt() {
+  _qrArtOverride = null;
+  renderQuickReplyArt();
+}
+
 function renderQuickReplyArt() {
-  const el = document.getElementById('qr-art-preview');
+  var el = document.getElementById('qr-art-preview');
   if (!el) return;
-  const artImg = getArtForTags(_qrContactTags);
+  var artImg = getQuickReplyArt();
   if (artImg && artImg.url) {
-    el.innerHTML = `
-      <div style="border:1px solid var(--border);border-radius:8px;padding:12px;background:var(--bg)">
-        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);margin-bottom:8px">Art Preview — matched to prospect tags</div>
-        <div style="text-align:center">
-          <img src="${esc(artImg.url)}" alt="${esc(artImg.alt)}" style="max-width:100%;width:400px;border-radius:6px" />
-          <div style="font-size:12px;color:var(--text-muted);margin-top:6px">${esc(artImg.alt)}</div>
-        </div>
-      </div>`;
+    var matchLabel = _qrArtOverride ? 'Your selection' : 'Auto-matched to prospect tags';
+    el.innerHTML =
+      '<div style="border:1px solid var(--border);border-radius:8px;padding:12px;background:var(--bg)">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
+          '<span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted)">Art Preview \u2014 ' + matchLabel + '</span>' +
+          '<div style="display:flex;gap:6px">' +
+            '<button class="btn btn-outline btn-sm" onclick="openQrArtPicker()" style="font-size:11px">Change</button>' +
+            (_qrArtOverride ? '<button class="btn btn-ghost btn-sm" onclick="resetQrArt()" style="font-size:11px;color:var(--text-muted)">Reset</button>' : '') +
+            '<button class="btn btn-ghost btn-sm" onclick="clearQrArt()" style="font-size:11px;color:var(--text-muted)">No Art</button>' +
+          '</div>' +
+        '</div>' +
+        '<div style="text-align:center">' +
+          '<img src="' + esc(artImg.url) + '" alt="' + esc(artImg.alt) + '" style="max-width:100%;width:400px;border-radius:6px" />' +
+          '<div style="font-size:12px;color:var(--text-muted);margin-top:6px">' + esc(artImg.alt) + '</div>' +
+        '</div>' +
+      '</div>';
   } else {
-    el.innerHTML = '';
+    el.innerHTML =
+      '<div style="border:1px dashed var(--border);border-radius:8px;padding:16px;text-align:center;color:var(--text-muted)">' +
+        '<div style="font-size:13px;margin-bottom:8px">No art selected</div>' +
+        '<button class="btn btn-outline btn-sm" onclick="openQrArtPicker()">Choose Art</button>' +
+        (_qrArtOverride ? ' <button class="btn btn-ghost btn-sm" onclick="resetQrArt()">Reset to Auto</button>' : '') +
+      '</div>';
   }
+}
+
+function openQrArtPicker() {
+  var cache = (typeof _artCache !== 'undefined' && _artCache.length) ? _artCache : [];
+  if (!cache.length) { toast('Art gallery not loaded yet', 'error'); return; }
+
+  var pickerEl = document.getElementById('qr-art-picker');
+  if (!pickerEl) {
+    pickerEl = document.createElement('div');
+    pickerEl.id = 'qr-art-picker';
+    var previewEl = document.getElementById('qr-art-preview');
+    previewEl.parentNode.insertBefore(pickerEl, previewEl);
+  }
+
+  var html = '<div class="qr-art-picker-wrap">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
+      '<span style="font-size:12px;font-weight:600">Choose Art</span>' +
+      '<button class="btn btn-ghost btn-sm" onclick="document.getElementById(\'qr-art-picker\').innerHTML=\'\'" style="font-size:11px">Close</button>' +
+    '</div>' +
+    '<div class="qr-art-picker-grid">';
+
+  cache.forEach(function(art) {
+    html += '<div class="qr-art-picker-item" onclick="selectQrArt(' + art.id + ')">' +
+      '<img src="' + esc(art.url) + '" alt="' + esc(art.title) + '" />' +
+      '<div class="qr-art-picker-label">' + esc(art.title) + '</div>' +
+    '</div>';
+  });
+
+  html += '</div></div>';
+  pickerEl.innerHTML = html;
+}
+
+function selectQrArt(artId) {
+  var cache = (typeof _artCache !== 'undefined') ? _artCache : [];
+  var art = cache.find(function(a) { return a.id === artId; });
+  if (!art) return;
+  _qrArtOverride = _artToImage(art);
+  document.getElementById('qr-art-picker').innerHTML = '';
+  renderQuickReplyArt();
 }
 
 async function sendQuickReply() {
@@ -180,7 +249,7 @@ async function sendQuickReply() {
   if (!body) { toast('Write a message first', 'error'); return; }
 
   // Replace the art placeholder with actual HTML for the email
-  const artImg = getArtForTags(_qrContactTags);
+  const artImg = getQuickReplyArt();
   if (artImg && artImg.url) {
     const artHtml = `<div style="margin:24px 0;text-align:center"><div style="margin-bottom:8px;font-size:13px;color:#666;font-style:italic">${esc(artImg.label)} — Recent Collaboration</div><img src="${artImg.url}" alt="${esc(artImg.alt)}" style="max-width:100%;width:480px;border-radius:8px;border:1px solid #e0e0e0" /><div style="margin-top:8px;font-size:12px;color:#999">${esc(artImg.alt)}</div></div>`;
     body = body.replace('[Art image will be embedded below]', artHtml);
