@@ -956,6 +956,9 @@
           <select id="enroll-sequence-select" class="full-width"></select>
           <div id="enroll-campaign-desc" style="font-size:11px;color:var(--text-muted);margin-top:6px;font-style:italic"></div>
         </div>
+        <div class="form-group" style="margin-bottom:8px">
+          <input type="text" id="enroll-search" class="form-input" placeholder="Search contacts by name, company, or email..." oninput="filterEnrollContacts()">
+        </div>
         <div id="enroll-contacts-list" class="enroll-contacts"></div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline" onclick="closeModal('modal-enroll')">Cancel</button>

@@ -1948,11 +1948,16 @@ async function openEnrollModalForSeq(sequenceId) {
   await _prepareEnrollModal(null, sequenceId);
 }
 
+var _allEnrollContacts = []; // full list for search
+var _enrollChecked = new Set(); // track checked IDs across filter changes
+
 async function _prepareEnrollModal(companyId, sequenceId) {
   try {
-    const [sequences, contacts] = await Promise.all([
+    // Always load all contacts so search works across companies
+    const [sequences, allContacts, companyContacts] = await Promise.all([
       apiFetch('/api/sequences'),
-      apiFetch(`/api/contacts${companyId ? `?company_id=${companyId}` : ''}`),
+      apiFetch('/api/contacts'),
+      companyId ? apiFetch('/api/contacts?company_id=' + companyId) : Promise.resolve([]),
     ]);
 
     if (!sequences.length) {
@@ -1972,28 +1977,74 @@ async function _prepareEnrollModal(companyId, sequenceId) {
     seqSel.onchange = updateDesc;
     updateDesc();
 
-    currentEnrollContacts = contacts;
-    const listEl = document.getElementById('enroll-contacts-list');
-    if (!contacts.length) {
-      listEl.innerHTML = `<div class="empty-state" style="padding:16px">No contacts found${companyId ? ' for this company' : ''}.</div>`;
-    } else {
-      listEl.innerHTML = contacts.map(c => `
-        <div class="enroll-contact-row">
-          <input type="checkbox" id="enroll-c-${c.id}" value="${c.id}" ${c.email ? 'checked' : 'disabled'}>
-          <label for="enroll-c-${c.id}">
-            <div class="enroll-contact-name">${esc(c.first_name)} ${esc(c.last_name||'')}${c.company_name ? ` — ${esc(c.company_name)}` : ''}</div>
-            <div class="enroll-contact-email">${c.email ? esc(c.email) : '⚠ No email address'}</div>
-          </label>
-        </div>
-      `).join('');
+    _allEnrollContacts = allContacts;
+    // Pre-check company contacts that have email
+    _enrollChecked = new Set();
+    if (companyId && companyContacts.length) {
+      companyContacts.forEach(function(c) { if (c.email) _enrollChecked.add(c.id); });
     }
+
+    // Clear search and render
+    var searchEl = document.getElementById('enroll-search');
+    if (searchEl) searchEl.value = '';
+
+    // Show company contacts first, or all if no company
+    var initialList = companyId ? companyContacts : allContacts;
+    currentEnrollContacts = initialList;
+    renderEnrollContacts(initialList);
     openModal('modal-enroll');
   } catch(e) { toast(e.message, 'error'); }
 }
 
+function renderEnrollContacts(contacts) {
+  var listEl = document.getElementById('enroll-contacts-list');
+  if (!contacts.length) {
+    listEl.innerHTML = '<div class="empty-state" style="padding:16px">No contacts match your search.</div>';
+    return;
+  }
+  listEl.innerHTML = contacts.map(function(c) {
+    var isChecked = _enrollChecked.has(c.id);
+    return '<div class="enroll-contact-row">' +
+      '<input type="checkbox" id="enroll-c-' + c.id + '" value="' + c.id + '"' +
+        (isChecked ? ' checked' : '') +
+        (!c.email ? ' disabled' : '') +
+        ' onchange="toggleEnrollCheck(' + c.id + ',this.checked)">' +
+      '<label for="enroll-c-' + c.id + '">' +
+        '<div class="enroll-contact-name">' + esc(c.first_name) + ' ' + esc(c.last_name || '') +
+          (c.company_name ? ' \u2014 ' + esc(c.company_name) : '') + '</div>' +
+        '<div class="enroll-contact-email">' + (c.email ? esc(c.email) : '\u26A0 No email address') + '</div>' +
+      '</label>' +
+    '</div>';
+  }).join('');
+}
+
+function toggleEnrollCheck(contactId, checked) {
+  if (checked) _enrollChecked.add(contactId);
+  else _enrollChecked.delete(contactId);
+}
+
+function filterEnrollContacts() {
+  var query = (document.getElementById('enroll-search').value || '').toLowerCase().trim();
+  if (!query) {
+    // Show company contacts if we opened from company, else all
+    renderEnrollContacts(currentEnrollContacts.length ? currentEnrollContacts : _allEnrollContacts);
+    return;
+  }
+  var filtered = _allEnrollContacts.filter(function(c) {
+    var searchable = ((c.first_name || '') + ' ' + (c.last_name || '') + ' ' + (c.company_name || '') + ' ' + (c.email || '')).toLowerCase();
+    return searchable.indexOf(query) !== -1;
+  });
+  renderEnrollContacts(filtered);
+}
+
 async function confirmEnroll() {
   const seqId = document.getElementById('enroll-sequence-select').value;
-  const checked = [...document.querySelectorAll('#enroll-contacts-list input[type=checkbox]:checked')].map(el => parseInt(el.value));
+  // Merge any currently visible checkboxes into the tracked set
+  document.querySelectorAll('#enroll-contacts-list input[type=checkbox]').forEach(function(el) {
+    if (el.checked) _enrollChecked.add(parseInt(el.value));
+    else _enrollChecked.delete(parseInt(el.value));
+  });
+  const checked = Array.from(_enrollChecked);
   if (!checked.length) { toast('Select at least one contact', 'error'); return; }
   try {
     const r = await apiFetch('/api/enrollments', { method: 'POST', body: JSON.stringify({ contact_ids: checked, sequence_id: seqId }) });
