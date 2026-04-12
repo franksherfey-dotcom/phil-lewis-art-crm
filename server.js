@@ -762,17 +762,22 @@ app.get('/api/sequences/:id/roster', async (req, res) => {
   try {
     const seqId = req.params.id
 
-    // Enrolled contacts with their status
+    // Enrolled contacts with their status + reply info
     const enrolled = await all(`
       SELECT ct.id, ct.first_name, ct.last_name, ct.email, ct.title,
              co.name AS company_name, co.category AS company_category,
+             co.id AS company_id,
              e.id AS enrollment_id, e.status AS enrollment_status,
-             e.current_step, e.started_at
+             e.current_step, e.started_at, e.completed_at,
+             (SELECT MAX(a.sent_at) FROM activities a
+                WHERE a.contact_id = ct.id AND a.type = 'received_email') AS last_reply_at,
+             (SELECT MAX(a.sent_at) FROM activities a
+                WHERE a.contact_id = ct.id AND a.type = 'email') AS last_sent_at
       FROM enrollments e
       JOIN contacts ct ON ct.id = e.contact_id
       LEFT JOIN companies co ON co.id = ct.company_id
       WHERE e.sequence_id = $1
-      ORDER BY CASE e.status WHEN 'active' THEN 0 WHEN 'paused' THEN 1 WHEN 'replied' THEN 2 WHEN 'completed' THEN 3 ELSE 4 END,
+      ORDER BY CASE e.status WHEN 'replied' THEN 0 WHEN 'active' THEN 1 WHEN 'paused' THEN 2 WHEN 'completed' THEN 3 ELSE 4 END,
                e.started_at DESC
     `, [seqId])
 
@@ -1368,9 +1373,11 @@ app.get('/api/inbox/not-in-sequence', async (req, res) => {
 })
 
 // Deduplicate existing inbox messages — keeps the newest copy, removes older dupes
+// Also detects auto-replies (same contact, identical body start) and keeps only newest
 app.post('/api/inbox/dedup', async (req, res) => {
   try {
-    const result = await run(`
+    // Pass 1: exact duplicates (same contact + subject + same day)
+    const r1 = await run(`
       DELETE FROM activities WHERE id IN (
         SELECT id FROM (
           SELECT id, ROW_NUMBER() OVER (
@@ -1382,7 +1389,21 @@ app.post('/api/inbox/dedup', async (req, res) => {
         ) dupes WHERE rn > 1
       )
     `)
-    const removed = result.rowCount || 0
+    // Pass 2: auto-reply consolidation — same contact, body starts the same (first 100 chars)
+    const r2 = await run(`
+      DELETE FROM activities WHERE id IN (
+        SELECT id FROM (
+          SELECT id, ROW_NUMBER() OVER (
+            PARTITION BY contact_id, LEFT(COALESCE(body,''), 100)
+            ORDER BY sent_at DESC
+          ) AS rn
+          FROM activities
+          WHERE type = 'received_email'
+            AND COALESCE(body,'') != ''
+        ) dupes WHERE rn > 1
+      )
+    `)
+    const removed = (r1.rowCount || 0) + (r2.rowCount || 0)
     res.json({ ok: true, removed })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
@@ -1410,12 +1431,23 @@ app.post('/api/inbox/sync', async (req, res) => {
       const contactId = contact.id
       // Avoid duplicates — check if this subject already logged from this contact
       // within a 24-hour window (handles auto-replies with slightly different timestamps)
+      // Skip exact duplicates (same subject within 24h)
       const existing = await one(
         `SELECT id FROM activities WHERE contact_id=$1 AND type='received_email' AND subject=$2
          AND sent_at BETWEEN ($3::timestamptz - INTERVAL '24 hours') AND ($3::timestamptz + INTERVAL '24 hours')`,
         [contactId, msg.subject, msg.received_at]
       )
       if (existing) continue
+      // Skip auto-replies: if body starts the same as an existing reply from this contact, skip
+      if (msg.body && msg.body.length > 20) {
+        const bodyPrefix = msg.body.substring(0, 100)
+        const autoReplyDupe = await one(
+          `SELECT id FROM activities WHERE contact_id=$1 AND type='received_email'
+           AND LEFT(COALESCE(body,''), 100) = $2 LIMIT 1`,
+          [contactId, bodyPrefix]
+        )
+        if (autoReplyDupe) continue
+      }
       await run(
         `INSERT INTO activities (contact_id, type, subject, body, status, sent_at)
          VALUES ($1,'received_email',$2,$3,'received',$4)`,

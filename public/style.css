@@ -501,6 +501,12 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
   letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 8px;
 }
 .seq-roster-hint { font-size: 12px; color: var(--text-muted); margin-bottom: 10px; }
+.roster-filter-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; padding: 8px 0; }
+.roster-filter-chip { display: inline-flex; gap: 4px; align-items: center; padding: 4px 10px; border: 1px solid var(--border); border-radius: 16px; font-size: 12px; transition: all .15s; }
+.roster-filter-chip:hover { background: var(--card-bg); box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+.roster-filter-active { background: var(--card-bg); box-shadow: 0 0 0 2px var(--primary-pale, rgba(79,70,229,0.15)); }
+.seq-stat-chip { cursor: pointer; transition: opacity .15s; }
+.seq-stat-chip:hover { opacity: 0.8; text-decoration: underline; }
 
 /* ── SEQUENCE BUILDER ── */
 .steps-header { display: flex; justify-content: space-between; align-items: center; margin: 16px 0 8px; }

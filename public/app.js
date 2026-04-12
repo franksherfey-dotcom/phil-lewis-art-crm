@@ -1469,13 +1469,19 @@ async function loadSequences() {
         barHtml += '</div>';
       }
 
+      function statChip(count, label, color, seqId, seqName, statusFilter) {
+        if (count === 0) return '';
+        return '<span class="seq-stat-chip" style="cursor:pointer" onclick="event.stopPropagation();openSequenceRoster(' + seqId + ',' + JSON.stringify(esc(seqName)) + ',\'' + statusFilter + '\')">' +
+          '<strong style="color:' + color + '">' + count + '</strong> ' + label + '</span>';
+      }
+
       var statsLine = st.total > 0
         ? '<div style="display:flex;gap:12px;font-size:12px;color:var(--text-muted);margin-top:4px;flex-wrap:wrap">' +
-            '<span><strong style="color:var(--text)">' + st.total + '</strong> enrolled</span>' +
-            '<span><strong style="color:var(--primary)">' + st.active + '</strong> active</span>' +
-            '<span><strong style="color:var(--success)">' + st.replied + '</strong> replied</span>' +
+            statChip(st.total, 'enrolled', 'var(--text)', s.id, s.name, '') +
+            statChip(st.active, 'active', 'var(--primary)', s.id, s.name, 'active') +
+            statChip(st.replied, 'replied', 'var(--success)', s.id, s.name, 'replied') +
             '<span>Reply rate: <strong style="color:' + (replyRate > 5 ? 'var(--success)' : 'var(--text)') + '">' + replyRate + '%</strong></span>' +
-            (st.stopped > 0 ? '<span style="color:var(--danger)"><strong>' + st.stopped + '</strong> stopped</span>' : '') +
+            (st.stopped > 0 ? statChip(st.stopped, 'stopped', 'var(--danger)', s.id, s.name, 'stopped') : '') +
           '</div>'
         : '<div style="font-size:12px;color:var(--text-muted);margin-top:4px">No enrollments yet</div>';
 
@@ -1508,100 +1514,153 @@ async function loadSequences() {
 }
 
 // ── Sequence Roster Panel ─────────────────────────────────────────────────────
-async function openSequenceRoster(seqId, seqName) {
+async function openSequenceRoster(seqId, seqName, filterStatus) {
   const existing = document.getElementById('seq-roster-panel');
   if (existing) existing.remove();
+
+  var activeFilter = filterStatus || '';
 
   const panel = document.createElement('div');
   panel.id = 'seq-roster-panel';
   panel.className = 'seq-roster-panel';
-  panel.innerHTML = `<div class="seq-roster-loading">Loading roster…</div>`;
-  // Insert after sequences-list
+  panel.innerHTML = '<div class="seq-roster-loading">Loading roster…</div>';
   const seqList = document.getElementById('sequences-list');
   seqList.parentNode.insertBefore(panel, seqList.nextSibling);
   panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
   try {
-    const { enrolled, suggestions } = await apiFetch(`/api/sequences/${seqId}/roster`);
+    const { enrolled, suggestions } = await apiFetch('/api/sequences/' + seqId + '/roster');
 
-    const statusBadge = s =>
-      s === 'active'    ? `<span class="seq-badge seq-active">● Active</span>` :
-      s === 'replied'   ? `<span class="seq-badge seq-replied">✓ Replied</span>` :
-      s === 'completed' ? `<span class="seq-badge seq-completed">✓ Done</span>` :
-      s === 'paused'    ? `<span class="seq-badge seq-completed">⏸ Paused</span>` :
-                          `<span class="seq-badge seq-completed">Stopped</span>`;
-
-    const enrolledRows = enrolled.length
-      ? enrolled.map(c => `
-          <tr>
-            <td><strong>${esc(c.first_name)} ${esc(c.last_name||'')}</strong></td>
-            <td>${esc(c.title||'—')}</td>
-            <td>${c.company_name ? esc(c.company_name) : '—'}</td>
-            <td>${esc(c.email||'—')}</td>
-            <td>${statusBadge(c.enrollment_status)}</td>
-            <td><button class="btn btn-ghost btn-sm" onclick="unenrollFromRoster(${c.enrollment_id}, ${seqId}, '${esc(seqName)}')">Remove</button></td>
-          </tr>`).join('')
-      : `<tr><td colspan="6" class="empty-state" style="padding:16px">No contacts enrolled yet.</td></tr>`;
-
-    const suggestRows = suggestions.length
-      ? suggestions.map(c => `
-          <tr>
-            <td><strong>${esc(c.first_name)} ${esc(c.last_name||'')}</strong></td>
-            <td>${esc(c.title||'—')}</td>
-            <td>${c.company_name ? esc(c.company_name) : '—'}</td>
-            <td>${esc(c.email||'—')}</td>
-            <td>${c.other_enrollment_status === 'active'
-              ? `<span class="seq-badge seq-completed" title="In another sequence">In sequence</span>`
-              : `<span style="color:var(--success,#16a34a);font-size:12px;font-weight:600">● Available</span>`}</td>
-            <td><button class="btn btn-primary btn-sm" onclick="enrollFromRoster(${c.id}, ${seqId}, '${esc(seqName)}')">Add</button></td>
-          </tr>`).join('')
-      : `<tr><td colspan="6" class="empty-state" style="padding:16px">All contacts with emails are already enrolled.</td></tr>`;
-
-    // Compute roster stats
+    // Compute stats
     var rosterActive = enrolled.filter(function(c) { return c.enrollment_status === 'active'; }).length;
     var rosterReplied = enrolled.filter(function(c) { return c.enrollment_status === 'replied'; }).length;
     var rosterCompleted = enrolled.filter(function(c) { return c.enrollment_status === 'completed'; }).length;
     var rosterStopped = enrolled.filter(function(c) { return c.enrollment_status === 'stopped' || c.enrollment_status === 'paused'; }).length;
     var rosterReplyRate = enrolled.length > 0 ? Math.round((rosterReplied / enrolled.length) * 100) : 0;
 
-    var rosterStatsHtml = enrolled.length > 0
-      ? `<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:13px;margin:8px 0 12px">
-          <span><strong style="color:var(--primary)">${rosterActive}</strong> active</span>
-          <span><strong style="color:var(--success)">${rosterReplied}</strong> replied</span>
-          <span><strong>${rosterCompleted}</strong> completed</span>
-          ${rosterStopped > 0 ? `<span style="color:var(--danger)"><strong>${rosterStopped}</strong> stopped</span>` : ''}
-          <span>Reply rate: <strong style="color:${rosterReplyRate > 5 ? 'var(--success)' : 'var(--text)'}">${rosterReplyRate}%</strong></span>
-        </div>`
-      : '';
+    // Filter chips
+    function rosterChip(label, count, status, color) {
+      var isActive = activeFilter === status;
+      return '<span class="roster-filter-chip' + (isActive ? ' roster-filter-active' : '') + '"' +
+        ' style="cursor:pointer;border-color:' + (isActive ? color : 'var(--border)') + '"' +
+        ' onclick="openSequenceRoster(' + seqId + ',' + JSON.stringify(esc(seqName)) + ',\'' + (isActive ? '' : status) + '\')">' +
+        '<strong style="color:' + color + '">' + count + '</strong> ' + label + '</span>';
+    }
 
-    panel.innerHTML = `
-      <div class="seq-roster-header">
-        <div>
-          <div class="seq-roster-title">${esc(seqName)} — Roster</div>
-          <div class="seq-roster-sub">${enrolled.length} enrolled · ${suggestions.filter(s=>s.other_enrollment_status!=='active').length} available to add</div>
-        </div>
-        <button class="inbox-rp-close" onclick="document.getElementById('seq-roster-panel').remove()">✕</button>
-      </div>
-      ${rosterStatsHtml}
+    var filterHtml = '<div class="roster-filter-bar">' +
+      rosterChip('All', enrolled.length, '', 'var(--text)') +
+      rosterChip('Active', rosterActive, 'active', 'var(--primary)') +
+      rosterChip('Replied', rosterReplied, 'replied', 'var(--success)') +
+      rosterChip('Completed', rosterCompleted, 'completed', '#6b7280') +
+      (rosterStopped > 0 ? rosterChip('Stopped', rosterStopped, 'stopped', 'var(--danger)') : '') +
+      '<span style="margin-left:auto;font-size:12px;color:var(--text-muted)">Reply rate: <strong style="color:' + (rosterReplyRate > 5 ? 'var(--success)' : 'var(--text)') + '">' + rosterReplyRate + '%</strong></span>' +
+    '</div>';
 
-      <div class="seq-roster-section-title">Currently Enrolled (${enrolled.length})</div>
-      <div class="table-scroll-wrapper" style="margin-bottom:24px">
-        <table class="data-table">
-          <thead><tr><th>Name</th><th>Title</th><th>Company</th><th>Email</th><th>Status</th><th></th></tr></thead>
-          <tbody>${enrolledRows}</tbody>
-        </table>
-      </div>
+    // Filter enrolled list
+    var filteredEnrolled = enrolled;
+    if (activeFilter) {
+      if (activeFilter === 'stopped') {
+        filteredEnrolled = enrolled.filter(function(c) { return c.enrollment_status === 'stopped' || c.enrollment_status === 'paused'; });
+      } else {
+        filteredEnrolled = enrolled.filter(function(c) { return c.enrollment_status === activeFilter; });
+      }
+    }
 
-      <div class="seq-roster-section-title">Suggested Contacts to Add (${suggestions.length})</div>
-      <div class="seq-roster-hint">● Available = not in any active sequence. Sorted by availability first.</div>
-      <div class="table-scroll-wrapper">
-        <table class="data-table">
-          <thead><tr><th>Name</th><th>Title</th><th>Company</th><th>Email</th><th>Status</th><th></th></tr></thead>
-          <tbody>${suggestRows}</tbody>
-        </table>
-      </div>`;
+    // Build enrolled rows — with action buttons and reply status
+    var enrolledRowsHtml = '';
+    if (filteredEnrolled.length) {
+      filteredEnrolled.forEach(function(c) {
+        var statusBadge =
+          c.enrollment_status === 'active'    ? '<span class="seq-badge seq-active">● Active</span>' :
+          c.enrollment_status === 'replied'   ? '<span class="seq-badge seq-replied">✓ Replied</span>' :
+          c.enrollment_status === 'completed' ? '<span class="seq-badge seq-completed">✓ Done</span>' :
+          c.enrollment_status === 'paused'    ? '<span class="seq-badge seq-completed">⏸ Paused</span>' :
+                                                '<span class="seq-badge seq-completed">Stopped</span>';
+
+        // Reply status: did they reply? Did Frank respond back?
+        var replyInfo = '';
+        if (c.enrollment_status === 'replied' && c.last_reply_at) {
+          var youReplied = c.last_sent_at && new Date(c.last_sent_at) > new Date(c.last_reply_at);
+          if (youReplied) {
+            replyInfo = '<div style="font-size:11px;color:var(--success);margin-top:2px">✓ You responded ' + fmtDate(c.last_sent_at) + '</div>';
+          } else {
+            replyInfo = '<div style="font-size:11px;color:var(--danger);font-weight:600;margin-top:2px">⚠ Awaiting your reply (replied ' + fmtDate(c.last_reply_at) + ')</div>';
+          }
+        }
+
+        // Action buttons based on status
+        var actions = '';
+        if (c.enrollment_status === 'replied') {
+          var youReplied2 = c.last_sent_at && new Date(c.last_sent_at) > new Date(c.last_reply_at);
+          if (!youReplied2) {
+            actions = '<button class="btn btn-primary btn-sm" onclick="openContactDetail(' + c.id + ')">Reply Now</button>';
+          } else {
+            actions = '<button class="btn btn-outline btn-sm" onclick="openContactDetail(' + c.id + ')">View</button>';
+          }
+        } else if (c.enrollment_status === 'active') {
+          actions = '<button class="btn btn-outline btn-sm" onclick="openContactDetail(' + c.id + ')">View</button>';
+        } else {
+          actions = '<button class="btn btn-ghost btn-sm" onclick="openContactDetail(' + c.id + ')">View</button>';
+        }
+        actions += ' <button class="btn btn-ghost btn-sm" style="color:var(--text-muted)" onclick="unenrollFromRoster(' + c.enrollment_id + ',' + seqId + ',\'' + esc(seqName) + '\')">Remove</button>';
+
+        enrolledRowsHtml += '<tr' + (c.enrollment_status === 'replied' && !(c.last_sent_at && new Date(c.last_sent_at) > new Date(c.last_reply_at)) ? ' style="background:var(--success-pale,#f0fdf4)"' : '') + '>' +
+          '<td><a href="#" onclick="event.preventDefault();openContactDetail(' + c.id + ')" style="font-weight:600;color:var(--text);text-decoration:none">' + esc(c.first_name) + ' ' + esc(c.last_name||'') + '</a>' + replyInfo + '</td>' +
+          '<td>' + esc(c.title||'—') + '</td>' +
+          '<td>' + (c.company_name ? '<a href="#" onclick="event.preventDefault();openCompanyDetail(' + (c.company_id||0) + ')" style="color:var(--text);text-decoration:none">' + esc(c.company_name) + '</a>' : '—') + '</td>' +
+          '<td>' + esc(c.email||'—') + '</td>' +
+          '<td>' + statusBadge + '</td>' +
+          '<td style="white-space:nowrap">' + actions + '</td>' +
+        '</tr>';
+      });
+    } else {
+      enrolledRowsHtml = '<tr><td colspan="6" class="empty-state" style="padding:16px">No contacts match this filter.</td></tr>';
+    }
+
+    var suggestRows = suggestions.length
+      ? suggestions.map(function(c) {
+          return '<tr>' +
+            '<td><strong>' + esc(c.first_name) + ' ' + esc(c.last_name||'') + '</strong></td>' +
+            '<td>' + esc(c.title||'—') + '</td>' +
+            '<td>' + (c.company_name ? esc(c.company_name) : '—') + '</td>' +
+            '<td>' + esc(c.email||'—') + '</td>' +
+            '<td>' + (c.other_enrollment_status === 'active'
+              ? '<span class="seq-badge seq-completed" title="In another sequence">In sequence</span>'
+              : '<span style="color:var(--success,#16a34a);font-size:12px;font-weight:600">● Available</span>') + '</td>' +
+            '<td><button class="btn btn-primary btn-sm" onclick="enrollFromRoster(' + c.id + ',' + seqId + ',\'' + esc(seqName) + '\')">Add</button></td>' +
+          '</tr>';
+        }).join('')
+      : '<tr><td colspan="6" class="empty-state" style="padding:16px">All contacts with emails are already enrolled.</td></tr>';
+
+    var filterLabel = activeFilter ? ' — ' + activeFilter.charAt(0).toUpperCase() + activeFilter.slice(1) : '';
+    panel.innerHTML =
+      '<div class="seq-roster-header">' +
+        '<div>' +
+          '<div class="seq-roster-title">' + esc(seqName) + ' — Roster' + filterLabel + '</div>' +
+          '<div class="seq-roster-sub">' + enrolled.length + ' enrolled · ' + suggestions.filter(function(s) { return s.other_enrollment_status !== 'active'; }).length + ' available to add</div>' +
+        '</div>' +
+        '<button class="inbox-rp-close" onclick="document.getElementById(\'seq-roster-panel\').remove()">✕</button>' +
+      '</div>' +
+      filterHtml +
+      '<div class="seq-roster-section-title">' + (activeFilter ? activeFilter.charAt(0).toUpperCase() + activeFilter.slice(1) + ' (' + filteredEnrolled.length + ')' : 'Currently Enrolled (' + enrolled.length + ')') + '</div>' +
+      '<div class="table-scroll-wrapper" style="margin-bottom:24px">' +
+        '<table class="data-table">' +
+          '<thead><tr><th>Name</th><th>Title</th><th>Company</th><th>Email</th><th>Status</th><th></th></tr></thead>' +
+          '<tbody>' + enrolledRowsHtml + '</tbody>' +
+        '</table>' +
+      '</div>' +
+      (activeFilter ? '' :
+        '<div class="seq-roster-section-title">Suggested Contacts to Add (' + suggestions.length + ')</div>' +
+        '<div class="seq-roster-hint">● Available = not in any active sequence. Sorted by availability first.</div>' +
+        '<div class="table-scroll-wrapper">' +
+          '<table class="data-table">' +
+            '<thead><tr><th>Name</th><th>Title</th><th>Company</th><th>Email</th><th>Status</th><th></th></tr></thead>' +
+            '<tbody>' + suggestRows + '</tbody>' +
+          '</table>' +
+        '</div>'
+      );
   } catch(e) {
-    panel.innerHTML = `<div style="padding:20px;color:red">Failed to load roster: ${e.message}</div>`;
+    panel.innerHTML = '<div style="padding:20px;color:red">Failed to load roster: ' + esc(e.message) + '</div>';
   }
 }
 
