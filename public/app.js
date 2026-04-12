@@ -2771,180 +2771,202 @@ function isStuckContact(c) {
 
 async function loadPipeline() {
   try {
-    const contacts = await apiFetch('/api/pipeline');
-    const el = document.getElementById('pipeline-content');
+    var contacts = await apiFetch('/api/pipeline');
+    var el = document.getElementById('pipeline-content');
 
     if (!contacts.length) {
       el.innerHTML = '<div class="empty-state"><div style="font-size:32px;margin-bottom:8px">◉</div><p>No contacts yet. Add contacts and enroll them in sequences to track their pipeline progress.</p></div>';
       return;
     }
 
-    // Count summary stats
-    const totalActive = contacts.filter(c => c.enrollment_status === 'active').length;
-    const totalReplied = contacts.filter(c => c.enrollment_status === 'replied').length;
-    const totalCompleted = contacts.filter(c => c.enrollment_status === 'completed').length;
-    const stuckContacts = contacts.filter(c => isStuckContact(c));
-    const stuckCount = stuckContacts.length;
+    // Bucket contacts into priority groups
+    var replied = contacts.filter(function(c) { return c.enrollment_status === 'replied'; });
+    var stuck = contacts.filter(function(c) { return isStuckContact(c); });
+    var active = contacts.filter(function(c) { return c.enrollment_status === 'active' && !isStuckContact(c); });
+    var completed = contacts.filter(function(c) { return c.enrollment_status === 'completed'; });
+    var stopped = contacts.filter(function(c) { return c.enrollment_status === 'stopped'; });
+    var notEnrolled = contacts.filter(function(c) { return !c.enrollment_status; });
+    var needEmail = notEnrolled.filter(function(c) { return !c.email; });
+    var haveEmail = notEnrolled.filter(function(c) { return !!c.email; });
 
-    // Group by sequence_name, then by current_step
-    // Contacts without enrollment go into a special group
-    const seqMap = {};
-    contacts.forEach(c => {
-      const seqName = c.sequence_name || '__none__';
-      if (!seqMap[seqName]) seqMap[seqName] = {};
-      const step = c.enrollment_status === 'active' ? (c.current_step || 0)
-                 : c.enrollment_status === 'completed' ? '__completed__'
-                 : c.enrollment_status === 'replied' ? '__replied__'
-                 : c.enrollment_status === 'stopped' ? '__stopped__'
-                 : '__none__';
-      if (!seqMap[seqName][step]) seqMap[seqName][step] = [];
-      seqMap[seqName][step].push(c);
-    });
+    var html = '';
 
-    // Sort sequence names: put __none__ last
-    const seqNames = Object.keys(seqMap).sort((a, b) => {
-      if (a === '__none__') return 1;
-      if (b === '__none__') return -1;
-      return a.localeCompare(b);
-    });
+    // ── Summary stat cards ──
+    html += '<div class="pipeline-summary" style="margin-bottom:20px">';
+    html += pipelineStat(replied.length, 'Need Follow-Up', 'var(--success)', 'replied');
+    html += pipelineStat(stuck.length, 'Stuck (2+ wks)', 'var(--danger)', 'stuck');
+    html += pipelineStat(active.length, 'Active', 'var(--primary)', 'active');
+    html += pipelineStat(completed.length, 'Completed', '#6b7280', 'completed');
+    html += pipelineStat(haveEmail.length, 'Ready to Enroll', '#8b5cf6', 'ready');
+    html += pipelineStat(needEmail.length, 'Need Email', '#9ca3af', 'needing');
+    html += '</div>';
 
-    let html = '';
-
-    // Summary stats bar
-    html += `
-      <div class="pipeline-summary" style="margin-bottom:16px">
-        <div class="pipeline-summary-card stage-active">
-          <div class="pipeline-summary-count">${totalActive}</div>
-          <div class="pipeline-summary-label">Active</div>
-        </div>
-        <div class="pipeline-summary-card stage-complete">
-          <div class="pipeline-summary-count">${totalReplied}</div>
-          <div class="pipeline-summary-label">Replied</div>
-        </div>
-        <div class="pipeline-summary-card stage-complete">
-          <div class="pipeline-summary-count">${totalCompleted}</div>
-          <div class="pipeline-summary-label">Completed</div>
-        </div>
-        ${stuckCount > 0 ? `
-        <div class="pipeline-summary-card" style="border-color:var(--danger);cursor:default">
-          <div class="pipeline-summary-count" style="color:var(--danger)">${stuckCount}</div>
-          <div class="pipeline-summary-label" style="color:var(--danger)">Stuck</div>
-        </div>` : ''}
-      </div>
-    `;
-
-    // Stuck alert banner
-    if (stuckCount > 0) {
-      html += `
-        <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:10px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px;font-size:13px;color:#856404">
-          <span style="font-size:16px">⚠</span>
-          <strong>${stuckCount} contact${stuckCount !== 1 ? 's' : ''} haven't been contacted in 2+ weeks.</strong>
-          <span style="color:#6c757d;font-size:12px">Scroll down to see contacts with a red ⚠ Stuck badge.</span>
-        </div>
-      `;
+    // ── 1. REPLIED — Need Follow-Up (highest priority) ──
+    if (replied.length) {
+      html += pipelineSection('replied', '↩ Need Follow-Up', replied.length, 'stage-complete',
+        'These prospects replied — follow up now!',
+        replied.map(function(c) { return pipelineActionCard(c, 'replied'); }).join('')
+      );
     }
 
-    // Build sequence sections
-    for (const seqName of seqNames) {
-      const stepMap = seqMap[seqName];
-      const displaySeqName = seqName === '__none__' ? 'No Sequence' : seqName;
+    // ── 2. STUCK — Needs Attention ──
+    if (stuck.length) {
+      html += pipelineSection('stuck', '⚠ Stuck — No Contact in 2+ Weeks', stuck.length, 'stage-stuck',
+        'These contacts are enrolled but haven\'t been reached recently.',
+        stuck.map(function(c) { return pipelineActionCard(c, 'stuck'); }).join('')
+      );
+    }
 
-      // Get all steps, sorted numerically, with special statuses last
-      const stepKeys = Object.keys(stepMap).sort((a, b) => {
-        const specialOrder = { '__completed__': 900, '__replied__': 901, '__stopped__': 902, '__none__': 999 };
-        const aVal = specialOrder[a] !== undefined ? specialOrder[a] : parseInt(a);
-        const bVal = specialOrder[b] !== undefined ? specialOrder[b] : parseInt(b);
-        return aVal - bVal;
+    // ── 3. ACTIVE — In Sequences ──
+    if (active.length) {
+      // Sub-group by sequence name
+      var seqGroups = {};
+      active.forEach(function(c) {
+        var key = c.sequence_name || 'Unknown Sequence';
+        if (!seqGroups[key]) seqGroups[key] = [];
+        seqGroups[key].push(c);
       });
+      var seqHtml = '';
+      Object.keys(seqGroups).sort().forEach(function(seqName) {
+        var cts = seqGroups[seqName];
+        seqHtml += '<div class="pipeline-seq-group">';
+        seqHtml += '<div class="pipeline-seq-name">' + esc(seqName) + ' <span class="pipeline-seq-count">' + cts.length + '</span></div>';
+        seqHtml += '<div class="pipeline-action-grid">';
+        seqHtml += cts.map(function(c) { return pipelineActionCard(c, 'active'); }).join('');
+        seqHtml += '</div></div>';
+      });
+      html += pipelineSection('active', 'In Sequences', active.length, 'stage-active', '', seqHtml);
+    }
 
-      html += `<div class="pipeline-stage-section" style="margin-bottom:24px">`;
+    // ── 4. COMPLETED ──
+    if (completed.length) {
+      html += pipelineCollapsible('completed', 'Completed Sequences', completed.length, 'stage-complete',
+        completed.map(function(c) { return pipelineCompactRow(c); }).join('')
+      );
+    }
 
-      for (const stepKey of stepKeys) {
-        const stepContacts = stepMap[stepKey];
-        let stepLabel;
-        let headerClass = 'stage-active';
+    // ── 5. READY TO ENROLL — have email but no sequence ──
+    if (haveEmail.length) {
+      html += pipelineSection('ready', 'Ready to Enroll', haveEmail.length, 'stage-ready',
+        'These contacts have email addresses but aren\'t in a sequence yet.',
+        '<div class="pipeline-action-grid">' + haveEmail.map(function(c) { return pipelineActionCard(c, 'ready'); }).join('') + '</div>'
+      );
+    }
 
-        if (stepKey === '__completed__') {
-          stepLabel = 'Completed';
-          headerClass = 'stage-complete';
-        } else if (stepKey === '__replied__') {
-          stepLabel = 'Replied';
-          headerClass = 'stage-complete';
-        } else if (stepKey === '__stopped__') {
-          stepLabel = 'Stopped';
-          headerClass = 'stage-none';
-        } else if (stepKey === '__none__') {
-          stepLabel = 'Not Enrolled';
-          headerClass = 'stage-none';
-        } else {
-          const totalSteps = stepContacts[0]?.total_steps || '?';
-          stepLabel = `Step ${stepKey} of ${totalSteps}`;
-        }
-
-        html += `
-          <div class="pipeline-stage-header ${headerClass}" style="margin-top:0;border-radius:8px 8px 0 0">
-            <span class="pipeline-stage-label">
-              ${seqName !== '__none__' ? `<span style="font-size:11px;opacity:.75;font-weight:400;margin-right:6px">&#128231; ${esc(displaySeqName)} —</span>` : ''}
-              ${esc(stepLabel)}
-            </span>
-            <span class="pipeline-stage-count">${stepContacts.length} contact${stepContacts.length !== 1 ? 's' : ''}</span>
-          </div>
-          <table class="data-table pipeline-table" style="border-radius:0 0 8px 8px;margin-bottom:2px">
-            <thead>
-              <tr>
-                <th>Contact</th>
-                <th>Company</th>
-                <th>Status</th>
-                <th>Emails Sent</th>
-                <th>Last Contact</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${stepContacts.map(c => {
-                const stuck = isStuckContact(c);
-                return `
-                  <tr${stuck ? ' style="background:#fff8f8"' : ''}>
-                    <td>
-                      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-                        ${c.is_primary ? '<span class="primary-badge" title="Primary contact">★</span>' : ''}
-                        <a href="#" onclick="event.preventDefault();openContactDetail(${c.id})" style="font-weight:600">${esc(c.first_name)} ${esc(c.last_name || '')}</a>
-                        ${stuck ? '<span style="background:#fee2e2;color:#b91c1c;font-size:10px;padding:1px 6px;border-radius:10px;font-weight:600">⚠ Stuck</span>' : ''}
-                      </div>
-                      ${c.title ? `<div style="font-size:11px;color:var(--text-muted)">${esc(c.title)}</div>` : ''}
-                      ${c.email ? `<div style="font-size:11px;color:var(--text-muted)">${esc(c.email)}</div>` : '<div style="font-size:11px;color:var(--danger)">⚠ No email</div>'}
-                    </td>
-                    <td>
-                      ${c.company_id ? `<a href="#" onclick="event.preventDefault();openCompanyDetail(${c.company_id})">${esc(c.company_name || '—')}</a>` : '<span style="color:var(--text-muted)">—</span>'}
-                      ${c.company_status ? `<div style="font-size:11px;margin-top:2px"><span class="status-pill status-${(c.company_status||'').replace(/\s/g,'-')}">${esc(c.company_status)}</span></div>` : ''}
-                    </td>
-                    <td>
-                      ${c.enrollment_status === 'active'
-                        ? `<span style="color:var(--primary);font-size:12px;font-weight:600">Active</span>`
-                        : c.enrollment_status === 'completed'
-                        ? `<span style="color:var(--success);font-size:12px;font-weight:600">✓ Completed</span>`
-                        : c.enrollment_status === 'replied'
-                        ? `<span style="color:var(--success);font-size:12px;font-weight:600">↩ Replied</span>`
-                        : c.enrollment_status === 'stopped'
-                        ? `<span style="color:var(--text-muted);font-size:12px">Stopped</span>`
-                        : `<span style="color:var(--text-muted);font-size:12px">—</span>`
-                      }
-                    </td>
-                    <td>
-                      <span class="pipeline-email-count">${c.emails_sent || 0}</span>
-                    </td>
-                    <td style="color:var(--text-muted)">${fmtDate(c.last_contact_at)}</td>
-                  </tr>
-                `;
-              }).join('')}
-            </tbody>
-          </table>
-        `;
-      }
-      html += `</div>`;
+    // ── 6. NEED EMAIL — collapsed by default ──
+    if (needEmail.length) {
+      html += pipelineCollapsible('needing', 'Need Email Address (' + needEmail.length + ')', needEmail.length, 'stage-none',
+        needEmail.map(function(c) { return pipelineCompactRow(c); }).join('')
+      );
     }
 
     el.innerHTML = html;
   } catch(e) { toast(e.message, 'error'); }
+}
+
+function pipelineStat(count, label, color, scrollTo) {
+  return '<div class="pipeline-summary-card" style="border-color:' + color + ';cursor:pointer" onclick="scrollToPipelineSection(\'' + scrollTo + '\')">' +
+    '<div class="pipeline-summary-count" style="color:' + color + '">' + count + '</div>' +
+    '<div class="pipeline-summary-label">' + label + '</div>' +
+  '</div>';
+}
+
+function scrollToPipelineSection(id) {
+  var el = document.getElementById('pipeline-sec-' + id);
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function pipelineSection(id, title, count, cls, subtitle, content) {
+  return '<div id="pipeline-sec-' + id + '" class="pipeline-priority-section" style="margin-bottom:24px">' +
+    '<div class="pipeline-stage-header ' + cls + '" style="border-radius:8px 8px 0 0">' +
+      '<span class="pipeline-stage-label">' + title + '</span>' +
+      '<span class="pipeline-stage-count">' + count + ' contact' + (count !== 1 ? 's' : '') + '</span>' +
+    '</div>' +
+    (subtitle ? '<div style="padding:8px 16px;font-size:12px;color:var(--text-muted);background:var(--card-bg);border:1px solid var(--border);border-top:0">' + subtitle + '</div>' : '') +
+    '<div style="background:var(--card-bg);border:1px solid var(--border);border-top:0;border-radius:0 0 8px 8px;padding:12px">' +
+      content +
+    '</div>' +
+  '</div>';
+}
+
+function pipelineCollapsible(id, title, count, cls, content) {
+  return '<div id="pipeline-sec-' + id + '" class="pipeline-priority-section" style="margin-bottom:24px">' +
+    '<div class="pipeline-stage-header ' + cls + '" style="border-radius:8px;cursor:pointer" onclick="togglePipelineCollapse(\'' + id + '\')">' +
+      '<span class="pipeline-stage-label">' + title + '</span>' +
+      '<span class="pipeline-stage-count" style="display:flex;align-items:center;gap:6px">' +
+        count + ' contact' + (count !== 1 ? 's' : '') +
+        ' <span id="pipeline-chevron-' + id + '" style="font-size:10px;transition:transform .2s">▶</span>' +
+      '</span>' +
+    '</div>' +
+    '<div id="pipeline-body-' + id + '" style="display:none;background:var(--card-bg);border:1px solid var(--border);border-top:0;border-radius:0 0 8px 8px;padding:12px;max-height:400px;overflow-y:auto">' +
+      content +
+    '</div>' +
+  '</div>';
+}
+
+function togglePipelineCollapse(id) {
+  var body = document.getElementById('pipeline-body-' + id);
+  var chevron = document.getElementById('pipeline-chevron-' + id);
+  if (!body) return;
+  var showing = body.style.display !== 'none';
+  body.style.display = showing ? 'none' : 'block';
+  if (chevron) chevron.style.transform = showing ? '' : 'rotate(90deg)';
+  // Fix border radius on header when expanded
+  var header = body.previousElementSibling;
+  if (header) header.style.borderRadius = showing ? '8px' : '8px 8px 0 0';
+}
+
+function pipelineActionCard(c, mode) {
+  var stuck = isStuckContact(c);
+  var borderColor = mode === 'replied' ? 'var(--success)' : mode === 'stuck' ? 'var(--danger)' : 'transparent';
+  var stepInfo = '';
+  if (c.enrollment_status === 'active' && c.current_step) {
+    stepInfo = '<span class="pipe-card-step">Step ' + c.current_step + '/' + (c.total_steps || '?') + '</span>';
+  }
+
+  return '<div class="pipe-action-card" style="border-left:3px solid ' + borderColor + '">' +
+    '<div class="pipe-card-top">' +
+      '<div class="pipe-card-identity">' +
+        (c.is_primary ? '<span class="primary-badge" title="Primary">★</span> ' : '') +
+        '<a href="#" onclick="event.preventDefault();openContactDetail(' + c.id + ')" class="pipe-card-name">' + esc(c.first_name) + ' ' + esc(c.last_name || '') + '</a>' +
+        (stuck ? ' <span class="pipe-stuck-badge">⚠ Stuck</span>' : '') +
+      '</div>' +
+      stepInfo +
+    '</div>' +
+    (c.title ? '<div class="pipe-card-title">' + esc(c.title) + '</div>' : '') +
+    '<div class="pipe-card-company">' +
+      (c.company_id ? '<a href="#" onclick="event.preventDefault();openCompanyDetail(' + c.company_id + ')">' + esc(c.company_name || '—') + '</a>' : '<span style="color:var(--text-muted)">—</span>') +
+    '</div>' +
+    '<div class="pipe-card-meta">' +
+      (c.email ? '<span class="pipe-card-email">' + esc(c.email) + '</span>' : '<span style="color:var(--danger);font-size:11px">No email</span>') +
+      (c.emails_sent ? '<span class="pipe-card-sent">' + c.emails_sent + ' sent</span>' : '') +
+      (c.last_contact_at ? '<span class="pipe-card-date">' + fmtDate(c.last_contact_at) + '</span>' : '') +
+    '</div>' +
+    '<div class="pipe-card-actions">' +
+      (mode === 'replied' ? '<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();openContactDetail(' + c.id + ')">Follow Up</button>' : '') +
+      (mode === 'ready' ? '<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();openContactDetail(' + c.id + ')">Enroll</button>' : '') +
+      (mode === 'stuck' ? '<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();openContactDetail(' + c.id + ')">Review</button>' : '') +
+      (mode === 'active' ? '<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openContactDetail(' + c.id + ')">View</button>' : '') +
+    '</div>' +
+  '</div>';
+}
+
+function pipelineCompactRow(c) {
+  return '<div class="pipe-compact-row">' +
+    '<div class="pipe-compact-identity">' +
+      (c.is_primary ? '<span class="primary-badge" title="Primary">★</span> ' : '') +
+      '<a href="#" onclick="event.preventDefault();openContactDetail(' + c.id + ')">' + esc(c.first_name) + ' ' + esc(c.last_name || '') + '</a>' +
+    '</div>' +
+    '<div class="pipe-compact-company">' +
+      (c.company_id ? '<a href="#" onclick="event.preventDefault();openCompanyDetail(' + c.company_id + ')">' + esc(c.company_name || '—') + '</a>' : '—') +
+    '</div>' +
+    '<div class="pipe-compact-email">' +
+      (c.email ? esc(c.email) : '<span style="color:var(--danger)">No email</span>') +
+    '</div>' +
+    '<div class="pipe-compact-action">' +
+      '<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openContactDetail(' + c.id + ')">View</button>' +
+    '</div>' +
+  '</div>';
 }
 
 function stageSlug(stage) {

@@ -848,6 +848,57 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
   padding: 0 6px;
 }
 
+/* Pipeline stuck stage */
+.pipeline-stage-header.stage-stuck { background: #fef2f2; border-bottom-color: var(--danger); }
+.pipeline-stage-header.stage-stuck .pipeline-stage-label { color: var(--danger); }
+.pipeline-stage-header.stage-ready { background: #f5f3ff; border-bottom-color: #8b5cf6; }
+.pipeline-stage-header.stage-ready .pipeline-stage-label { color: #8b5cf6; }
+
+/* Pipeline action card grid */
+.pipeline-action-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+}
+.pipe-action-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px 14px; transition: box-shadow .15s;
+}
+.pipe-action-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.07); }
+.pipe-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 2px; }
+.pipe-card-identity { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.pipe-card-name { font-weight: 600; font-size: 13px; color: var(--text); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pipe-card-name:hover { color: var(--primary); }
+.pipe-card-step { font-size: 11px; color: var(--text-muted); white-space: nowrap; background: var(--primary-pale); padding: 1px 7px; border-radius: 10px; font-weight: 600; color: var(--primary); }
+.pipe-stuck-badge { background: #fee2e2; color: #b91c1c; font-size: 10px; padding: 1px 6px; border-radius: 10px; font-weight: 600; white-space: nowrap; }
+.pipe-card-title { font-size: 11px; color: var(--text-muted); margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pipe-card-company { font-size: 12px; margin-bottom: 4px; }
+.pipe-card-company a { color: var(--text); text-decoration: none; }
+.pipe-card-company a:hover { color: var(--primary); }
+.pipe-card-meta { display: flex; flex-wrap: wrap; gap: 8px; font-size: 11px; color: var(--text-muted); margin-bottom: 8px; }
+.pipe-card-email { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pipe-card-sent { font-weight: 600; }
+.pipe-card-actions { display: flex; gap: 6px; }
+
+/* Pipeline sequence sub-groups */
+.pipeline-seq-group { margin-bottom: 12px; }
+.pipeline-seq-name { font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.pipeline-seq-count { background: var(--primary-pale); color: var(--primary); font-size: 10px; padding: 1px 6px; border-radius: 10px; }
+
+/* Pipeline compact rows (for collapsed sections) */
+.pipe-compact-row {
+  display: grid; grid-template-columns: 1.2fr 1fr 1.5fr auto;
+  gap: 8px; align-items: center; padding: 6px 4px;
+  font-size: 12px; border-bottom: 1px solid var(--border);
+}
+.pipe-compact-row:last-child { border-bottom: 0; }
+.pipe-compact-identity { display: flex; align-items: center; gap: 4px; }
+.pipe-compact-identity a { font-weight: 500; color: var(--text); text-decoration: none; }
+.pipe-compact-identity a:hover { color: var(--primary); }
+.pipe-compact-company a { color: var(--text-muted); text-decoration: none; }
+.pipe-compact-company a:hover { color: var(--primary); }
+.pipe-compact-email { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* ── UTILITIES ── */
 .empty-state { text-align: center; padding: 60px 20px; color: var(--text-muted); font-size: 13px; }
 .empty-state p { margin-top: 8px; }
