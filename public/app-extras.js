@@ -3,10 +3,18 @@
 // getArtForTags() scores each gallery entry by tag overlap with the
 // prospect's company tags, so the best match is always automatic.
 
+var GALLERY_DISPLAY_NAMES = {
+  'ocean': 'Ocean & Surf', 'wildlife': 'Wildlife', 'nature': 'Nature & Mountains',
+  'psychedelic': 'Psychedelic', 'fantasy': 'Fantasy', 'whimsical': 'Whimsical',
+  'drinkware': 'Drinkware', 'apparel': 'Apparel', 'board-sports': 'Board Sports',
+  'cards-stationery': 'Cards & Stationery', 'books': 'Books',
+  'home-lifestyle': 'Home & Lifestyle', 'disc-sports': 'Disc Sports', 'stickers': 'Stickers'
+};
+
 function _artToImage(art) {
-  const label = (GALLERY_DISPLAY_NAMES && GALLERY_DISPLAY_NAMES[art.category])
+  var label = (GALLERY_DISPLAY_NAMES[art.category])
     || art.category || art.title;
-  return { url: art.url, alt: 'Phil Lewis Art × ' + art.title, label };
+  return { url: art.url, alt: 'Phil Lewis Art × ' + art.title, label: label };
 }
 
 // Given a tags string (comma-separated), return the best matching art image
