@@ -1059,9 +1059,9 @@ app.get('/api/contacts/:id/enrollments', async (req, res) => {
     // Attach activity timeline for each enrollment
     for (var enr of rows) {
       enr.activities = await all(`
-        SELECT id, type, subject, status, sent_at, created_at
+        SELECT id, type, subject, status, sent_at
         FROM activities WHERE enrollment_id=$1
-        ORDER BY sent_at ASC NULLS LAST, created_at ASC
+        ORDER BY sent_at ASC NULLS LAST
       `, [enr.id])
     }
     res.json(rows)

@@ -381,7 +381,7 @@ function renderEnrollmentHistory(enrollments, contactId) {
         h += '<div class="eh-timeline-content">';
         h += '<span class="eh-timeline-label" style="color:' + stepColor + '">' + stepIcon + '</span>';
         h += '<span class="eh-timeline-subject">' + esc(a.subject || '(no subject)') + '</span>';
-        h += '<span class="eh-timeline-date">' + fmtDate(a.sent_at || a.created_at) + '</span>';
+        h += '<span class="eh-timeline-date">' + fmtDate(a.sent_at) + '</span>';
         h += '</div></div>';
       }
     }
