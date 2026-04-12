@@ -316,6 +316,114 @@ function renderEnrollmentBadges(enrollments, onDoneJs) {
   }).join('') + '</div>';
 }
 
+// ── QUEUE DETAIL ART PICKER ─────────────────────────────────────────────
+
+function openQdArtPicker(companyTags) {
+  var picker = document.getElementById('qd-art-picker');
+  if (!picker) return;
+  if (!picker.classList.contains('hidden')) { picker.classList.add('hidden'); return; }
+
+  var arts = _artCache || [];
+  // Score by tag match relevance
+  var tagArr = (companyTags || '').split(',').map(function(t) { return t.trim().toLowerCase(); }).filter(Boolean);
+  var scored = arts.map(function(a) {
+    var artTags = (a.tags || '').split(',').map(function(t) { return t.trim().toLowerCase(); }).filter(Boolean);
+    var overlap = 0;
+    for (var i = 0; i < tagArr.length; i++) {
+      if (artTags.indexOf(tagArr[i]) !== -1) overlap++;
+    }
+    return { art: a, score: overlap * 10 + (a.priority || 0) };
+  });
+  scored.sort(function(a, b) { return b.score - a.score; });
+
+  var h = '<div class="qd-art-picker-grid">';
+  for (var i = 0; i < scored.length; i++) {
+    var a = scored[i].art;
+    var matchBadge = scored[i].score > 0 ? '<span class="qd-art-match">match</span>' : '';
+    h += '<div class="qd-art-picker-item" onclick="selectQdArt(' + a.id + ')" title="' + esc(a.title) + '">';
+    h += '<img src="' + esc(a.url) + '" alt="' + esc(a.title) + '">';
+    h += '<div class="qd-art-picker-label">' + esc(a.title) + matchBadge + '</div>';
+    h += '</div>';
+  }
+  h += '</div>';
+  picker.innerHTML = h;
+  picker.classList.remove('hidden');
+}
+
+function selectQdArt(artId) {
+  var art = (_artCache || []).find(function(a) { return a.id === artId; });
+  if (!art) return;
+
+  var textarea = document.getElementById('queue-edit-body');
+  if (!textarea) return;
+  var body = textarea.value;
+
+  // Build the <img> tag for this art piece
+  var imgTag = '<img src="' + art.url + '" alt="Phil Lewis ' + (art.title || 'Art') + '" width="200" style="border-radius:8px;margin:4px;">';
+
+  // Replace existing <img> tags or {{art_block}} placeholder
+  var imgPattern = /<img\s+src="https:\/\/phillewisart\.com\/cdn\/shop\/[^"]*"[^>]*>/g;
+  var hasImages = imgPattern.test(body);
+  var artBlockPattern = /\{\{art_block\}\}/g;
+  var hasArtBlock = artBlockPattern.test(body);
+
+  if (hasImages) {
+    // Replace all existing Phil Lewis art images with the new one
+    body = body.replace(/<img\s+src="https:\/\/phillewisart\.com\/cdn\/shop\/[^"]*"[^>]*>/g, '');
+    // Clean up leftover whitespace from removed images
+    body = body.replace(/\n{3,}/g, '\n\n');
+    // Find a good insertion point — after "Here's Phil's art" type line or before the closing paragraph
+    var insertIdx = findArtInsertPoint(body);
+    body = body.slice(0, insertIdx) + '\n' + imgTag + '\n' + body.slice(insertIdx);
+  } else if (hasArtBlock) {
+    body = body.replace(artBlockPattern, imgTag);
+  } else {
+    // No images and no placeholder — append before closing paragraph
+    var insertIdx = findArtInsertPoint(body);
+    body = body.slice(0, insertIdx) + '\n\n' + imgTag + '\n' + body.slice(insertIdx);
+  }
+
+  textarea.value = body;
+
+  // Show preview of selected art
+  var preview = document.getElementById('qd-art-preview');
+  if (preview) {
+    preview.innerHTML = '<div class="qd-art-selected"><img src="' + esc(art.url) + '" alt="' + esc(art.title) + '"><span>' + esc(art.title) + '</span></div>';
+  }
+
+  // Close picker
+  var picker = document.getElementById('qd-art-picker');
+  if (picker) picker.classList.add('hidden');
+}
+
+function removeQdArt() {
+  var textarea = document.getElementById('queue-edit-body');
+  if (!textarea) return;
+  var body = textarea.value;
+
+  // Remove all Phil Lewis art <img> tags
+  body = body.replace(/<img\s+src="https:\/\/phillewisart\.com\/cdn\/shop\/[^"]*"[^>]*>\n?/g, '');
+  body = body.replace(/\n{3,}/g, '\n\n');
+  textarea.value = body;
+
+  var preview = document.getElementById('qd-art-preview');
+  if (preview) preview.innerHTML = '<div class="qd-art-selected" style="color:var(--text-muted);font-size:12px;font-style:italic">No art selected</div>';
+}
+
+function findArtInsertPoint(body) {
+  // Try to find "Here's" line or similar art intro
+  var artIntro = body.search(/here'?s\s+(a sample|phil|some|one|an example)/i);
+  if (artIntro !== -1) {
+    var nextLine = body.indexOf('\n', artIntro);
+    return nextLine !== -1 ? nextLine + 1 : body.length;
+  }
+  // Try to find the line before "I'd love to" or "Would you" closing paragraph
+  var closing = body.search(/\n(I'?d love|Would you|I'd be happy|Happy to|Let me know|Looking forward)/i);
+  if (closing !== -1) return closing;
+  // Default: end of body
+  return body.length;
+}
+
 // Render full enrollment history for contact detail — all statuses with timeline
 function renderEnrollmentHistory(enrollments, contactId) {
   if (!enrollments || !enrollments.length) {

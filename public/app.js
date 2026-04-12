@@ -2204,6 +2204,16 @@ async function openQueueDetail(index) {
       <textarea id="queue-edit-body" class="queue-detail-textarea" rows="12">${esc(preview.body)}</textarea>
     </div>
 
+    <!-- Art picker for queue detail -->
+    <div id="qd-art-section">
+      <div id="qd-art-preview"></div>
+      <div style="display:flex;gap:6px;margin-bottom:12px">
+        <button class="btn btn-outline btn-sm" onclick="openQdArtPicker('${esc(preview.company_tags || '')}')">Change Art</button>
+        <button class="btn btn-outline btn-sm" onclick="removeQdArt()">No Art</button>
+      </div>
+      <div id="qd-art-picker" class="hidden"></div>
+    </div>
+
     <div class="queue-detail-actions">
       <button class="btn btn-primary" onclick="sendFromQueueDetail(${item.enrollment_id})">Send Email</button>
       <button class="btn btn-outline" onclick="previewFromQueueDetail(${item.enrollment_id})">Preview</button>

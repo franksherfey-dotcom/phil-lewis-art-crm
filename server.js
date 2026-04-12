@@ -322,6 +322,19 @@ const migrationReady = (async () => {
       UPDATE companies SET tags = REPLACE(tags, '"', '')
       WHERE tags LIKE '%"%'
     `)
+
+    // Tag known licensing partners — append 'licensing' if not already tagged
+    var licensingPartners = ['MinuteKey', 'Minute Key', 'Meier', 'Soulcraft']
+    for (var lp of licensingPartners) {
+      await pool.query(`
+        UPDATE companies SET tags = CASE
+          WHEN tags IS NULL OR tags = '' THEN 'licensing'
+          WHEN tags NOT LIKE '%licensing%' THEN tags || ',licensing'
+          ELSE tags
+        END
+        WHERE LOWER(name) LIKE LOWER($1)
+      `, ['%' + lp + '%'])
+    }
   } catch (e) { console.error('Users migration error:', e.message) }
 })()
 
@@ -2022,14 +2035,14 @@ app.get('/api/pipeline/stuck-count', async (req, res) => {
 
 const ART_SEEDS = [
   // ── Collaborations (original) ──
-  { title: 'Soulcraft Wake Surf Boards', url: 'https://phillewisart.com/cdn/shop/articles/soulcraft-header2_600x.jpg?v=1630337503', tags: 'skateboard,surf', category: 'boards' },
-  { title: 'Meier Skis', url: 'https://phillewisart.com/cdn/shop/articles/Final_3_wood_demo_8041b6df-1fe3-4780-98f7-802164043715_600x.jpg?v=1645204598', tags: 'snowboard,outdoor', category: 'boards' },
+  { title: 'Soulcraft Wake Surf Boards', url: 'https://phillewisart.com/cdn/shop/articles/soulcraft-header2_600x.jpg?v=1630337503', tags: 'skateboard,surf,licensing', category: 'boards' },
+  { title: 'Meier Skis', url: 'https://phillewisart.com/cdn/shop/articles/Final_3_wood_demo_8041b6df-1fe3-4780-98f7-802164043715_600x.jpg?v=1645204598', tags: 'snowboard,outdoor,licensing', category: 'boards' },
   { title: 'Epic Water Filters', url: 'https://phillewisart.com/cdn/shop/articles/epic-hero2_600x.jpg?v=1604016747', tags: 'drinkware,camping,fishing', category: 'drinkware' },
   { title: 'Liberty Puzzles', url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4423WEB_600x.jpg?v=1603909822', tags: 'puzzles,calendars,cards', category: 'print' },
   { title: 'Third Eye Tapestries', url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4973WEB_768653d3-f5fc-42a1-8a97-c2929961780a_600x.jpg?v=1603909864', tags: 'fabric,lifestyle', category: 'home-decor' },
   { title: 'LogoJET UV Products', url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product5843WEB_fadcaa8c-3b21-462c-b8be-26b402bc6f94_600x.jpg?v=1747320948', tags: 'hard-goods', category: 'hard-goods', is_default: true },
   { title: 'Grassroots California', url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4389WEB_600x.jpg?v=1603909818', tags: 'apparel,footwear', category: 'apparel' },
-  { title: 'Minute Key', url: 'https://phillewisart.com/cdn/shop/articles/minute-key-collab-hero_600x.jpg?v=1603909120', tags: 'hard-goods,lifestyle', category: 'hard-goods' },
+  { title: 'Minute Key', url: 'https://phillewisart.com/cdn/shop/articles/minute-key-collab-hero_600x.jpg?v=1603909120', tags: 'hard-goods,lifestyle,licensing', category: 'hard-goods' },
   { title: 'PAMP Silver Coins', url: 'https://phillewisart.com/cdn/shop/articles/package-open_600x.jpg?v=1623250937', tags: 'hard-goods,lifestyle', category: 'collectibles' },
   // ── Stickers & Collectibles ──
   { title: 'Sticker Pack — 7 Chakras', url: 'https://phillewisart.com/cdn/shop/products/stickerpack3.jpg?v=1618612977', tags: 'stickers,collectibles', category: 'stickers' },
@@ -2051,8 +2064,8 @@ const ART_SEEDS = [
   { title: 'Skateboard Decks', url: 'https://phillewisart.com/cdn/shop/products/IMG_0896_600x.jpg?v=1646926505', tags: 'skateboard,boardsports', category: 'boards' },
   { title: 'Skateboard Grip Tape', url: 'https://phillewisart.com/cdn/shop/files/three-headed-dragon_3903ccd9-da88-4bf2-86d5-2feabf344e40_600x.jpg?v=1762356481', tags: 'skateboard,boardsports', category: 'boards' },
   { title: 'Custom Traction Pads', url: 'https://phillewisart.com/cdn/shop/files/1_69101f2a-4b32-4f2d-9646-06617f1596b6_600x.jpg?v=1775862568', tags: 'surf,boardsports', category: 'boards' },
-  { title: 'Soulcraft Custom Surfboards', url: 'https://phillewisart.com/cdn/shop/products/surfboard1_600x.jpg?v=1639755792', tags: 'surf,boardsports', category: 'boards' },
-  { title: 'Meier Custom Skis & Snowboards', url: 'https://phillewisart.com/cdn/shop/products/Pow-Days_600x.jpg?v=1701384339', tags: 'snowboard,ski,boardsports,outdoor', category: 'boards' },
+  { title: 'Soulcraft Custom Surfboards', url: 'https://phillewisart.com/cdn/shop/products/surfboard1_600x.jpg?v=1639755792', tags: 'surf,boardsports,licensing', category: 'boards' },
+  { title: 'Meier Custom Skis & Snowboards', url: 'https://phillewisart.com/cdn/shop/products/Pow-Days_600x.jpg?v=1701384339', tags: 'snowboard,ski,boardsports,outdoor,licensing', category: 'boards' },
   // ── Tech ──
   { title: 'XL Desk Mat — Lion', url: 'https://phillewisart.com/cdn/shop/files/Lion2_600x.jpg?v=1767200990', tags: 'tech,desk,accessories', category: 'tech' },
   { title: 'XL Desk Mat — Let it Flow', url: 'https://phillewisart.com/cdn/shop/files/Let-it-Flow2_fad4d1c7-72b5-42ad-afc7-b6227aec4be8_600x.jpg?v=1767201092', tags: 'tech,desk,accessories', category: 'tech' },
