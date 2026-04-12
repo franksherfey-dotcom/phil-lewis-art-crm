@@ -221,7 +221,7 @@ const migrationReady = (async () => {
 
     // Seed product photos — Phil's art on actual products for prospect outreach
     const prodCount = await one("SELECT COUNT(*)::int AS n FROM art_images WHERE type='product'")
-    if (prodCount.n < 20) {
+    if (prodCount.n < 54) {
       await pool.query("DELETE FROM art_images WHERE type='product'")
       const S = 'https://phillewisart.com/cdn/shop/'
       const PRODUCT_SEEDS = [
@@ -290,6 +290,9 @@ const migrationReady = (async () => {
         { title: 'Go Fish Sticker Sheets', url: S+'files/1-web.jpg', category: 'Stickers', notes: 'Multi-sticker sheets' },
         { title: 'Lotus Glitter Sticker', url: S+'files/Lotus-Foil-Sticker1500.jpg', category: 'Stickers', notes: 'Glitter foil sticker' },
         { title: '7 Chakras Sticker Pack', url: S+'products/stickerpack3.jpg', category: 'Stickers', notes: 'Chakra sticker set' },
+        // ── HARD GOODS / LICENSING ──
+        { title: 'MinuteKey Custom Keys', url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4423WEB_600x.jpg?v=1603909822', category: 'Hard Goods', notes: 'Licensed decorative keys — MinuteKey partnership. Sold at big box retailers and specialty stores nationwide. Phil\'s designs are among their most popular keys.' },
+        { title: 'MinuteKey Key Collection', url: 'https://phillewisart.com/cdn/shop/articles/Phil_Lewis_Product4389WEB_600x.jpg?v=1603909818', category: 'Hard Goods', notes: 'MinuteKey custom key designs — collectible accessories featuring Phil\'s laser engraving art. Boulder-based company.' },
       ]
       for (const p of PRODUCT_SEEDS) {
         await run(

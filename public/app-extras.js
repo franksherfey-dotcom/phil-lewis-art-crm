@@ -788,6 +788,7 @@ var GALLERY_TOPICS = [
   { key: 'cards',      label: 'Cards',      icon: '🃏' },
   { key: 'fabric',     label: 'Fabric',     icon: '🧵' },
   { key: 'lifestyle',  label: 'Lifestyle',  icon: '✨' },
+  { key: 'licensing',  label: 'Licensing',  icon: '📄' },
 ];
 
 // Art-style categories (from the DB category field)
