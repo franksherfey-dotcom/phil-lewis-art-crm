@@ -908,10 +908,14 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
   background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px;
   padding: 14px; text-align: center;
 }
+.activity-stat-card { cursor: pointer; transition: box-shadow .15s, transform .15s; }
+.activity-stat-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); transform: translateY(-1px); }
+.activity-stat-active { border-color: var(--primary) !important; box-shadow: 0 0 0 2px var(--primary-pale, rgba(79,70,229,0.15)) !important; }
 .activity-stat-reply { border-color: var(--success); background: var(--success-pale, #f0fdf4); }
 .activity-stat-num { font-size: 24px; font-weight: 700; color: var(--text); line-height: 1.1; }
 .activity-stat-reply .activity-stat-num { color: var(--success); }
 .activity-stat-label { font-size: 11px; color: var(--text-muted); margin-top: 4px; text-transform: uppercase; letter-spacing: .3px; }
+.activity-filter-indicator { display: none; align-items: center; gap: 10px; padding: 8px 14px; margin-bottom: 10px; background: var(--primary-pale, #eef2ff); border: 1px solid var(--primary); border-radius: 8px; font-size: 13px; }
 
 .activity-day { margin-bottom: 4px; }
 .activity-day-header {
@@ -940,6 +944,8 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
 .activity-item-who { font-size: 13px; }
 .activity-item-names { font-size: 11px; color: var(--text-muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .activity-item-subject { font-size: 11px; color: var(--text-muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.activity-item-actions { display: flex; gap: 4px; align-items: center; flex-shrink: 0; opacity: 0.6; transition: opacity .15s; }
+.activity-item:hover .activity-item-actions { opacity: 1; }
 
 /* ── UTILITIES ── */
 .empty-state { text-align: center; padding: 60px 20px; color: var(--text-muted); font-size: 13px; }
@@ -955,6 +961,8 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
   flex: 1 1 140px; background: var(--surface); border: 1px solid var(--border);
   border-radius: 10px; padding: 16px 20px; text-align: center;
 }
+.report-kpi[onclick] { cursor: pointer; transition: box-shadow .15s, transform .15s; }
+.report-kpi[onclick]:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); transform: translateY(-1px); }
 .report-kpi.highlight { border-color: var(--accent); }
 .report-kpi.warn { border-color: #e45c00; }
 .report-kpi-value { font-size: 28px; font-weight: 700; color: var(--text); }
