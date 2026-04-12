@@ -966,7 +966,7 @@ async function openCompanyDetail(id) {
                   </div>
                   ${seqBadge}
                   <div class="contact-detail-links">
-                    ${ct.email ? `<a href="mailto:${esc(ct.email)}" class="contact-link email-link">✉ ${esc(ct.email)}</a>` : ''}
+                    ${ct.email ? `<a href="mailto:${esc(ct.email)}" class="contact-link email-link">✉ ${esc(ct.email)}</a>` : '<span class="contact-missing-email">✉ No email — add one to send outreach</span>'}
                     ${ct.phone ? `<span class="contact-link phone-link">✆ ${esc(ct.phone)}</span>` : ''}
                     ${ct.linkedin ? `<a href="${esc(ct.linkedin.startsWith('http')?ct.linkedin:'https://'+ct.linkedin)}" target="_blank" class="contact-link linkedin-link">in LinkedIn</a>` : ''}
                   </div>
@@ -1219,20 +1219,25 @@ async function loadContacts() {
             : '<span class="seq-badge seq-none">No Outreach</span>';
 
           var contactLines = cts.slice(0, 3).map(function(c) {
-            return '<div class="tile-contact-row">' +
+            var emailIndicator = c.email ? '' : '<span class="tile-no-email" title="No email address">✉?</span>';
+            return '<div class="tile-contact-row' + (c.email ? '' : ' tile-contact-no-email') + '">' +
               (c.is_primary ? '<span class="tile-star">★</span>' : '<span class="tile-star-placeholder"></span>') +
               '<span class="tile-contact-name">' + esc(c.first_name) + ' ' + esc(c.last_name||'') + '</span>' +
               (c.title ? '<span class="tile-contact-title">' + esc(c.title) + '</span>' : '') +
+              emailIndicator +
             '</div>';
           }).join('');
           var moreCount = cts.length > 3 ? '<div class="tile-more">+' + (cts.length - 3) + ' more</div>' : '';
+
+          var missingEmails = cts.filter(function(c) { return !c.email; }).length;
+          var emailWarning = missingEmails > 0 ? '<div class="tile-email-warning" title="' + missingEmails + ' contact' + (missingEmails !== 1 ? 's' : '') + ' missing email">' + missingEmails + ' missing email' + (missingEmails !== 1 ? 's' : '') + '</div>' : '';
 
           return '<div class="contact-tile" onclick="openCompanyDetail(' + (group.companyId||0) + ')">' +
             '<div class="tile-header">' +
               '<div class="tile-company-name">' + esc(coName) + '</div>' +
               '<div class="tile-contact-count">' + cts.length + '</div>' +
             '</div>' +
-            '<div class="tile-status">' + tileBadge + '</div>' +
+            '<div class="tile-status">' + tileBadge + emailWarning + '</div>' +
             '<div class="tile-contacts">' + contactLines + moreCount + '</div>' +
           '</div>';
         }).join('') +

@@ -297,6 +297,21 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
 .tile-more { font-size: 11px; color: var(--text-muted); padding-left: 18px; }
 .seq-badge.seq-none { background: #F3F4F6; color: #9CA3AF; }
 
+/* ── Email Missing Indicators ── */
+.tile-no-email {
+  font-size: 10px; color: #b45309; background: #fffbeb; border: 1px solid #fde68a;
+  padding: 0 5px; border-radius: 3px; flex-shrink: 0; white-space: nowrap;
+}
+.tile-contact-no-email .tile-contact-name { color: var(--text-muted); }
+.tile-email-warning {
+  font-size: 10px; color: #b45309; background: #fffbeb; border: 1px solid #fde68a;
+  padding: 1px 6px; border-radius: 4px; white-space: nowrap;
+}
+.contact-missing-email {
+  font-size: 12px; color: #b45309; background: #fffbeb; border: 1px solid #fde68a;
+  padding: 2px 8px; border-radius: 4px; display: inline-block;
+}
+
 /* ── MULTI-SELECT DROPDOWNS ── */
 .ms-dropdown { position: relative; display: inline-block; }
 .ms-dropdown-btn {
