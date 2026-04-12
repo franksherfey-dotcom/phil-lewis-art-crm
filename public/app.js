@@ -2251,6 +2251,7 @@ function filterActivity(filter) {
   if (indicator) {
     if (_activityFilter) {
       var labels = {
+        'needs-reply': 'Needs Your Reply',
         'sent-week': 'Sent This Week', 'replies-week': 'Replies This Week',
         'companies-week': 'Companies Reached This Week',
         'sent-month': 'Sent (30 Days)', 'replies-month': 'Replies (30 Days)'
@@ -2284,7 +2285,7 @@ function getFilteredActivities() {
 
 async function loadActivity() {
   try {
-    var activities = await apiFetch('/api/activities?limit=200');
+    var activities = await apiFetch('/api/activities?limit=300');
     _activityCache = activities;
 
     if (!activities.length) {
@@ -2292,6 +2293,9 @@ async function loadActivity() {
       document.getElementById('activity-timeline').innerHTML = '<div class="empty-state">No activity yet.</div>';
       return;
     }
+
+    // Index for lookups
+    activities.forEach(function(a, idx) { a._idx = idx; });
 
     // ── Compute stats ──
     var now = new Date();
@@ -2308,113 +2312,227 @@ async function loadActivity() {
     var uniqueCompaniesWeek = new Set(thisWeek.map(function(a) { return a.company_name; }).filter(Boolean)).size;
     var responseRate = sentMonth > 0 ? Math.round((repliesMonth / sentMonth) * 100) : 0;
 
-    function statCard(value, label, filter, isReply) {
+    // Find replies awaiting your response — inbound with no subsequent outbound to same contact
+    var needsReply = [];
+    var contactLastSent = {};
+    var contactLastReceived = {};
+    activities.forEach(function(a) {
+      if (a.type === 'email' && a.contact_id) {
+        if (!contactLastSent[a.contact_id] || new Date(a.sent_at) > new Date(contactLastSent[a.contact_id].sent_at)) {
+          contactLastSent[a.contact_id] = a;
+        }
+      }
+      if (a.type === 'received_email' && a.contact_id) {
+        if (!contactLastReceived[a.contact_id] || new Date(a.sent_at) > new Date(contactLastReceived[a.contact_id].sent_at)) {
+          contactLastReceived[a.contact_id] = a;
+        }
+      }
+    });
+    Object.keys(contactLastReceived).forEach(function(cid) {
+      var lastIn = contactLastReceived[cid];
+      var lastOut = contactLastSent[cid];
+      if (!lastOut || new Date(lastIn.sent_at) > new Date(lastOut.sent_at)) {
+        needsReply.push(lastIn);
+      }
+    });
+    needsReply.sort(function(a, b) { return new Date(b.sent_at) - new Date(a.sent_at); });
+
+    function statCard(value, label, filter, cls) {
       var active = _activityFilter === filter;
-      return '<div class="activity-stat-card' + (isReply ? ' activity-stat-reply' : '') + (active ? ' activity-stat-active' : '') + '"' +
+      return '<div class="activity-stat-card' + (cls ? ' ' + cls : '') + (active ? ' activity-stat-active' : '') + '"' +
         ' data-filter="' + filter + '"' +
-        ' onclick="filterActivity(\'' + filter + '\')" style="cursor:pointer">' +
+        (filter ? ' onclick="filterActivity(\'' + filter + '\')" style="cursor:pointer"' : '') + '>' +
         '<div class="activity-stat-num">' + value + '</div>' +
         '<div class="activity-stat-label">' + label + '</div>' +
       '</div>';
     }
-    var statsHtml = statCard(sentWeek, 'Sent This Week', 'sent-week', false) +
-      statCard(repliesWeek, 'Replies This Week', 'replies-week', true) +
-      statCard(uniqueCompaniesWeek, 'Companies Reached', 'companies-week', false) +
-      statCard(responseRate + '%', '30-Day Response Rate', '', false) +
-      statCard(sentMonth, 'Sent (30 Days)', 'sent-month', false) +
-      statCard(repliesMonth, 'Replies (30 Days)', 'replies-month', true);
+    var statsHtml = statCard(needsReply.length, 'Needs Reply', 'needs-reply', needsReply.length > 0 ? 'activity-stat-urgent' : '') +
+      statCard(sentWeek, 'Sent This Week', 'sent-week', '') +
+      statCard(repliesWeek, 'Replies This Week', 'replies-week', 'activity-stat-reply') +
+      statCard(uniqueCompaniesWeek, 'Companies Reached', 'companies-week', '') +
+      statCard(responseRate + '%', '30-Day Response Rate', '', '') +
+      statCard(sentMonth, 'Sent (30 Days)', 'sent-month', '') +
+      statCard(repliesMonth, 'Replies (30 Days)', 'replies-month', 'activity-stat-reply');
     document.getElementById('activity-stats').innerHTML = statsHtml;
+
+    // Store needs-reply for filter
+    _needsReplyCache = needsReply;
 
     renderActivityTimeline();
   } catch(e) { toast(e.message, 'error'); }
 }
 
+var _needsReplyCache = [];
+
 function renderActivityTimeline() {
   var activities = getFilteredActivities();
   var timelineEl = document.getElementById('activity-timeline');
-  if (!activities.length) {
-    timelineEl.innerHTML = '<div class="empty-state">No activity matches this filter.</div>';
-    return;
-  }
 
-  // Index all activities for _idx lookup
-  _activityCache.forEach(function(a, idx) { a._idx = idx; });
+  // ── NEEDS REPLY section (always show when unfiltered, or when filtered to needs-reply) ──
+  var showNeedsReply = (!_activityFilter || _activityFilter === 'needs-reply') && _needsReplyCache.length > 0;
+  var html = '';
 
-  // ── Group by day ──
-  var dayGroups = {};
-  var dayOrder = [];
-  activities.forEach(function(a) {
-    var d = new Date(a.sent_at);
-    var key = d.toISOString().slice(0, 10);
-    if (!dayGroups[key]) { dayGroups[key] = []; dayOrder.push(key); }
-    dayGroups[key].push(a);
-  });
-
-  var timelineHtml = '';
-  dayOrder.forEach(function(dayKey) {
-    var items = dayGroups[dayKey];
-    var d = new Date(dayKey + 'T12:00:00');
-    var dayLabel = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-    var sent = items.filter(function(a) { return a.type === 'email'; }).length;
-    var received = items.filter(function(a) { return a.type === 'received_email'; }).length;
-
-    var daySummary = '';
-    if (sent > 0) daySummary += '<span class="day-stat day-stat-sent">' + sent + ' sent</span>';
-    if (received > 0) daySummary += '<span class="day-stat day-stat-reply">' + received + ' replies</span>';
-
-    timelineHtml += '<div class="activity-day">';
-    timelineHtml += '<div class="activity-day-header" onclick="toggleActivityDay(this)">';
-    timelineHtml += '<div class="activity-day-date">' + esc(dayLabel) + '</div>';
-    timelineHtml += '<div class="activity-day-summary">' + daySummary + '</div>';
-    timelineHtml += '<span class="activity-day-chevron">▾</span>';
-    timelineHtml += '</div>';
-    timelineHtml += '<div class="activity-day-body">';
-
-    // Render each activity item with action buttons
-    // Replies first
-    items.filter(function(a) { return a.type === 'received_email'; }).forEach(function(a) {
-      timelineHtml += '<div class="activity-item activity-item-reply">' +
-        '<div class="activity-item-icon">↩</div>' +
-        '<div class="activity-item-content">' +
-          '<div class="activity-item-who"><strong>' + esc(a.first_name || '') + ' ' + esc(a.last_name || '') + '</strong> at ' + esc(a.company_name || '—') + ' replied</div>' +
-          '<div class="activity-item-subject">' + esc(a.subject || '—') + '</div>' +
+  if (showNeedsReply) {
+    html += '<div class="al-section al-needs-reply">';
+    html += '<div class="al-section-header"><h3>Needs Your Reply</h3><span class="al-section-count">' + _needsReplyCache.length + '</span></div>';
+    html += '<div class="al-needs-reply-grid">';
+    _needsReplyCache.forEach(function(a) {
+      var daysAgo = Math.floor((Date.now() - new Date(a.sent_at).getTime()) / 86400000);
+      var urgencyCls = daysAgo >= 3 ? 'al-urgent' : daysAgo >= 1 ? 'al-warning' : '';
+      var timeLabel = daysAgo === 0 ? 'Today' : daysAgo === 1 ? 'Yesterday' : daysAgo + 'd ago';
+      html += '<div class="al-reply-card ' + urgencyCls + '">' +
+        '<div class="al-reply-card-header">' +
+          '<div class="al-reply-card-who">' +
+            '<strong>' + esc((a.first_name || '') + ' ' + (a.last_name || '')) + '</strong>' +
+            (a.company_name ? '<span class="al-reply-card-co" onclick="event.stopPropagation();openCompanyDetail(' + a.company_id + ')">' + esc(a.company_name) + '</span>' : '') +
+          '</div>' +
+          '<span class="al-reply-card-time">' + timeLabel + '</span>' +
         '</div>' +
-        '<div class="activity-item-actions">' +
+        '<div class="al-reply-card-subject">' + esc(a.subject || '(no subject)') + '</div>' +
+        (a.body ? '<div class="al-reply-card-snippet">' + esc((a.body || '').substring(0, 120)) + '</div>' : '') +
+        '<div class="al-reply-card-actions">' +
           '<button class="btn btn-primary btn-sm" onclick="openContactDetail(' + a.contact_id + ')">Reply</button>' +
-          '<button class="btn btn-ghost btn-sm" onclick="openActivityDetail(' + a._idx + ')">View</button>' +
+          '<button class="btn btn-outline btn-sm" onclick="openActivityDetail(' + a._idx + ')">View Full</button>' +
+          (a.enrollment_id ? '<button class="btn btn-ghost btn-sm" onclick="stopEnrollment(' + a.enrollment_id + ',{onDone:function(){loadActivity()}})" style="color:var(--text-muted)">Stop Sequence</button>' : '') +
         '</div>' +
       '</div>';
     });
+    html += '</div></div>';
+  }
 
-    // Then sent items — group by company
-    var companyGroups = {};
-    items.filter(function(a) { return a.type === 'email'; }).forEach(function(a) {
-      var co = a.company_name || '—';
-      if (!companyGroups[co]) companyGroups[co] = [];
-      companyGroups[co].push(a);
-    });
+  // If filtered to needs-reply only, stop here
+  if (_activityFilter === 'needs-reply') {
+    timelineEl.innerHTML = html || '<div class="empty-state">No replies awaiting your response.</div>';
+    return;
+  }
 
-    Object.keys(companyGroups).sort().forEach(function(co) {
-      var group = companyGroups[co];
-      group.forEach(function(a) {
-        timelineHtml += '<div class="activity-item">' +
-          '<div class="activity-item-icon">✉</div>' +
-          '<div class="activity-item-content">' +
-            '<div class="activity-item-who">Emailed <strong>' + esc(a.first_name || '') + ' ' + esc(a.last_name || '') + '</strong> at ' + esc(co) + '</div>' +
-            '<div class="activity-item-subject">' + esc(a.subject || '—') + '</div>' +
-          '</div>' +
-          '<div class="activity-item-actions">' +
-            (a.contact_id ? '<button class="btn btn-outline btn-sm" onclick="openContactDetail(' + a.contact_id + ')">Contact</button>' : '') +
-            '<button class="btn btn-ghost btn-sm" onclick="openActivityDetail(' + a._idx + ')">View</button>' +
-          '</div>' +
-        '</div>';
-      });
-    });
+  if (!activities.length) {
+    timelineEl.innerHTML = html + '<div class="empty-state">No activity matches this filter.</div>';
+    return;
+  }
 
-    timelineHtml += '</div></div>';
+  // ── COMPANY-GROUPED TIMELINE ──
+  // Group all activities by company, then show chronological within each
+  var companyMap = {};
+  var companyOrder = [];
+  activities.forEach(function(a) {
+    var coKey = a.company_name || '(unknown)';
+    if (!companyMap[coKey]) {
+      companyMap[coKey] = { name: coKey, id: a.company_id, items: [], sent: 0, received: 0, latestDate: a.sent_at };
+      companyOrder.push(coKey);
+    }
+    companyMap[coKey].items.push(a);
+    if (a.type === 'email') companyMap[coKey].sent++;
+    if (a.type === 'received_email') companyMap[coKey].received++;
+    if (new Date(a.sent_at) > new Date(companyMap[coKey].latestDate)) companyMap[coKey].latestDate = a.sent_at;
   });
 
-  timelineEl.innerHTML = timelineHtml;
+  // Sort companies: those with replies first, then by most recent activity
+  companyOrder.sort(function(a, b) {
+    var ca = companyMap[a], cb = companyMap[b];
+    // Replies bubble up
+    if (ca.received > 0 && cb.received === 0) return -1;
+    if (cb.received > 0 && ca.received === 0) return 1;
+    return new Date(cb.latestDate) - new Date(ca.latestDate);
+  });
+
+  html += '<div class="al-section">';
+  html += '<div class="al-section-header"><h3>Activity by Company</h3></div>';
+
+  companyOrder.forEach(function(coKey) {
+    var co = companyMap[coKey];
+    var hasReplies = co.received > 0;
+
+    html += '<div class="al-company-group' + (hasReplies ? ' al-company-has-replies' : '') + '">';
+    html += '<div class="al-company-header" onclick="this.parentElement.classList.toggle(\'al-collapsed\')">';
+    html += '<div class="al-company-name">' +
+      (co.id ? '<a href="#" onclick="event.preventDefault();event.stopPropagation();openCompanyDetail(' + co.id + ')">' + esc(co.name) + '</a>' : esc(co.name)) +
+      '</div>';
+    html += '<div class="al-company-badges">';
+    if (co.sent > 0) html += '<span class="al-badge al-badge-sent">' + co.sent + ' sent</span>';
+    if (co.received > 0) html += '<span class="al-badge al-badge-reply">' + co.received + ' repl' + (co.received !== 1 ? 'ies' : 'y') + '</span>';
+    html += '</div>';
+    html += '<span class="al-company-chevron">▾</span>';
+    html += '</div>';
+
+    html += '<div class="al-company-body">';
+
+    // Show activities grouped by contact within the company
+    var contactMap = {};
+    var contactOrder = [];
+    co.items.forEach(function(a) {
+      var ctKey = a.contact_id || 'unknown';
+      if (!contactMap[ctKey]) {
+        contactMap[ctKey] = { id: a.contact_id, name: (a.first_name || '') + ' ' + (a.last_name || ''), email: a.email, title: a.title, items: [] };
+        contactOrder.push(ctKey);
+      }
+      contactMap[ctKey].items.push(a);
+    });
+
+    contactOrder.forEach(function(ctKey) {
+      var ct = contactMap[ctKey];
+      var ctReplies = ct.items.filter(function(a) { return a.type === 'received_email'; });
+      var ctSent = ct.items.filter(function(a) { return a.type === 'email'; });
+
+      html += '<div class="al-contact-row">';
+      html += '<div class="al-contact-info">';
+      html += '<div class="al-contact-name">' +
+        (ct.id ? '<a href="#" onclick="event.preventDefault();openContactDetail(' + ct.id + ')">' + esc(ct.name.trim() || 'Unknown') + '</a>' : esc(ct.name.trim() || 'Unknown')) +
+        (ct.title ? '<span class="al-contact-title">' + esc(ct.title) + '</span>' : '') +
+        '</div>';
+
+      // Show sequence context if any
+      var seqItem = ct.items.find(function(a) { return a.sequence_name; });
+      if (seqItem) {
+        var stepLabel = seqItem.current_step ? 'Step ' + seqItem.current_step + (seqItem.sequence_total_steps ? '/' + seqItem.sequence_total_steps : '') : '';
+        var seqStatus = seqItem.enrollment_status || '';
+        html += '<div class="al-seq-context">' +
+          '<span class="al-seq-name">' + esc(seqItem.sequence_name) + '</span>' +
+          (stepLabel ? '<span class="al-seq-step">' + stepLabel + '</span>' : '') +
+          (seqStatus ? '<span class="al-seq-status al-seq-' + seqStatus + '">' + seqStatus + '</span>' : '') +
+          '</div>';
+      }
+      html += '</div>';
+
+      // Activity items for this contact — compact rows
+      html += '<div class="al-contact-activities">';
+      ct.items.forEach(function(a) {
+        var isReply = a.type === 'received_email';
+        var icon = isReply ? '←' : '→';
+        var iconCls = isReply ? 'al-icon-reply' : 'al-icon-sent';
+        html += '<div class="al-activity-row' + (isReply ? ' al-activity-reply' : '') + '">' +
+          '<span class="al-activity-icon ' + iconCls + '">' + icon + '</span>' +
+          '<span class="al-activity-subject">' + esc(a.subject || '(no subject)') + '</span>' +
+          '<span class="al-activity-date">' + fmtDate(a.sent_at) + '</span>' +
+          '<span class="al-activity-actions">' +
+            (isReply ? '<button class="btn btn-primary btn-xs" onclick="openContactDetail(' + a.contact_id + ')">Reply</button>' : '') +
+            '<button class="btn btn-ghost btn-xs" onclick="openActivityDetail(' + a._idx + ')">View</button>' +
+          '</span>' +
+        '</div>';
+      });
+      html += '</div>';
+
+      // Quick action row for this contact
+      html += '<div class="al-contact-actions">';
+      if (ctReplies.length > 0 && ct.id) {
+        html += '<button class="btn btn-primary btn-sm" onclick="openContactDetail(' + ct.id + ')">Reply</button>';
+      }
+      if (ct.id) {
+        html += '<button class="btn btn-outline btn-sm" onclick="openContactDetail(' + ct.id + ')">View Contact</button>';
+      }
+      if (ct.email && co.id) {
+        html += '<button class="btn btn-outline btn-sm" onclick="openPortfolioComposer(' + (co.id || 'null') + ',\'' + esc(ct.email) + '\',\'' + esc((ct.name || '').split(' ')[0]) + '\')">📨 Portfolio</button>';
+      }
+      html += '</div>';
+
+      html += '</div>';
+    });
+
+    html += '</div></div>';
+  });
+
+  html += '</div>';
+  timelineEl.innerHTML = html;
 }
 
 function toggleActivityDay(header) {

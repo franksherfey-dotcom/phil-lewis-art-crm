@@ -2317,6 +2317,99 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
   min-height: 2px;
 }
 
+/* ── Activity Log Redesign ──────────────────────────────────────────── */
+.activity-stat-urgent { border-color: var(--danger) !important; background: var(--danger-pale, #fef2f2); }
+.activity-stat-urgent .activity-stat-num { color: var(--danger); }
+
+/* Needs Reply section */
+.al-section { margin-bottom: 24px; }
+.al-section-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.al-section-header h3 { font-size: 15px; font-weight: 700; margin: 0; }
+.al-section-count { font-size: 12px; font-weight: 600; background: var(--danger); color: #fff; border-radius: 10px; padding: 1px 8px; }
+.al-needs-reply { margin-bottom: 28px; }
+.al-needs-reply-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+.al-reply-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px;
+  border-left: 3px solid var(--success); transition: box-shadow .15s;
+}
+.al-reply-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+.al-reply-card.al-warning { border-left-color: var(--warn); }
+.al-reply-card.al-urgent { border-left-color: var(--danger); background: var(--danger-pale, #fef2f2); }
+.al-reply-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
+.al-reply-card-who { font-size: 13px; }
+.al-reply-card-who strong { font-size: 14px; }
+.al-reply-card-co { display: block; font-size: 12px; color: var(--primary); cursor: pointer; }
+.al-reply-card-co:hover { text-decoration: underline; }
+.al-reply-card-time { font-size: 11px; color: var(--text-muted); white-space: nowrap; flex-shrink: 0; }
+.al-reply-card-subject { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.al-reply-card-snippet { font-size: 12px; color: var(--text-muted); line-height: 1.4; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; margin-bottom: 10px; }
+.al-reply-card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* Company-grouped timeline */
+.al-company-group { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; overflow: hidden; }
+.al-company-has-replies { border-color: var(--success); }
+.al-company-header {
+  display: flex; align-items: center; gap: 10px; padding: 10px 14px; cursor: pointer;
+  background: var(--bg); border-bottom: 1px solid var(--border); transition: background .1s;
+}
+.al-company-header:hover { background: #f3f3ee; }
+.al-company-name { font-weight: 700; font-size: 14px; flex: 1; min-width: 0; }
+.al-company-name a { color: var(--text); text-decoration: none; }
+.al-company-name a:hover { color: var(--primary); }
+.al-company-badges { display: flex; gap: 6px; flex-shrink: 0; }
+.al-badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; }
+.al-badge-sent { background: var(--bg); color: var(--text-muted); border: 1px solid var(--border); }
+.al-badge-reply { background: var(--success-pale, #f0fdf4); color: var(--success); border: 1px solid var(--success); }
+.al-company-chevron { font-size: 12px; color: var(--text-muted); transition: transform .15s; }
+.al-collapsed .al-company-body { display: none; }
+.al-collapsed .al-company-chevron { transform: rotate(-90deg); }
+
+.al-company-body { padding: 0; }
+
+/* Contact row within company */
+.al-contact-row { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.al-contact-row:last-child { border-bottom: none; }
+.al-contact-info { margin-bottom: 6px; }
+.al-contact-name { font-size: 13px; font-weight: 600; }
+.al-contact-name a { color: var(--text); text-decoration: none; }
+.al-contact-name a:hover { color: var(--primary); text-decoration: underline; }
+.al-contact-title { font-size: 12px; color: var(--text-muted); margin-left: 6px; font-weight: 400; }
+
+/* Sequence context badge */
+.al-seq-context { display: flex; gap: 6px; align-items: center; margin-top: 3px; }
+.al-seq-name { font-size: 11px; color: var(--primary); font-weight: 600; }
+.al-seq-step { font-size: 11px; color: var(--text-muted); }
+.al-seq-status { font-size: 10px; font-weight: 600; text-transform: uppercase; padding: 1px 6px; border-radius: 8px; }
+.al-seq-active { background: var(--primary-pale, #eef2ff); color: var(--primary); }
+.al-seq-replied { background: var(--success-pale, #f0fdf4); color: var(--success); }
+.al-seq-completed { background: var(--bg); color: var(--text-muted); }
+.al-seq-stopped { background: var(--danger-pale, #fef2f2); color: var(--danger); }
+
+/* Individual activity rows within contact */
+.al-contact-activities { margin: 4px 0 6px 0; }
+.al-activity-row {
+  display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 12px;
+  border-radius: 4px; transition: background .1s;
+}
+.al-activity-row:hover { background: var(--bg); }
+.al-activity-reply { font-weight: 500; }
+.al-activity-icon { width: 18px; text-align: center; font-weight: 700; flex-shrink: 0; }
+.al-icon-reply { color: var(--success); }
+.al-icon-sent { color: var(--text-muted); }
+.al-activity-subject { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-muted); }
+.al-activity-reply .al-activity-subject { color: var(--text); }
+.al-activity-date { font-size: 11px; color: var(--text-muted); white-space: nowrap; flex-shrink: 0; }
+.al-activity-actions { display: flex; gap: 4px; opacity: 0; transition: opacity .15s; flex-shrink: 0; }
+.al-activity-row:hover .al-activity-actions { opacity: 1; }
+
+/* Contact quick actions */
+.al-contact-actions { display: flex; gap: 6px; margin-top: 4px; }
+
+@media (max-width: 768px) {
+  .al-needs-reply-grid { grid-template-columns: 1fr; }
+  .al-activity-actions { opacity: 1; }
+}
+
 /* ── Enrollment Badges (Remove from Sequence) ──────────────────────── */
 .enrollment-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
 .enrollment-badge {
