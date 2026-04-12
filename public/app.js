@@ -2013,7 +2013,9 @@ function renderEnrollContacts(contacts) {
       '<label for="enroll-c-' + c.id + '">' +
         '<div class="enroll-contact-name">' + esc(c.first_name) + ' ' + esc(c.last_name || '') +
           (c.company_name ? ' \u2014 ' + esc(c.company_name) : '') + '</div>' +
-        '<div class="enroll-contact-email">' + (c.email ? esc(c.email) : '\u26A0 No email address') + '</div>' +
+        '<div class="enroll-contact-email">' + (c.email ? esc(c.email) : '\u26A0 No email address') +
+          (c.company_tags ? ' <span class="enroll-tags">' + c.company_tags.split(',').map(function(t) { return esc(t.trim()); }).join(', ') + '</span>' : '') +
+        '</div>' +
       '</label>' +
     '</div>';
   }).join('');
@@ -2032,7 +2034,7 @@ function filterEnrollContacts() {
     return;
   }
   var filtered = _allEnrollContacts.filter(function(c) {
-    var searchable = ((c.first_name || '') + ' ' + (c.last_name || '') + ' ' + (c.company_name || '') + ' ' + (c.email || '')).toLowerCase();
+    var searchable = ((c.first_name || '') + ' ' + (c.last_name || '') + ' ' + (c.company_name || '') + ' ' + (c.email || '') + ' ' + (c.company_tags || '') + ' ' + (c.company_category || '')).toLowerCase();
     return searchable.indexOf(query) !== -1;
   });
   renderEnrollContacts(filtered);

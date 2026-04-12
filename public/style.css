@@ -641,6 +641,7 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
 .enroll-contact-row label { flex: 1; cursor: pointer; }
 .enroll-contact-name { font-weight: 600; }
 .enroll-contact-email { font-size: 11px; color: var(--text-muted); }
+.enroll-tags { font-size: 10px; color: var(--primary); margin-left: 4px; }
 
 /* ── PREVIEW ── */
 .preview-email { padding: 4px; }
