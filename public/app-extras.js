@@ -445,24 +445,26 @@ function renderLeadHeatmap(leads) {
 // ── ART GALLERY ──────────────────────────────────────────────────────────
 var _artCache = [];
 var _galleryTopics = [];   // active topic filters (multi-select)
-var _galleryView = 'topic'; // 'topic' or 'style'
 
 // Pre-load art cache at startup so getArtForTags works from any page
 (async function() {
   try { _artCache = await apiFetch('/api/art'); } catch(e) {}
 })();
 
-// Industry topics — each maps to one or more tag values in art_images.tags
+// Industry topics — 1:1 with INDUSTRY_TAGS used in prospect sequences
 var GALLERY_TOPICS = [
-  { key: 'surf',        label: 'Surf',          icon: '🏄' },
-  { key: 'boardsports', label: 'Board Sports',  icon: '🛹', match: ['skateboard','snowboard','surf'] },
-  { key: 'outdoor',     label: 'Outdoors',      icon: '⛰️' },
-  { key: 'apparel',     label: 'Apparel',       icon: '👕' },
-  { key: 'drinkware',   label: 'Drinkware',     icon: '🥤' },
-  { key: 'hard-goods',  label: 'Hard Goods',    icon: '🔧' },
-  { key: 'kids',        label: 'Kids & Games',  icon: '🧩', match: ['puzzles','cards'] },
-  { key: 'fabric',      label: 'Fabric & Home', icon: '🧵', match: ['fabric','lifestyle'] },
-  { key: 'footwear',    label: 'Footwear',      icon: '👟' },
+  { key: 'apparel',    label: 'Apparel',    icon: '👕' },
+  { key: 'hard-goods', label: 'Hard Goods', icon: '🔧' },
+  { key: 'outdoor',    label: 'Outdoor',    icon: '⛰️' },
+  { key: 'surf',       label: 'Surf',       icon: '🏄' },
+  { key: 'skateboard', label: 'Skateboard', icon: '🛹' },
+  { key: 'snowboard',  label: 'Snowboard',  icon: '🏂' },
+  { key: 'drinkware',  label: 'Drinkware',  icon: '🥤' },
+  { key: 'footwear',   label: 'Footwear',   icon: '👟' },
+  { key: 'puzzles',    label: 'Puzzles',    icon: '🧩' },
+  { key: 'cards',      label: 'Cards',      icon: '🃏' },
+  { key: 'fabric',     label: 'Fabric',     icon: '🧵' },
+  { key: 'lifestyle',  label: 'Lifestyle',  icon: '✨' },
 ];
 
 // Art-style categories (from the DB category field)
@@ -476,14 +478,8 @@ var GALLERY_STYLE_NAMES = {
 };
 
 function artMatchesTopic(art, topicKey) {
-  var topic = GALLERY_TOPICS.find(function(t) { return t.key === topicKey; });
-  if (!topic) return false;
   var tags = (art.tags || '').toLowerCase().split(',').map(function(t) { return t.trim(); });
-  var matchTags = topic.match || [topic.key];
-  for (var i = 0; i < matchTags.length; i++) {
-    if (tags.indexOf(matchTags[i]) !== -1) return true;
-  }
-  return false;
+  return tags.indexOf(topicKey) !== -1;
 }
 
 async function loadArtGallery() {
@@ -524,51 +520,27 @@ function clearGalleryTopics() {
   renderGallerySections();
 }
 
-function setGalleryView(view) {
-  _galleryView = view;
-  document.querySelectorAll('.gallery-view-btn').forEach(function(b) {
-    b.classList.toggle('active', b.getAttribute('data-view') === view);
-  });
-  renderGallerySections();
-}
-
-function getFilteredArt() {
-  if (_galleryTopics.length === 0) return _artCache;
-  return _artCache.filter(function(a) {
-    for (var i = 0; i < _galleryTopics.length; i++) {
-      if (artMatchesTopic(a, _galleryTopics[i])) return true;
-    }
-    return false;
-  });
-}
-
 function renderGallerySections() {
   var el = document.getElementById('gallery-sections');
   if (!el) return;
-  var items = getFilteredArt();
 
-  if (!items.length) {
-    el.innerHTML = '<div class="empty-state"><div style="font-size:32px;margin-bottom:8px">🎨</div><p>No art matches those filters.</p></div>';
-    return;
-  }
-
-  // Group items
   var groups = {};
   var groupOrder = [];
-  if (_galleryView === 'topic' && _galleryTopics.length > 0) {
-    // Group by active topics
+
+  if (_galleryTopics.length > 0) {
+    // Show each selected topic as its own collection
     _galleryTopics.forEach(function(key) {
       var topic = GALLERY_TOPICS.find(function(t) { return t.key === key; });
       if (!topic) return;
       var matching = _artCache.filter(function(a) { return artMatchesTopic(a, key); });
       if (matching.length) {
-        groups[key] = { label: topic.icon + ' ' + topic.label, items: matching };
+        groups[key] = { label: topic.icon + ' ' + topic.label + ' Collection', items: matching };
         groupOrder.push(key);
       }
     });
-  } else if (_galleryView === 'style' || _galleryTopics.length === 0) {
-    // Group by art style (category)
-    items.forEach(function(a) {
+  } else {
+    // No topic selected — show all art grouped by art style
+    _artCache.forEach(function(a) {
       var cat = a.category || 'Uncategorized';
       if (!groups[cat]) {
         groups[cat] = { label: GALLERY_STYLE_NAMES[cat] || cat, items: [] };
@@ -576,6 +548,11 @@ function renderGallerySections() {
       }
       groups[cat].items.push(a);
     });
+  }
+
+  if (!groupOrder.length) {
+    el.innerHTML = '<div class="empty-state"><div style="font-size:32px;margin-bottom:8px">🎨</div><p>No art matches those filters.</p></div>';
+    return;
   }
 
   var html = '';
@@ -601,11 +578,7 @@ function renderGalleryCard(a) {
   if (a.tags) {
     tagChips = a.tags.split(',').map(function(t) {
       var tag = t.trim();
-      var isHighlighted = _galleryTopics.length > 0 && _galleryTopics.some(function(tk) {
-        var topic = GALLERY_TOPICS.find(function(tp) { return tp.key === tk; });
-        var matchTags = topic ? (topic.match || [topic.key]) : [];
-        return matchTags.indexOf(tag) !== -1;
-      });
+      var isHighlighted = _galleryTopics.length > 0 && _galleryTopics.indexOf(tag) !== -1;
       return '<span class="tag-chip ' + (isHighlighted ? 'tag-primary' : 'tag-default') + '">' + esc(tag) + '</span>';
     }).join('');
   }
