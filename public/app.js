@@ -3028,7 +3028,7 @@ function openIcArtPicker(companyTags) {
     var a = item.art;
     var matchBadge = item.score > 0 ? '<div style="font-size:9px;color:var(--success);font-weight:600">' + Math.floor(item.score / 10) + ' tag match' + (Math.floor(item.score / 10) !== 1 ? 'es' : '') + '</div>' : '';
     html += '<div class="qr-art-picker-item" onclick="selectIcArt(' + a.id + ')">' +
-      '<img src="' + esc(a.url) + '" alt="' + esc(a.title) + '" />' +
+      '<img src="' + esc(a.url) + '" alt="' + esc(a.title) + '" onerror="_onImgErr(this)" />' +
       '<div class="qr-art-picker-label">' + esc(a.title) + '</div>' +
       matchBadge +
     '</div>';

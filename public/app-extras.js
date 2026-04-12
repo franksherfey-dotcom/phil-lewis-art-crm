@@ -1,3 +1,7 @@
+// ── IMAGE FALLBACK ───────────────────────────────────────────────────────
+var _imgFallback = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 150"><rect fill="#f0f0f0" width="200" height="150" rx="6"/><text x="50%" y="42%" fill="#999" font-family="system-ui" font-size="13" text-anchor="middle">No Preview</text><text x="50%" y="58%" fill="#bbb" font-family="system-ui" font-size="11" text-anchor="middle">Image unavailable</text></svg>');
+function _onImgErr(el) { el.onerror = null; el.src = _imgFallback; }
+
 // ── DYNAMIC ART MATCHING ─────────────────────────────────────────────────
 // Art images are pulled from the gallery database (_artCache).
 // getArtForTags() scores each gallery entry by tag overlap with the
@@ -60,7 +64,7 @@ function buildArtPreviewCard(artImg) {
   return `
 <div class="art-preview-card">
   <div class="art-preview-label">${esc(artImg.label)} — Collaboration Preview</div>
-  <img src="${artImg.url}" alt="${esc(artImg.alt)}" class="art-preview-img" />
+  <img src="${artImg.url}" alt="${esc(artImg.alt)}" class="art-preview-img" onerror="_onImgErr(this)" />
   <div class="art-preview-caption">${esc(artImg.alt)}</div>
 </div>`;
 }
@@ -190,7 +194,7 @@ function renderQuickReplyArt() {
           '</div>' +
         '</div>' +
         '<div style="text-align:center">' +
-          '<img src="' + esc(artImg.url) + '" alt="' + esc(artImg.alt) + '" style="max-width:100%;width:400px;border-radius:6px" />' +
+          '<img src="' + esc(artImg.url) + '" alt="' + esc(artImg.alt) + '" style="max-width:100%;width:400px;border-radius:6px" onerror="_onImgErr(this)" />' +
           '<div style="font-size:12px;color:var(--text-muted);margin-top:6px">' + esc(artImg.alt) + '</div>' +
         '</div>' +
       '</div>';
@@ -225,7 +229,7 @@ function openQrArtPicker() {
 
   cache.forEach(function(art) {
     html += '<div class="qr-art-picker-item" onclick="selectQrArt(' + art.id + ')">' +
-      '<img src="' + esc(art.url) + '" alt="' + esc(art.title) + '" />' +
+      '<img src="' + esc(art.url) + '" alt="' + esc(art.title) + '" onerror="_onImgErr(this)" />' +
       '<div class="qr-art-picker-label">' + esc(art.title) + '</div>' +
     '</div>';
   });
@@ -341,7 +345,7 @@ function openQdArtPicker(companyTags) {
     var a = scored[i].art;
     var matchBadge = scored[i].score > 0 ? '<span class="qd-art-match">match</span>' : '';
     h += '<div class="qd-art-picker-item" onclick="selectQdArt(' + a.id + ')" title="' + esc(a.title) + '">';
-    h += '<img src="' + esc(a.url) + '" alt="' + esc(a.title) + '">';
+    h += '<img src="' + esc(a.url) + '" alt="' + esc(a.title) + '" onerror="_onImgErr(this)">';
     h += '<div class="qd-art-picker-label">' + esc(a.title) + matchBadge + '</div>';
     h += '</div>';
   }
@@ -562,7 +566,7 @@ function renderPortfolioPreview(preview) {
     html += '<div class="pf-image-grid">';
     preview.art.forEach(function(a) {
       html += '<div class="pf-image-card">' +
-        '<img src="' + esc(a.url) + '" alt="' + esc(a.title) + '" class="pf-image-thumb" />' +
+        '<img src="' + esc(a.url) + '" alt="' + esc(a.title) + '" class="pf-image-thumb" onerror="_onImgErr(this)" />' +
         '<div class="pf-image-label">' + esc(a.title) + '</div>' +
         '</div>';
     });
@@ -1073,7 +1077,7 @@ function renderGalleryCard(a) {
   }
   return '<div class="gallery-card">' +
     '<div class="gallery-card-img-wrap">' +
-    '<img src="' + esc(a.url) + '" alt="' + esc(a.title) + '" class="gallery-card-img" loading="lazy" onerror="this.src=\'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 200 150%22><rect fill=%22%23f0f0f0%22 width=%22200%22 height=%22150%22/><text x=%2250%25%22 y=%2250%25%22 fill=%22%23999%22 text-anchor=%22middle%22 dy=%22.3em%22>No Image</text></svg>\'">' +
+    '<img src="' + esc(a.url) + '" alt="' + esc(a.title) + '" class="gallery-card-img" loading="lazy" onerror="_onImgErr(this)">' +
     '</div>' +
     '<div class="gallery-card-body">' +
     '<div class="gallery-card-title">' + esc(a.title) + '</div>' +
@@ -1180,7 +1184,7 @@ function openArtPicker(stepNum) {
       return `
         <div class="gallery-card gallery-picker-card ${isMatch ? 'gallery-card-matched' : ''}" onclick="selectArtForStep(${a.id}, '${esc(a.url)}', '${esc(a.title)}')">
           <div class="gallery-card-img-wrap">
-            <img src="${esc(a.url)}" alt="${esc(a.title)}" class="gallery-card-img">
+            <img src="${esc(a.url)}" alt="${esc(a.title)}" class="gallery-card-img" onerror="_onImgErr(this)">
             ${isMatch ? '<div class="gallery-match-badge">Tag Match</div>' : ''}
           </div>
           <div class="gallery-card-body">
