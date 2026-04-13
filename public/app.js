@@ -1124,6 +1124,7 @@ async function deleteCompany(id) {
 // Track selected contact IDs for bulk actions
 var _selectedContactIds = new Set();
 var _notInSeqActive = false;
+var _hasEmailActive = false;
 var _missingEmailActive = false;
 var _lastFilteredContacts = []; // store last loaded contacts for mass enrollment
 
@@ -1159,6 +1160,7 @@ async function loadContacts() {
   if (search)         params.set('search', search);
   if (_contactsTagFilters.length) params.set('tag', _contactsTagFilters.join(','));
   if (_notInSeqActive) params.set('not_in_sequence', 'true');
+  if (_hasEmailActive) params.set('has_email', 'true');
   if (_missingEmailActive) params.set('missing_email', 'true');
 
   try {
@@ -1337,10 +1339,23 @@ function toggleNotInSequence() {
   loadContacts();
 }
 
+function toggleHasEmail() {
+  _hasEmailActive = !_hasEmailActive;
+  if (_hasEmailActive) _missingEmailActive = false;
+  var btn = document.getElementById('btn-has-email');
+  if (btn) btn.classList.toggle('filter-toggle-active', _hasEmailActive);
+  var btn2 = document.getElementById('btn-missing-email');
+  if (btn2) btn2.classList.remove('filter-toggle-active');
+  loadContacts();
+}
+
 function toggleMissingEmail() {
   _missingEmailActive = !_missingEmailActive;
+  if (_missingEmailActive) _hasEmailActive = false;
   var btn = document.getElementById('btn-missing-email');
   if (btn) btn.classList.toggle('filter-toggle-active', _missingEmailActive);
+  var btn2 = document.getElementById('btn-has-email');
+  if (btn2) btn2.classList.remove('filter-toggle-active');
   loadContacts();
 }
 
@@ -1349,11 +1364,14 @@ function clearContactFilters() {
   if (search) search.value = '';
   _contactsTagFilters = [];
   _notInSeqActive = false;
+  _hasEmailActive = false;
   _missingEmailActive = false;
   var btn = document.getElementById('btn-not-in-seq');
   if (btn) btn.classList.remove('filter-toggle-active');
-  var btn2 = document.getElementById('btn-missing-email');
+  var btn2 = document.getElementById('btn-has-email');
   if (btn2) btn2.classList.remove('filter-toggle-active');
+  var btn3 = document.getElementById('btn-missing-email');
+  if (btn3) btn3.classList.remove('filter-toggle-active');
   renderContactsTagChips();
   loadContacts();
 }
@@ -1362,7 +1380,7 @@ function updateMassEnrollBar(contacts) {
   var bar = document.getElementById('mass-enroll-bar');
   if (!bar) return;
   // Show mass enroll bar when filters are active and there are enrollable contacts
-  var hasFilters = _contactsTagFilters.length > 0 || _notInSeqActive || _missingEmailActive;
+  var hasFilters = _contactsTagFilters.length > 0 || _notInSeqActive || _hasEmailActive || _missingEmailActive;
   var enrollable = contacts.filter(function(c) {
     return c.email && c.enrollment_status !== 'active';
   });

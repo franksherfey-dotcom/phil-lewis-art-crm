@@ -664,7 +664,7 @@ app.delete('/api/companies/:id', async (req, res) => {
 
 app.get('/api/contacts', async (req, res) => {
   try {
-    const { search, company_id, category, tag, not_in_sequence, missing_email } = req.query
+    const { search, company_id, category, tag, not_in_sequence, has_email, missing_email } = req.query
     let sql = `
       SELECT ct.*,
              co.name AS company_name, co.type AS company_type,
@@ -704,6 +704,9 @@ app.get('/api/contacts', async (req, res) => {
     }
     if (not_in_sequence === 'true') {
       sql += ` AND NOT EXISTS (SELECT 1 FROM enrollments WHERE contact_id=ct.id AND status='active')`
+    }
+    if (has_email === 'true') {
+      sql += ` AND ct.email IS NOT NULL AND ct.email != ''`
     }
     if (missing_email === 'true') {
       sql += ` AND (ct.email IS NULL OR ct.email = '')`
