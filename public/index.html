@@ -394,6 +394,13 @@
       <section id="page-activity" class="page">
         <div class="page-header">
           <h1>Activity Log</h1>
+          <select id="activity-time-range" onchange="setActivityTimeRange(this.value)" class="btn btn-outline" style="font-size:13px;padding:4px 12px">
+            <option value="week">This Week</option>
+            <option value="month" selected>This Month</option>
+            <option value="quarter">This Quarter</option>
+            <option value="ytd">Year to Date</option>
+            <option value="all">All Time</option>
+          </select>
         </div>
         <div id="activity-stats" class="activity-stats"></div>
         <div id="activity-filter-indicator" class="activity-filter-indicator" style="display:none"></div>
