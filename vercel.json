@@ -12,5 +12,15 @@
     { "src": "/icon-512.png", "dest": "/public/icon-512.png" },
     { "src": "/api/(.*)", "dest": "/server.js" },
     { "src": "/(.*)", "dest": "/server.js" }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/process-queue",
+      "schedule": "0 */1 * * *"
+    },
+    {
+      "path": "/api/cron/weekly-digest",
+      "schedule": "0 14 * * 1"
+    }
   ]
 }

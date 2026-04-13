@@ -500,6 +500,74 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
 }
 .enrolled-count-btn:hover { color: var(--primary-dark, #0a3a52); }
 
+/* ── Weekly Summary Widget ── */
+.ws-panel {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 20px; margin-bottom: 24px; box-shadow: var(--shadow);
+}
+.ws-header { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
+.ws-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 12px; }
+.ws-stat { text-align: center; padding: 10px 4px; background: var(--bg); border-radius: 8px; }
+.ws-stat-val { font-size: 22px; font-weight: 800; color: var(--text); }
+.ws-stat-label { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.ws-positive { background: #f0fdf4; border-radius: 8px; padding: 12px; margin-top: 8px; }
+.ws-positive-title { font-size: 13px; font-weight: 700; color: #166534; margin-bottom: 6px; }
+.ws-positive-item { font-size: 13px; padding: 3px 0; }
+@media (max-width: 768px) { .ws-grid { grid-template-columns: repeat(3, 1fr); } }
+
+/* ── Daily Priorities Panel ── */
+.pri-panel {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 20px; margin-bottom: 24px; box-shadow: var(--shadow);
+}
+.pri-header { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
+.pri-empty { color: var(--text-muted); font-size: 14px; }
+.pri-section { margin-bottom: 16px; padding: 12px; border-radius: 8px; background: var(--bg); }
+.pri-section:last-child { margin-bottom: 0; }
+.pri-section-title { font-size: 13px; font-weight: 700; margin-bottom: 8px; }
+.pri-urgent { background: #fef2f2; border-left: 3px solid var(--danger); }
+.pri-warn { background: #fffbeb; border-left: 3px solid #f59e0b; }
+.pri-auto { background: #f0fdf4; border-left: 3px solid var(--success, #22c55e); }
+.pri-item { padding: 4px 0; }
+.pri-item-clickable { cursor: pointer; padding: 6px 8px; border-radius: 6px; transition: background 0.15s; }
+.pri-item-clickable:hover { background: rgba(0,0,0,0.04); }
+.pri-item-name { font-size: 13px; font-weight: 600; }
+.pri-item-sub { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
+.pri-more { font-size: 11px; color: var(--primary); font-weight: 600; padding: 4px 8px; cursor: pointer; }
+.pri-sentiment { font-size: 10px; padding: 1px 6px; border-radius: 999px; font-weight: 600; margin-left: 4px; }
+.pri-sentiment-positive { background: #dcfce7; color: #166534; }
+.pri-sentiment-neutral { background: #fef3c7; color: #92400e; }
+.pri-sentiment-negative { background: #fef2f2; color: #991b1b; }
+
+/* ── Auto-Send Toggle & Badges ── */
+.seq-auto-badge {
+  display: inline-block; font-size: 11px; font-weight: 600;
+  padding: 2px 8px; border-radius: 10px; vertical-align: middle; margin-left: 6px;
+}
+.seq-auto-on { background: #dcfce7; color: #166534; }
+.seq-auto-off { background: var(--bg); color: var(--text-muted); }
+
+.auto-send-toggle {
+  position: relative; display: inline-block; width: 36px; height: 20px; cursor: pointer;
+}
+.auto-send-toggle input { opacity: 0; width: 0; height: 0; }
+.auto-send-slider {
+  position: absolute; inset: 0; background: #ccc; border-radius: 20px; transition: 0.2s;
+}
+.auto-send-slider::before {
+  content: ''; position: absolute; height: 16px; width: 16px; left: 2px; bottom: 2px;
+  background: white; border-radius: 50%; transition: 0.2s;
+}
+.auto-send-toggle input:checked + .auto-send-slider { background: var(--success, #22c55e); }
+.auto-send-toggle input:checked + .auto-send-slider::before { transform: translateX(16px); }
+
+.auto-send-form-row { margin-bottom: 14px; }
+.auto-send-form-label {
+  display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.auto-send-form-label input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--success, #22c55e); }
+.auto-send-hint { font-size: 12px; color: var(--text-muted); margin-top: 4px; margin-left: 24px; }
+
 /* ── Sequence Roster Panel ── */
 .seq-roster-panel {
   background: var(--surface); border: 1px solid var(--border);
@@ -567,6 +635,8 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
 .queue-company { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
 .queue-seq { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--primary); margin-top: 6px; }
 .queue-step-badge { font-size: 11px; background: var(--primary-pale); color: var(--primary); padding: 2px 8px; border-radius: 999px; font-weight: 600; display: inline-block; margin-top: 4px; }
+.queue-auto-hint { font-size: 10px; color: #166534; background: #dcfce7; padding: 2px 6px; border-radius: 999px; margin-left: 4px; display: inline-block; margin-top: 4px; }
+.queue-manual-hint { font-size: 10px; color: #92400e; background: #fef3c7; padding: 2px 6px; border-radius: 999px; margin-left: 4px; display: inline-block; margin-top: 4px; }
 .queue-subject { font-size: 13px; color: var(--text); margin-top: 8px; font-style: italic; }
 .queue-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
 

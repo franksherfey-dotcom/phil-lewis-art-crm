@@ -7,6 +7,9 @@ const { parse } = require('csv-parse/sync')
 const jwt = require('jsonwebtoken')
 const bcrypt = require('bcryptjs')
 
+const https = require('https')
+const http = require('http')
+
 const pool = require('./lib/db')
 const { sendEmail, syncInbox, testConnection, interpolate } = require('./emailer')
 
@@ -133,6 +136,9 @@ const migrationReady = (async () => {
 
     // Add priority column — higher priority images are preferred when multiple match the same tag
     await pool.query(`ALTER TABLE art_images ADD COLUMN IF NOT EXISTS priority INT NOT NULL DEFAULT 0`)
+
+    // Auto-send column on sequences — when true, steps 2+ send automatically via cron
+    await pool.query(`ALTER TABLE sequences ADD COLUMN IF NOT EXISTS auto_send BOOLEAN NOT NULL DEFAULT FALSE`)
 
     // Seed Phil's art collection — re-seed if fewer than 40 art pieces
     const artCount = await one("SELECT COUNT(*)::int AS n FROM art_images WHERE type='art'")
@@ -524,6 +530,102 @@ app.get('/api/dashboard', async (req, res) => {
       totalCompanies: c.n, totalContacts: ct.n,
       activeEnrollments: ae.n, emailsSent: es.n,
       queueCount, recentActivity: recent,
+    })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ─── DAILY PRIORITIES ────────────────────────────────────────────────────────
+// Returns a structured "here's what to do today" object for the dashboard
+
+app.get('/api/dashboard/priorities', async (req, res) => {
+  try {
+    // 1. Unread replies that need a response (highest priority)
+    var unreplied = await all(`
+      SELECT DISTINCT ON (a.contact_id)
+        a.id, a.contact_id, a.subject, a.sent_at, a.sentiment,
+        c.first_name, c.last_name, co.name AS company_name, co.id AS company_id
+      FROM activities a
+      JOIN contacts c ON a.contact_id = c.id
+      LEFT JOIN companies co ON c.company_id = co.id
+      WHERE a.type = 'received_email'
+        AND (a.notes IS NULL OR a.notes NOT IN ('archived','read'))
+      ORDER BY a.contact_id, a.sent_at DESC
+    `)
+
+    // 2. First-touch emails waiting for manual review (step 1 items in queue)
+    var queue = await getQueueItems()
+    var firstTouches = queue.filter(function(q) { return q.current_step === 1 })
+    var autoSendPending = queue.filter(function(q) { return q.auto_send && q.current_step > 1 })
+    var manualFollowUps = queue.filter(function(q) { return !q.auto_send && q.current_step > 1 })
+
+    // 3. Companies going cold (last activity > 14 days, still has active enrollments or is 'active' status)
+    var goingCold = await all(`
+      SELECT c.id, c.name, c.last_activity_at, c.next_step, c.next_step_date, c.status,
+        (SELECT COUNT(*)::int FROM enrollments e JOIN contacts ct ON e.contact_id = ct.id WHERE ct.company_id = c.id AND e.status = 'active') AS active_enrollments
+      FROM companies c
+      WHERE c.last_activity_at < NOW() - INTERVAL '14 days'
+        AND c.status IN ('active','prospect')
+      ORDER BY c.last_activity_at ASC
+      LIMIT 10
+    `)
+
+    // 4. Recently auto-sent (last 24h) so Frank knows what went out
+    var recentAutoSent = await all(`
+      SELECT a.id, a.subject, a.sent_at, c.first_name, c.last_name, co.name AS company_name
+      FROM activities a
+      JOIN contacts c ON a.contact_id = c.id
+      LEFT JOIN companies co ON c.company_id = co.id
+      WHERE a.type = 'email' AND a.status = 'sent'
+        AND a.sent_at > NOW() - INTERVAL '24 hours'
+      ORDER BY a.sent_at DESC
+      LIMIT 20
+    `)
+
+    // 5. Overdue next-steps on companies
+    var overdue = await all(`
+      SELECT id, name, next_step, next_step_date, status
+      FROM companies
+      WHERE next_step_date < CURRENT_DATE
+        AND next_step IS NOT NULL AND next_step != ''
+        AND status IN ('active','prospect')
+      ORDER BY next_step_date ASC
+      LIMIT 10
+    `)
+
+    res.json({
+      unreplied: unreplied,
+      firstTouches: firstTouches,
+      autoSendPending: autoSendPending.length,
+      manualFollowUps: manualFollowUps,
+      goingCold: goingCold,
+      recentAutoSent: recentAutoSent,
+      overdue: overdue,
+    })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ─── WEEKLY SUMMARY DATA (for dashboard widget) ─────────────────────────────
+
+app.get('/api/dashboard/weekly-summary', async (req, res) => {
+  try {
+    var [sent, replies, newCos, completed, replied] = await Promise.all([
+      one("SELECT COUNT(*)::int AS n FROM activities WHERE type='email' AND sent_at > NOW() - INTERVAL '7 days'"),
+      one("SELECT COUNT(*)::int AS n FROM activities WHERE type='received_email' AND sent_at > NOW() - INTERVAL '7 days'"),
+      one("SELECT COUNT(*)::int AS n FROM companies WHERE created_at > NOW() - INTERVAL '7 days'"),
+      one("SELECT COUNT(*)::int AS n FROM enrollments WHERE status='completed' AND completed_at > NOW() - INTERVAL '7 days'"),
+      one("SELECT COUNT(*)::int AS n FROM enrollments WHERE status='replied' AND completed_at > NOW() - INTERVAL '7 days'"),
+    ])
+    var positiveReplies = await all(`
+      SELECT a.sent_at, c.first_name, c.last_name, co.name AS company_name, co.id AS company_id
+      FROM activities a JOIN contacts c ON a.contact_id = c.id LEFT JOIN companies co ON c.company_id = co.id
+      WHERE a.type = 'received_email' AND a.sentiment = 'positive' AND a.sent_at > NOW() - INTERVAL '7 days'
+      ORDER BY a.sent_at DESC LIMIT 5
+    `)
+    var replyRate = sent.n > 0 ? Math.round((replies.n / sent.n) * 100) : 0
+    res.json({
+      emailsSent: sent.n, repliesReceived: replies.n, newCompanies: newCos.n,
+      completedSequences: completed.n, repliedSequences: replied.n,
+      positiveReplies: positiveReplies, replyRate: replyRate,
     })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
@@ -978,11 +1080,11 @@ app.get('/api/sequences/:id/roster', async (req, res) => {
 
 app.post('/api/sequences', async (req, res) => {
   try {
-    const { name, description, steps } = req.body
+    const { name, description, steps, auto_send } = req.body
     if (!name) return res.status(400).json({ error: 'Name required' })
     const { id: seqId } = await one(
-      'INSERT INTO sequences (name, description) VALUES ($1,$2) RETURNING id',
-      [name, description||'']
+      'INSERT INTO sequences (name, description, auto_send) VALUES ($1,$2,$3) RETURNING id',
+      [name, description||'', auto_send === true]
     )
     if (steps && steps.length) {
       await Promise.all(steps.map((step, idx) =>
@@ -994,10 +1096,19 @@ app.post('/api/sequences', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
+// Toggle auto_send on a sequence (quick toggle from card UI)
+app.patch('/api/sequences/:id/auto-send', async (req, res) => {
+  try {
+    const { auto_send } = req.body
+    await run('UPDATE sequences SET auto_send=$1 WHERE id=$2', [auto_send === true, req.params.id])
+    res.json({ ok: true, auto_send: auto_send === true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
 app.put('/api/sequences/:id', async (req, res) => {
   try {
-    const { name, description, steps } = req.body
-    await run('UPDATE sequences SET name=$1, description=$2 WHERE id=$3', [name, description||'', req.params.id])
+    const { name, description, steps, auto_send } = req.body
+    await run('UPDATE sequences SET name=$1, description=$2, auto_send=$3 WHERE id=$4', [name, description||'', auto_send === true, req.params.id])
     if (steps) {
       await run('DELETE FROM sequence_steps WHERE sequence_id=$1', [req.params.id])
       await Promise.all(steps.map((step, idx) =>
@@ -1162,7 +1273,7 @@ async function getQueueItems() {
   const rows = await all(`
     SELECT
       e.id AS enrollment_id, e.contact_id, e.sequence_id, e.current_step, e.started_at,
-      s.name AS sequence_name,
+      s.name AS sequence_name, s.auto_send,
       ss.subject AS step_subject, ss.body AS step_body, ss.delay_days,
       (SELECT COUNT(*)::int FROM sequence_steps WHERE sequence_id = e.sequence_id) AS total_steps,
       c.first_name, c.last_name, c.email, c.title, c.company_id,
@@ -1192,6 +1303,7 @@ async function getQueueItems() {
         contact_id: row.contact_id,
         sequence_id: row.sequence_id,
         sequence_name: row.sequence_name,
+        auto_send: row.auto_send,
         current_step: row.current_step,
         total_steps: row.total_steps,
         first_name: row.first_name,
@@ -1360,6 +1472,215 @@ app.post('/api/queue/send-all', async (req, res) => {
       failed: results.filter(r => !r.ok).length,
     })
   } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ─── AUTO-SEND CRON ──────────────────────────────────────────────────────────
+// Called by Vercel cron every hour.  Only processes steps 2+ on sequences
+// that have auto_send enabled.  Step 1 always stays manual so the user can
+// personalise the first outreach.
+
+app.get('/api/cron/process-queue', async (req, res) => {
+  try {
+    // Verify this is a Vercel cron request (or allow in dev)
+    const isCron = req.headers['authorization'] === 'Bearer ' + (process.env.CRON_SECRET || '')
+    const isDev  = !process.env.VERCEL
+    if (!isCron && !isDev) return res.status(401).json({ error: 'Unauthorized' })
+
+    // Get all due queue items
+    const queue = await getQueueItems()
+
+    // Fetch which sequences have auto_send enabled
+    var autoSeqRows = await all("SELECT id FROM sequences WHERE auto_send = true")
+    var autoSeqIds = {}
+    autoSeqRows.forEach(function(r) { autoSeqIds[r.id] = true })
+
+    var results = []
+    var sent = 0, skipped = 0
+
+    for (var qi = 0; qi < queue.length; qi++) {
+      var item = queue[qi]
+      // Only auto-send steps 2+ on auto_send sequences
+      if (!autoSeqIds[item.sequence_id]) { skipped++; continue }
+      if (item.current_step <= 1) { skipped++; continue }
+
+      try {
+        var enr = await one(
+          'SELECT e.*, c.first_name, c.last_name, c.email, c.title, c.company_id FROM enrollments e JOIN contacts c ON e.contact_id = c.id WHERE e.id=$1',
+          [item.enrollment_id]
+        )
+        if (!enr || !enr.email) { results.push({ enrollment_id: item.enrollment_id, ok: false, error: 'No email' }); continue }
+
+        var step = await one(
+          'SELECT * FROM sequence_steps WHERE sequence_id=$1 AND step_number=$2',
+          [enr.sequence_id, enr.current_step]
+        )
+        var company = enr.company_id ? await one('SELECT * FROM companies WHERE id=$1', [enr.company_id]) : null
+        var contact = { first_name: enr.first_name, last_name: enr.last_name, email: enr.email, title: enr.title }
+
+        var totalStepsRow = await one('SELECT COUNT(*)::int AS n FROM sequence_steps WHERE sequence_id=$1', [enr.sequence_id])
+        var totalSteps = totalStepsRow.n
+        var isArtStep = (enr.current_step % 2 === 1) || (enr.current_step >= totalSteps)
+        var emailBody = step.body
+        if (isArtStep) {
+          var artImg = await getArtForCompany(company)
+          emailBody = emailBody + '\n' + buildArtEmailBlock(artImg)
+        }
+
+        var result = await sendEmail({
+          toEmail: enr.email,
+          toName: [enr.first_name, enr.last_name].filter(Boolean).join(' '),
+          subject: step.subject,
+          body: emailBody,
+          isHtml: isArtStep,
+          contact: contact,
+          company: company,
+        })
+
+        await run(
+          "INSERT INTO activities (enrollment_id, contact_id, type, subject, body, status, sent_at) VALUES ($1,$2,'email',$3,$4,'sent',NOW())",
+          [item.enrollment_id, enr.contact_id, result.resolvedSubject, result.resolvedBody]
+        )
+        if (enr.company_id) await run("UPDATE companies SET last_activity_at=NOW() WHERE id=$1", [enr.company_id])
+
+        if (enr.current_step >= totalSteps) {
+          await run("UPDATE enrollments SET status='completed', completed_at=NOW() WHERE id=$1", [item.enrollment_id])
+          await autoSetNextStep(enr.company_id, 'sequence_completed')
+        } else {
+          await run("UPDATE enrollments SET current_step=current_step+1 WHERE id=$1", [item.enrollment_id])
+          var nextStepNum = enr.current_step + 1
+          var nextStepRow = await one('SELECT * FROM sequence_steps WHERE sequence_id=$1 AND step_number=$2', [enr.sequence_id, nextStepNum])
+          var nextDate = nextStepRow ? new Date(Date.now() + (nextStepRow.delay_days||0) * 86400000).toISOString().slice(0,10) : null
+          await autoSetNextStep(enr.company_id, 'email_sent', {
+            nextStep: nextStepRow ? 'Send Step ' + nextStepNum + ': ' + (nextStepRow.subject || '').slice(0, 60) : 'Continue sequence',
+            nextStepDate: nextDate
+          })
+        }
+
+        results.push({ enrollment_id: item.enrollment_id, ok: true, subject: result.resolvedSubject })
+        sent++
+      } catch (err) {
+        results.push({ enrollment_id: item.enrollment_id, ok: false, error: err.message })
+      }
+    }
+
+    console.log('[CRON] Auto-send processed:', sent, 'sent,', skipped, 'skipped')
+    res.json({ ok: true, sent: sent, skipped: skipped, results: results })
+  } catch (err) {
+    console.error('[CRON] Auto-send error:', err.message)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ─── WEEKLY DIGEST EMAIL (Monday mornings) ───────────────────────────────────
+
+app.get('/api/cron/weekly-digest', async (req, res) => {
+  try {
+    var isCron = req.headers['authorization'] === 'Bearer ' + (process.env.CRON_SECRET || '')
+    var isDev  = !process.env.VERCEL
+    if (!isCron && !isDev) return res.status(401).json({ error: 'Unauthorized' })
+
+    // Get SMTP settings for sending the digest
+    var settingsRows = await all('SELECT key, value FROM settings')
+    var settings = {}
+    settingsRows.forEach(function(r) { settings[r.key] = r.value })
+    if (!settings.smtp_host || !settings.smtp_user) {
+      return res.json({ ok: false, error: 'SMTP not configured' })
+    }
+
+    // Get digest recipient from admin user email or settings
+    var adminUser = await one("SELECT email FROM public.users WHERE role='admin' LIMIT 1")
+    var digestEmail = settings.digest_email || (adminUser && adminUser.email) || settings.smtp_user
+    if (!digestEmail) return res.json({ ok: false, error: 'No digest recipient found' })
+
+    // Gather stats for the past 7 days
+    var emailsSent = await one("SELECT COUNT(*)::int AS n FROM activities WHERE type='email' AND sent_at > NOW() - INTERVAL '7 days'")
+    var repliesReceived = await one("SELECT COUNT(*)::int AS n FROM activities WHERE type='received_email' AND sent_at > NOW() - INTERVAL '7 days'")
+    var newCompanies = await one("SELECT COUNT(*)::int AS n FROM companies WHERE created_at > NOW() - INTERVAL '7 days'")
+    var completedSeqs = await one("SELECT COUNT(*)::int AS n FROM enrollments WHERE status='completed' AND completed_at > NOW() - INTERVAL '7 days'")
+    var repliedSeqs = await one("SELECT COUNT(*)::int AS n FROM enrollments WHERE status='replied' AND completed_at > NOW() - INTERVAL '7 days'")
+
+    // Positive replies this week
+    var positiveReplies = await all(`
+      SELECT a.subject, a.sent_at, c.first_name, c.last_name, co.name AS company_name
+      FROM activities a
+      JOIN contacts c ON a.contact_id = c.id
+      LEFT JOIN companies co ON c.company_id = co.id
+      WHERE a.type = 'received_email' AND a.sentiment = 'positive'
+        AND a.sent_at > NOW() - INTERVAL '7 days'
+      ORDER BY a.sent_at DESC LIMIT 10
+    `)
+
+    // What's coming up: queue count, first touches, overdue
+    var queue = await getQueueItems()
+    var firstTouchCount = queue.filter(function(q) { return q.current_step === 1 }).length
+    var overdue = await one("SELECT COUNT(*)::int AS n FROM companies WHERE next_step_date < CURRENT_DATE AND next_step IS NOT NULL AND next_step != '' AND status IN ('active','prospect')")
+
+    // Active enrollments
+    var activeEnrollments = await one("SELECT COUNT(*)::int AS n FROM enrollments WHERE status='active'")
+
+    // Build HTML digest
+    var html = `
+      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:600px;margin:0 auto;padding:20px">
+        <h1 style="font-size:22px;color:#1a1a1a;margin-bottom:4px">Phil Lewis Art CRM — Weekly Digest</h1>
+        <p style="color:#666;font-size:13px;margin-bottom:24px">${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+
+        <div style="background:#f5f5f0;border-radius:8px;padding:16px;margin-bottom:20px">
+          <h2 style="font-size:16px;margin:0 0 12px 0;color:#333">Last 7 Days</h2>
+          <table style="width:100%;font-size:14px;border-collapse:collapse">
+            <tr><td style="padding:4px 0;color:#666">Emails Sent</td><td style="padding:4px 0;text-align:right;font-weight:700">${emailsSent.n}</td></tr>
+            <tr><td style="padding:4px 0;color:#666">Replies Received</td><td style="padding:4px 0;text-align:right;font-weight:700;color:${repliesReceived.n > 0 ? '#22c55e' : '#333'}">${repliesReceived.n}</td></tr>
+            <tr><td style="padding:4px 0;color:#666">New Prospects</td><td style="padding:4px 0;text-align:right;font-weight:700">${newCompanies.n}</td></tr>
+            <tr><td style="padding:4px 0;color:#666">Sequences Completed</td><td style="padding:4px 0;text-align:right;font-weight:700">${completedSeqs.n}</td></tr>
+            <tr><td style="padding:4px 0;color:#666">Got Replies</td><td style="padding:4px 0;text-align:right;font-weight:700;color:#22c55e">${repliedSeqs.n}</td></tr>
+          </table>
+        </div>
+    `
+
+    if (positiveReplies.length > 0) {
+      html += '<div style="background:#dcfce7;border-radius:8px;padding:16px;margin-bottom:20px">'
+      html += '<h2 style="font-size:16px;margin:0 0 12px 0;color:#166534">Interested Replies This Week</h2>'
+      positiveReplies.forEach(function(r) {
+        html += '<div style="padding:4px 0;font-size:13px"><strong>' + (r.first_name||'') + ' ' + (r.last_name||'') + '</strong>'
+        html += r.company_name ? ' (' + r.company_name + ')' : ''
+        html += '</div>'
+      })
+      html += '</div>'
+    }
+
+    html += `
+        <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin-bottom:20px">
+          <h2 style="font-size:16px;margin:0 0 12px 0;color:#333">This Week's To-Do</h2>
+          <table style="width:100%;font-size:14px;border-collapse:collapse">
+            <tr><td style="padding:4px 0;color:#666">Queue Items Ready</td><td style="padding:4px 0;text-align:right;font-weight:700">${queue.length}</td></tr>
+            <tr><td style="padding:4px 0;color:#666">First Touches (manual review)</td><td style="padding:4px 0;text-align:right;font-weight:700">${firstTouchCount}</td></tr>
+            <tr><td style="padding:4px 0;color:#666">Active Enrollments</td><td style="padding:4px 0;text-align:right;font-weight:700">${activeEnrollments.n}</td></tr>
+            <tr><td style="padding:4px 0;color:#666">Overdue Actions</td><td style="padding:4px 0;text-align:right;font-weight:700;color:${overdue.n > 0 ? '#ef4444' : '#333'}">${overdue.n}</td></tr>
+          </table>
+        </div>
+
+        <p style="font-size:12px;color:#999;text-align:center;margin-top:24px">
+          Sent by Phil Lewis Art CRM · <a href="${process.env.VERCEL_URL ? 'https://' + process.env.VERCEL_URL : 'http://localhost:3000'}" style="color:#4f46e5">Open Dashboard</a>
+        </p>
+      </div>
+    `
+
+    // Send via existing email infrastructure
+    await sendEmail({
+      toEmail: digestEmail,
+      toName: 'Frank',
+      subject: 'CRM Weekly Digest — ' + emailsSent.n + ' sent, ' + repliesReceived.n + ' replies',
+      body: html,
+      isHtml: true,
+      contact: { first_name: 'Frank', last_name: '', email: digestEmail },
+      company: null,
+    })
+
+    console.log('[CRON] Weekly digest sent to', digestEmail)
+    res.json({ ok: true, sent_to: digestEmail })
+  } catch (err) {
+    console.error('[CRON] Weekly digest error:', err.message)
+    res.status(500).json({ error: err.message })
+  }
 })
 
 app.get('/api/queue/preview/:enrollment_id', async (req, res) => {
@@ -1655,6 +1976,40 @@ app.post('/api/inbox/sync', async (req, res) => {
     const settings = {}
     rows.forEach(r => { settings[r.key] = r.value })
 
+    // Simple sentiment analysis for incoming replies
+    function classifySentiment(subject, body) {
+      var text = ((subject || '') + ' ' + (body || '')).toLowerCase()
+      // Negative signals
+      var negPatterns = [
+        /not interested/i, /no thanks/i, /no thank you/i, /unsubscribe/i, /remove me/i,
+        /stop (contact|email|reach)/i, /don'?t (contact|email|reach)/i, /please remove/i,
+        /not (looking|seeking|accepting)/i, /take me off/i, /opt out/i, /not at this time/i,
+        /no longer/i, /cease/i, /do not (want|wish)/i
+      ]
+      // Soft decline (not now)
+      var laterPatterns = [
+        /maybe later/i, /not right now/i, /check back/i, /reach out (later|again|next)/i,
+        /busy (right now|at the moment)/i, /touch base (later|next|in)/i, /revisit/i,
+        /perhaps (later|next|in the)/i, /try (again|back|next)/i, /circle back/i,
+        /not a good time/i, /another time/i, /not now/i, /down the (road|line)/i,
+        /few months/i, /next (quarter|year|season)/i
+      ]
+      // Positive signals
+      var posPatterns = [
+        /interested/i, /love to/i, /would like/i, /tell me more/i, /send (me |us )?(more|info|details|samples)/i,
+        /let'?s (talk|chat|connect|discuss|schedule|set up)/i, /sounds great/i, /sounds good/i,
+        /looking forward/i, /excited/i, /great fit/i, /perfect/i, /absolutely/i,
+        /set up (a |an )?(call|meeting|time)/i, /schedule (a |an )?(call|meeting|time)/i,
+        /I'?d (love|like) to/i, /can you send/i, /please send/i, /want to (learn|see|hear)/i,
+        /this is (great|awesome|fantastic|wonderful|amazing)/i, /we'?re interested/i
+      ]
+
+      for (var pi = 0; pi < negPatterns.length; pi++) { if (negPatterns[pi].test(text)) return 'negative' }
+      for (var li = 0; li < laterPatterns.length; li++) { if (laterPatterns[li].test(text)) return 'neutral' }
+      for (var ii = 0; ii < posPatterns.length; ii++) { if (posPatterns[ii].test(text)) return 'positive' }
+      return null // no strong signal — leave for human review
+    }
+
     // Build set of known contact emails for matching
     const contacts = await all('SELECT id, email, company_id FROM contacts WHERE email IS NOT NULL AND email != \'\'')
     const emailToContact = {}
@@ -1689,10 +2044,11 @@ app.post('/api/inbox/sync', async (req, res) => {
         )
         if (autoReplyDupe) continue
       }
+      var sentiment = classifySentiment(msg.subject, msg.body)
       await run(
-        `INSERT INTO activities (contact_id, type, subject, body, status, sent_at)
-         VALUES ($1,'received_email',$2,$3,'received',$4)`,
-        [contactId, msg.subject, msg.body, msg.received_at]
+        `INSERT INTO activities (contact_id, type, subject, body, status, sent_at, sentiment)
+         VALUES ($1,'received_email',$2,$3,'received',$4,$5)`,
+        [contactId, msg.subject, msg.body, msg.received_at, sentiment]
       )
       imported++
       // Auto-remove from active sequences when a reply is received
@@ -1789,6 +2145,75 @@ app.post('/api/settings/test-email', async (req, res) => {
   } catch (err) { res.status(400).json({ ok: false, error: err.message }) }
 })
 
+// ─── QUICK IMPORT (paste a URL) ──────────────────────────────────────────────
+// Uses fetchURL() defined in the News Feed section below
+
+function extractMeta(html) {
+  var meta = {}
+  // Title
+  var titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
+  if (titleMatch) meta.title = titleMatch[1].trim()
+
+  // Meta tags: description, og:title, og:description, og:site_name
+  var metaRe = /<meta\s+[^>]*(?:name|property)\s*=\s*["']([^"']+)["'][^>]*content\s*=\s*["']([^"']+)["'][^>]*/gi
+  var metaRe2 = /<meta\s+[^>]*content\s*=\s*["']([^"']+)["'][^>]*(?:name|property)\s*=\s*["']([^"']+)["'][^>]*/gi
+  var m
+  while ((m = metaRe.exec(html)) !== null) { meta[m[1].toLowerCase()] = m[2].trim() }
+  while ((m = metaRe2.exec(html)) !== null) { meta[m[2].toLowerCase()] = m[1].trim() }
+
+  return meta
+}
+
+app.post('/api/import/quick', async (req, res) => {
+  try {
+    var url = (req.body.url || '').trim()
+    if (!url) return res.status(400).json({ error: 'URL is required' })
+    if (!url.match(/^https?:\/\//i)) url = 'https://' + url
+
+    // Parse domain for company name fallback
+    var parsed = new URL(url)
+    var domain = parsed.hostname.replace(/^www\./, '')
+    var domainName = domain.split('.')[0]
+    domainName = domainName.charAt(0).toUpperCase() + domainName.slice(1)
+
+    var companyName = domainName
+    var description = ''
+    var website = parsed.origin
+
+    try {
+      var html = await fetchURL(url)
+      var meta = extractMeta(html)
+      // Use og:site_name or title for company name
+      if (meta['og:site_name']) companyName = meta['og:site_name']
+      else if (meta.title) {
+        // Clean up title — often includes taglines after | or - or –
+        companyName = meta.title.split(/[|–—\-]/)[0].trim() || domainName
+      }
+      if (meta['og:description']) description = meta['og:description']
+      else if (meta['description']) description = meta['description']
+    } catch(e) {
+      console.log('Quick import: could not fetch URL, using domain name:', e.message)
+    }
+
+    // Check if company already exists (by website domain)
+    var existing = await one(
+      "SELECT id, name FROM companies WHERE website ILIKE $1 OR website ILIKE $2",
+      ['%' + domain + '%', '%' + domain + '%']
+    )
+    if (existing) {
+      return res.json({ existing: true, company: existing, message: 'Company already exists: ' + existing.name })
+    }
+
+    // Create the company
+    var newCompany = await one(
+      "INSERT INTO companies (name, type, website, notes, status) VALUES ($1, 'manufacturer', $2, $3, 'prospect') RETURNING *",
+      [companyName.slice(0, 200), website, description.slice(0, 500)]
+    )
+
+    res.json({ ok: true, company: newCompany, scraped: { name: companyName, website: website, description: description } })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
 // ─── CSV IMPORT ───────────────────────────────────────────────────────────────
 
 app.post('/api/import/companies', upload.single('file'), async (req, res) => {
@@ -1854,9 +2279,6 @@ app.post('/api/import/contacts', upload.single('file'), async (req, res) => {
 })
 
 // ─── NEWS FEED ────────────────────────────────────────────────────────────────
-
-const https = require('https')
-const http  = require('http')
 
 function fetchURL(urlStr, redirects = 0) {
   return new Promise((resolve, reject) => {

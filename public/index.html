@@ -173,6 +173,8 @@
           </div>
         </div>
         <div class="stats-grid" id="stats-grid"></div>
+        <div id="priorities-panel"></div>
+        <div id="weekly-summary-panel"></div>
         <div class="section-title">Prospect Replies</div>
         <div id="recent-activity"></div>
       </section>
@@ -182,6 +184,7 @@
         <div class="page-header">
           <h1>Prospects</h1>
           <div class="page-actions">
+            <button class="btn btn-outline" onclick="openQuickImport()">⚡ Quick Add</button>
             <button class="btn btn-outline" onclick="openImportModal('companies')">Import CSV</button>
             <button class="btn btn-primary" onclick="openCompanyModal()">+ Add Company</button>
           </div>
@@ -1013,6 +1016,28 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-outline" onclick="closeModal('modal-import')">Cancel</button>
           <button type="button" class="btn btn-primary" onclick="submitImport()">Import</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Import Modal -->
+  <div id="modal-quick-import" class="modal-overlay hidden">
+    <div class="modal" style="max-width:480px">
+      <div class="modal-header">
+        <h2>Quick Add Prospect</h2>
+        <button class="modal-close" onclick="closeModal('modal-quick-import')">✕</button>
+      </div>
+      <div style="padding:20px">
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">Paste a company website URL and we'll create the prospect record automatically.</p>
+        <div class="form-group">
+          <label>Company URL</label>
+          <input type="url" id="quick-import-url" placeholder="e.g. https://hydroflask.com or linkedin.com/company/hydro-flask" style="width:100%">
+        </div>
+        <div id="quick-import-result" style="display:none"></div>
+        <div class="modal-footer" style="padding-top:12px">
+          <button type="button" class="btn btn-outline" onclick="closeModal('modal-quick-import')">Cancel</button>
+          <button type="button" class="btn btn-primary" id="quick-import-btn" onclick="submitQuickImport()">⚡ Import</button>
         </div>
       </div>
     </div>

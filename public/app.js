@@ -605,6 +605,10 @@ async function loadDashboard() {
     `;
     updateBadge('badge-queue', d.queueCount);
 
+    // Load daily priorities + weekly summary panels
+    loadPriorities();
+    loadWeeklySummary();
+
     const actEl = document.getElementById('recent-activity');
     // Sort replies newest-first (query uses DISTINCT ON which orders by contact)
     const replies = (d.recentActivity || []).sort((a, b) => new Date(b.sent_at) - new Date(a.sent_at));
@@ -642,6 +646,149 @@ async function loadDashboard() {
       </div>`;
     }).join('')}</div>`;
   } catch(e) { toast(e.message, 'error'); }
+}
+
+async function loadPriorities() {
+  var panel = document.getElementById('priorities-panel');
+  if (!panel) return;
+  try {
+    var p = await apiFetch('/api/dashboard/priorities');
+    var hasAnything = p.unreplied.length || p.firstTouches.length || p.manualFollowUps.length || p.goingCold.length || p.overdue.length;
+    if (!hasAnything && !p.autoSendPending && !p.recentAutoSent.length) {
+      panel.innerHTML = '<div class="pri-panel"><div class="pri-header">✨ Today\'s Priorities</div><div class="pri-empty">All clear! No urgent items today.</div></div>';
+      return;
+    }
+
+    var html = '<div class="pri-panel"><div class="pri-header">📋 Today\'s Priorities</div>';
+
+    // Unreplied replies — highest priority
+    if (p.unreplied.length) {
+      html += '<div class="pri-section pri-urgent">';
+      html += '<div class="pri-section-title">💬 Reply to These (' + p.unreplied.length + ')</div>';
+      html += p.unreplied.map(function(r) {
+        var sentimentLabels = { positive: '✓ Interested', neutral: '⏳ Maybe Later', negative: '✗ Not Interested' };
+        var sentiment = r.sentiment ? ' <span class="pri-sentiment pri-sentiment-' + r.sentiment + '">' + (sentimentLabels[r.sentiment] || r.sentiment) + '</span>' : '';
+        return '<div class="pri-item pri-item-clickable" onclick="openContactDetail(' + r.contact_id + ')">' +
+          '<div class="pri-item-name">' + esc(r.first_name) + ' ' + esc(r.last_name || '') + sentiment + '</div>' +
+          '<div class="pri-item-sub">' + esc(r.company_name || '') + ' · ' + fmtDate(r.sent_at) + '</div>' +
+        '</div>';
+      }).join('');
+      html += '</div>';
+    }
+
+    // First-touch emails (step 1) — need manual review
+    if (p.firstTouches.length) {
+      html += '<div class="pri-section">';
+      html += '<div class="pri-section-title">✋ First Touches to Review (' + p.firstTouches.length + ')</div>';
+      html += p.firstTouches.slice(0, 8).map(function(q) {
+        return '<div class="pri-item pri-item-clickable" onclick="showPage(\'queue\')">' +
+          '<div class="pri-item-name">' + esc(q.first_name) + ' ' + esc(q.last_name || '') + '</div>' +
+          '<div class="pri-item-sub">' + esc(q.company_name || '') + ' · "' + esc((q.step_subject || '').slice(0, 50)) + '"</div>' +
+        '</div>';
+      }).join('');
+      if (p.firstTouches.length > 8) html += '<div class="pri-more">+ ' + (p.firstTouches.length - 8) + ' more</div>';
+      html += '</div>';
+    }
+
+    // Manual follow-ups (non-auto-send sequences, step 2+)
+    if (p.manualFollowUps.length) {
+      html += '<div class="pri-section">';
+      html += '<div class="pri-section-title">📧 Follow-Ups to Send (' + p.manualFollowUps.length + ')</div>';
+      html += p.manualFollowUps.slice(0, 5).map(function(q) {
+        return '<div class="pri-item pri-item-clickable" onclick="showPage(\'queue\')">' +
+          '<div class="pri-item-name">' + esc(q.first_name) + ' ' + esc(q.last_name || '') + ' — Step ' + q.current_step + '</div>' +
+          '<div class="pri-item-sub">' + esc(q.company_name || '') + '</div>' +
+        '</div>';
+      }).join('');
+      if (p.manualFollowUps.length > 5) html += '<div class="pri-more">+ ' + (p.manualFollowUps.length - 5) + ' more in queue</div>';
+      html += '</div>';
+    }
+
+    // Auto-send summary
+    if (p.autoSendPending > 0 || p.recentAutoSent.length > 0) {
+      html += '<div class="pri-section pri-auto">';
+      html += '<div class="pri-section-title">⚡ Auto-Send Activity</div>';
+      if (p.autoSendPending > 0) html += '<div class="pri-item"><div class="pri-item-sub">' + p.autoSendPending + ' follow-up' + (p.autoSendPending !== 1 ? 's' : '') + ' queued for auto-send</div></div>';
+      if (p.recentAutoSent.length > 0) {
+        html += '<div class="pri-item"><div class="pri-item-sub">' + p.recentAutoSent.length + ' email' + (p.recentAutoSent.length !== 1 ? 's' : '') + ' auto-sent in the last 24h</div></div>';
+        p.recentAutoSent.slice(0, 3).forEach(function(a) {
+          html += '<div class="pri-item" style="padding-left:12px"><div class="pri-item-sub">→ ' + esc(a.first_name) + ' ' + esc(a.last_name || '') + ' · ' + esc(a.company_name || '') + '</div></div>';
+        });
+        if (p.recentAutoSent.length > 3) html += '<div class="pri-more">+ ' + (p.recentAutoSent.length - 3) + ' more</div>';
+      }
+      html += '</div>';
+    }
+
+    // Overdue next-steps
+    if (p.overdue.length) {
+      html += '<div class="pri-section pri-warn">';
+      html += '<div class="pri-section-title">⏰ Overdue Actions (' + p.overdue.length + ')</div>';
+      html += p.overdue.map(function(o) {
+        return '<div class="pri-item pri-item-clickable" onclick="openCompanyDetail(' + o.id + ')">' +
+          '<div class="pri-item-name">' + esc(o.name) + '</div>' +
+          '<div class="pri-item-sub">' + esc(o.next_step || '') + ' · due ' + fmtDate(o.next_step_date) + '</div>' +
+        '</div>';
+      }).join('');
+      html += '</div>';
+    }
+
+    // Going cold
+    if (p.goingCold.length) {
+      html += '<div class="pri-section">';
+      html += '<div class="pri-section-title">🧊 Going Cold (' + p.goingCold.length + ')</div>';
+      html += p.goingCold.slice(0, 5).map(function(c) {
+        var daysAgo = Math.round((Date.now() - new Date(c.last_activity_at).getTime()) / 86400000);
+        return '<div class="pri-item pri-item-clickable" onclick="openCompanyDetail(' + c.id + ')">' +
+          '<div class="pri-item-name">' + esc(c.name) + '</div>' +
+          '<div class="pri-item-sub">Last activity ' + daysAgo + ' days ago' + (c.active_enrollments > 0 ? ' · ' + c.active_enrollments + ' active enrollment' + (c.active_enrollments !== 1 ? 's' : '') : '') + '</div>' +
+        '</div>';
+      }).join('');
+      html += '</div>';
+    }
+
+    html += '</div>';
+    panel.innerHTML = html;
+  } catch(e) {
+    panel.innerHTML = '';
+    console.error('Priorities load error:', e);
+  }
+}
+
+async function loadWeeklySummary() {
+  var panel = document.getElementById('weekly-summary-panel');
+  if (!panel) return;
+  try {
+    var w = await apiFetch('/api/dashboard/weekly-summary');
+    var html = '<div class="ws-panel">';
+    html += '<div class="ws-header">📊 Last 7 Days</div>';
+    html += '<div class="ws-grid">';
+    html += '<div class="ws-stat"><div class="ws-stat-val">' + w.emailsSent + '</div><div class="ws-stat-label">Sent</div></div>';
+    html += '<div class="ws-stat"><div class="ws-stat-val" style="color:var(--success,#22c55e)">' + w.repliesReceived + '</div><div class="ws-stat-label">Replies</div></div>';
+    html += '<div class="ws-stat"><div class="ws-stat-val">' + w.replyRate + '%</div><div class="ws-stat-label">Reply Rate</div></div>';
+    html += '<div class="ws-stat"><div class="ws-stat-val">' + w.newCompanies + '</div><div class="ws-stat-label">New Prospects</div></div>';
+    html += '<div class="ws-stat"><div class="ws-stat-val">' + w.completedSequences + '</div><div class="ws-stat-label">Sequences Done</div></div>';
+    html += '<div class="ws-stat"><div class="ws-stat-val" style="color:var(--success,#22c55e)">' + w.repliedSequences + '</div><div class="ws-stat-label">Got Replies</div></div>';
+    html += '</div>';
+
+    if (w.positiveReplies && w.positiveReplies.length > 0) {
+      html += '<div class="ws-positive">';
+      html += '<div class="ws-positive-title">Interested Replies</div>';
+      w.positiveReplies.forEach(function(r) {
+        html += '<div class="ws-positive-item' + (r.company_id ? ' pri-item-clickable' : '') + '"' +
+          (r.company_id ? ' onclick="openCompanyDetail(' + r.company_id + ')"' : '') + '>' +
+          esc(r.first_name || '') + ' ' + esc(r.last_name || '') +
+          (r.company_name ? ' <span style="color:var(--text-muted)">(' + esc(r.company_name) + ')</span>' : '') +
+          '</div>';
+      });
+      html += '</div>';
+    }
+
+    html += '</div>';
+    panel.innerHTML = html;
+  } catch(e) {
+    panel.innerHTML = '';
+    console.error('Weekly summary error:', e);
+  }
 }
 
 /* ── Reply body cleanup (handles base64, HTML, encoding artifacts) ── */
@@ -1547,10 +1694,18 @@ async function loadSequences() {
           '</div>'
         : '<div style="font-size:12px;color:var(--text-muted);margin-top:4px">No enrollments yet</div>';
 
+      var autoLabel = s.auto_send
+        ? '<span class="seq-auto-badge seq-auto-on" title="Steps 2+ send automatically on schedule">⚡ Auto-Send ON</span>'
+        : '<span class="seq-auto-badge seq-auto-off" title="All steps require manual send">Manual</span>';
+
       return '<div class="seq-card">' +
         '<div class="seq-card-header">' +
-          '<div class="seq-name">' + esc(s.name) + '</div>' +
-          '<div style="display:flex;gap:6px">' +
+          '<div class="seq-name">' + esc(s.name) + ' ' + autoLabel + '</div>' +
+          '<div style="display:flex;gap:6px;align-items:center">' +
+            '<label class="auto-send-toggle" title="Auto-send steps 2+ on schedule" onclick="event.stopPropagation()">' +
+              '<input type="checkbox" ' + (s.auto_send ? 'checked' : '') + ' onchange="toggleAutoSend(' + s.id + ', this.checked)">' +
+              '<span class="auto-send-slider"></span>' +
+            '</label>' +
             '<button class="btn btn-ghost btn-sm" onclick="openSequenceModal(' + s.id + ')">Edit</button>' +
             '<button class="btn btn-danger btn-sm" onclick="deleteSequence(' + s.id + ')">Delete</button>' +
           '</div>' +
@@ -1756,11 +1911,23 @@ function openSequenceModal(id = null) {
   stepCount = 0;
   document.getElementById('steps-container').innerHTML = '';
   document.getElementById('sequence-modal-title').textContent = id ? 'Edit Sequence' : 'New Sequence';
+  // Ensure auto_send checkbox exists in the form
+  if (!form.querySelector('[name="auto_send"]')) {
+    var asDiv = document.createElement('div');
+    asDiv.className = 'form-group auto-send-form-row';
+    asDiv.innerHTML = '<label class="auto-send-form-label"><input type="checkbox" name="auto_send"> <span>⚡ Auto-Send Steps 2+</span></label>' +
+      '<div class="auto-send-hint">When enabled, follow-up emails (steps 2, 3, …) send automatically on schedule. Step 1 always stays manual for personalisation.</div>';
+    var stepsContainer = document.getElementById('steps-container');
+    stepsContainer.parentNode.insertBefore(asDiv, stepsContainer);
+  }
+  form.querySelector('[name="auto_send"]').checked = false;
+
   if (id) {
     apiFetch(`/api/sequences/${id}`).then(s => {
       form.querySelector('[name="id"]').value = s.id;
       form.querySelector('[name="name"]').value = s.name;
       form.querySelector('[name="description"]').value = s.description||'';
+      form.querySelector('[name="auto_send"]').checked = !!s.auto_send;
       s.steps.forEach(st => addStep(st));
     });
   } else {
@@ -1872,6 +2039,7 @@ async function saveSequence(e) {
   const id = form.querySelector('[name="id"]').value;
   const name = form.querySelector('[name="name"]').value;
   const description = form.querySelector('[name="description"]').value;
+  const auto_send = form.querySelector('[name="auto_send"]') ? form.querySelector('[name="auto_send"]').checked : false;
 
   // Collect steps from DOM
   const steps = [];
@@ -1887,15 +2055,26 @@ async function saveSequence(e) {
 
   try {
     if (id) {
-      await apiFetch(`/api/sequences/${id}`, { method: 'PUT', body: JSON.stringify({ name, description, steps }) });
+      await apiFetch(`/api/sequences/${id}`, { method: 'PUT', body: JSON.stringify({ name, description, steps, auto_send }) });
       toast('Sequence updated');
     } else {
-      await apiFetch('/api/sequences', { method: 'POST', body: JSON.stringify({ name, description, steps }) });
+      await apiFetch('/api/sequences', { method: 'POST', body: JSON.stringify({ name, description, steps, auto_send }) });
       toast('Sequence created', 'success');
     }
     closeModal('modal-sequence');
     loadSequences();
   } catch(err) { toast(err.message, 'error'); }
+}
+
+async function toggleAutoSend(seqId, enabled) {
+  try {
+    await apiFetch('/api/sequences/' + seqId + '/auto-send', {
+      method: 'PATCH',
+      body: JSON.stringify({ auto_send: enabled })
+    });
+    toast(enabled ? 'Auto-send enabled — steps 2+ will send automatically' : 'Auto-send disabled — all steps manual', enabled ? 'success' : 'info');
+    loadSequences();
+  } catch(e) { toast(e.message, 'error'); }
 }
 
 async function deleteSequence(id) {
@@ -2150,8 +2329,16 @@ async function loadQueue() {
       if (_queueExpanded[k] === undefined) _queueExpanded[k] = true;
     });
 
+    // Fetch sequences to check auto_send status
+    var seqsForAuto = {};
+    try {
+      var seqList = await apiFetch('/api/sequences');
+      seqList.forEach(function(s) { seqsForAuto[s.id] = s; });
+    } catch(e) { /* ignore — non-critical */ }
+
     listEl.innerHTML = Object.values(groups).map(g => {
       const isOpen = _queueExpanded[g.id];
+      const isAutoSend = seqsForAuto[g.id] && seqsForAuto[g.id].auto_send;
       const stepCounts = {};
       g.items.forEach(item => {
         const k = `Step ${item.current_step}`;
@@ -2165,6 +2352,7 @@ async function loadQueue() {
             <div class="queue-group-left">
               <span class="queue-group-arrow">${isOpen ? '▾' : '▸'}</span>
               <span class="queue-group-name">${esc(g.name)}</span>
+              ${isAutoSend ? '<span class="seq-auto-badge seq-auto-on" style="font-size:11px">⚡ Auto</span>' : ''}
               <span class="queue-group-count">${g.items.length} recipient${g.items.length!==1?'s':''}</span>
               <span class="queue-group-steps">${stepSummary}</span>
             </div>
@@ -2180,6 +2368,7 @@ async function loadQueue() {
                 <div class="queue-company">${esc(item.company_name||'No company')} ${item.company_type ? `· ${typeName(item.company_type)}` : ''}</div>
                 ${item.email ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px">${esc(item.email)}</div>` : ''}
                 <span class="queue-step-badge">Step ${item.current_step} of ${item.total_steps}</span>
+                ${(isAutoSend && item.current_step > 1) ? '<span class="queue-auto-hint">⚡ will auto-send</span>' : (item.current_step === 1 ? '<span class="queue-manual-hint">✋ manual review</span>' : '')}
                 <div class="queue-subject">"${esc(item.step_subject)}"</div>
               </div>
               <div class="queue-actions" onclick="event.stopPropagation()">
@@ -3353,6 +3542,55 @@ async function testEmail() {
 
 // ── CSV IMPORT ────────────────────────────────────────────────────────────
 let importType = '';
+function openQuickImport() {
+  document.getElementById('quick-import-url').value = '';
+  document.getElementById('quick-import-result').style.display = 'none';
+  document.getElementById('quick-import-btn').disabled = false;
+  document.getElementById('quick-import-btn').textContent = '⚡ Import';
+  openModal('modal-quick-import');
+  setTimeout(function() { document.getElementById('quick-import-url').focus(); }, 100);
+}
+
+async function submitQuickImport() {
+  var url = document.getElementById('quick-import-url').value.trim();
+  if (!url) { toast('Paste a URL first', 'error'); return; }
+  var btn = document.getElementById('quick-import-btn');
+  var resultEl = document.getElementById('quick-import-result');
+  btn.disabled = true;
+  btn.textContent = 'Importing…';
+  resultEl.style.display = 'none';
+
+  try {
+    var data = await apiFetch('/api/import/quick', {
+      method: 'POST',
+      body: JSON.stringify({ url: url })
+    });
+
+    if (data.existing) {
+      resultEl.style.display = 'block';
+      resultEl.innerHTML = '<div style="padding:12px;background:#fef3c7;border-radius:8px;font-size:13px">' +
+        '<strong>Already exists:</strong> ' + esc(data.company.name) +
+        ' <button class="btn btn-ghost btn-sm" onclick="closeModal(\'modal-quick-import\');openCompanyDetail(' + data.company.id + ')">View →</button></div>';
+      btn.disabled = false;
+      btn.textContent = '⚡ Import';
+      return;
+    }
+
+    resultEl.style.display = 'block';
+    resultEl.innerHTML = '<div style="padding:12px;background:#dcfce7;border-radius:8px;font-size:13px">' +
+      '<strong>Created:</strong> ' + esc(data.company.name) +
+      (data.scraped.description ? '<br><span style="color:var(--text-muted)">' + esc(data.scraped.description.slice(0, 150)) + '</span>' : '') +
+      ' <button class="btn btn-primary btn-sm" style="margin-left:8px" onclick="closeModal(\'modal-quick-import\');openCompanyDetail(' + data.company.id + ')">Open & Edit →</button></div>';
+    toast('Prospect added: ' + data.company.name, 'success');
+    loadCompanies();
+    btn.textContent = '✓ Done';
+  } catch(e) {
+    toast(e.message, 'error');
+    btn.disabled = false;
+    btn.textContent = '⚡ Import';
+  }
+}
+
 function openImportModal(type) {
   importType = type;
   document.getElementById('import-modal-title').textContent = type === 'companies' ? 'Import Companies CSV' : 'Import Contacts CSV';
