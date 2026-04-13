@@ -811,11 +811,22 @@ function renderLeadHeatmap(leads) {
   const warm = scored.filter(l => l.cls === 'warm');
   const cold = scored.filter(l => l.cls === 'cold');
 
-  function renderSection(title, items, cls) {
-    if (!items.length) return '<div class="heatmap-section heatmap-' + cls + '"><div class="heatmap-section-title">' + title + ' <span class="heatmap-count">(0)</span></div><div class="heatmap-empty">No ' + title.replace(/[^\w\s]/g,'').trim().toLowerCase() + ' leads</div></div>';
+  function toggleHeatmapSection(id) {
+    var grid = document.getElementById(id);
+    var arrow = document.getElementById(id + '-arrow');
+    if (!grid) return;
+    var collapsed = grid.style.display === 'none';
+    grid.style.display = collapsed ? '' : 'none';
+    if (arrow) arrow.textContent = collapsed ? '▾' : '▸';
+  }
+
+  function renderSection(title, items, cls, sectionId) {
+    var arrow = '<span id="hm-' + sectionId + '-arrow" class="heatmap-collapse-arrow" style="cursor:pointer;margin-right:4px;font-size:12px;user-select:none">▾</span>';
+    var header = '<div class="heatmap-section-title" style="cursor:pointer" onclick="toggleHeatmapSection(\'hm-' + sectionId + '\')">' + arrow + title + ' <span class="heatmap-count">(' + items.length + ')</span></div>';
+    if (!items.length) return '<div class="heatmap-section heatmap-' + cls + '">' + header + '<div id="hm-' + sectionId + '"><div class="heatmap-empty">No ' + title.replace(/[^\w\s]/g,'').trim().toLowerCase() + ' leads</div></div></div>';
     return '<div class="heatmap-section heatmap-' + cls + '">' +
-      '<div class="heatmap-section-title">' + title + ' <span class="heatmap-count">(' + items.length + ')</span></div>' +
-      '<div class="heatmap-grid">' +
+      header +
+      '<div id="hm-' + sectionId + '" class="heatmap-grid">' +
         items.map(function(l) {
           var factorsHtml = (l.factors || []).map(function(f) {
             return '<div class="score-factor score-factor-' + f.cls + '">' +
@@ -842,10 +853,13 @@ function renderLeadHeatmap(leads) {
   }
 
   function renderSleepers(items) {
-    if (!items.length) return `<div class="heatmap-section heatmap-sleeper"><div class="heatmap-section-title">\uD83D\uDCA4 Sleepers <span class="heatmap-count">(0)</span></div><div class="heatmap-empty">No sleepers — every aligned company has been contacted</div></div>`;
+    var arrow = '<span id="hm-sleepers-arrow" class="heatmap-collapse-arrow" style="cursor:pointer;margin-right:4px;font-size:12px;user-select:none">▾</span>';
+    var header = `<div class="heatmap-section-title" style="cursor:pointer" onclick="toggleHeatmapSection('hm-sleepers')">${arrow}\uD83D\uDCA4 Sleepers <span class="heatmap-count">(${items.length})</span></div>`;
+    if (!items.length) return `<div class="heatmap-section heatmap-sleeper">${header}<div id="hm-sleepers"><div class="heatmap-empty">No sleepers — every aligned company has been contacted</div></div></div>`;
     return `
       <div class="heatmap-section heatmap-sleeper">
-        <div class="heatmap-section-title">\uD83D\uDCA4 Sleepers <span class="heatmap-count">(${items.length})</span></div>
+        ${header}
+        <div id="hm-sleepers">
         <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Aligned companies with zero outreach — potential untapped opportunities</div>
         <div class="heatmap-grid">
           ${items.map(l => {
@@ -862,12 +876,13 @@ function renderLeadHeatmap(leads) {
             </div>`;
           }).join('')}
         </div>
+        </div>
       </div>`;
   }
 
-  el.innerHTML = renderSection('\uD83D\uDD25 Hot', hot, 'hot')
-    + renderSection('\uD83D\uDFE1 Warm', warm, 'warm')
-    + renderSection('\uD83D\uDD35 Cold', cold, 'cold')
+  el.innerHTML = renderSection('\uD83D\uDD25 Hot', hot, 'hot', 'hot')
+    + renderSection('\uD83D\uDFE1 Warm', warm, 'warm', 'warm')
+    + renderSection('\u2744\uFE0F Cold', cold, 'cold', 'cold')
     + renderSleepers(sleepers);
 }
 

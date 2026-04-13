@@ -115,7 +115,7 @@
           <span class="nav-icon">📊</span> Reports
         </li>
         <li class="nav-item" data-page="news">
-          <span class="nav-icon">◉</span> Industry News
+          <span class="nav-icon">🏄</span> Fresh Stoke
         </li>
         <li class="nav-item" data-page="activity">
           <span class="nav-icon">◷</span> Activity Log
@@ -326,11 +326,11 @@
         <div id="inbox-list"></div>
       </section>
 
-      <!-- INDUSTRY NEWS -->
+      <!-- FRESH STOKE -->
       <section id="page-news" class="page">
         <div class="page-header">
           <div>
-            <h1>Industry News</h1>
+            <h1>Fresh Stoke</h1>
             <div style="font-size:12px;color:var(--text-muted);margin-top:3px">Art licensing, brand collabs &amp; prospect company news — updated every 45 min</div>
           </div>
           <div class="page-actions" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -1117,7 +1117,22 @@
   <!-- Toast -->
   <div id="toast" class="toast hidden"></div>
 
-  <script src="app.js"></script>
+  <!-- Core module (must load first - declares all globals and shared functions) -->
+  <script src="app-core.js"></script>
+
+  <!-- Feature modules (in order of dependencies) -->
+  <script src="app-dashboard.js"></script>
+  <script src="app-companies.js"></script>
+  <script src="app-contacts.js"></script>
+  <script src="app-sequences.js"></script>
+  <script src="app-queue.js"></script>
+  <script src="app-activity.js"></script>
+  <script src="app-inbox.js"></script>
+  <script src="app-pipeline.js"></script>
+  <script src="app-reports.js"></script>
+  <script src="app-news.js"></script>
+
+  <!-- Utility and supplementary modules -->
   <script src="app-extras.js"></script>
 </body>
 </html>

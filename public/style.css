@@ -1191,6 +1191,8 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
 .news-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; padding-top: 4px; }
 .news-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
 .news-card:hover { border-color: var(--primary); }
+.news-card-must-read { border-left: 4px solid #a78bfa; background: linear-gradient(135deg, #faf5ff 0%, var(--surface) 100%); position: relative; }
+.news-must-read-badge { position: absolute; top: 8px; right: 8px; background: #a78bfa; color: #fff; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; padding: 2px 8px; border-radius: 4px; }
 .news-card-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .news-source { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--accent); }
 .news-title { display: block; font-size: 13px; font-weight: 600; color: var(--text); text-decoration: none; line-height: 1.4; }
@@ -1501,6 +1503,12 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
   box-sizing: border-box;
 }
 .queue-detail-input:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px rgba(26,86,153,0.1); }
+.textarea-toolbar {
+  display: flex; gap: 4px; padding: 4px 0;
+}
+.textarea-toolbar .btn { font-size: 12px; padding: 2px 8px; opacity: 0.7; }
+.textarea-toolbar .btn:hover { opacity: 1; }
+
 .queue-detail-textarea {
   width: 100%; padding: 12px 14px; font-size: 14px; line-height: 1.7;
   border: 1px solid var(--border); border-radius: 8px; background: #fff; color: var(--text);
@@ -1770,7 +1778,8 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
 }
 .heatmap-dot-hot     { background: #22c55e; }
 .heatmap-dot-warm    { background: #eab308; }
-.heatmap-dot-cold    { background: #93a3b8; }
+.heatmap-dot-cold    { background: transparent; font-size: 12px; width: auto; height: auto; border-radius: 0; }
+.heatmap-dot-cold::after { content: '\2744\FE0F'; }
 .heatmap-dot-sleeper { background: #a78bfa; }
 .heatmap-card-sleeper { border-left: 4px solid #a78bfa; }
 .heatmap-card-stage {
