@@ -557,94 +557,146 @@ document.querySelectorAll('.modal-overlay').forEach(overlay => {
 // ── DASHBOARD ─────────────────────────────────────────────────────────────
 async function loadDashboard() {
   try {
-    const [d, stuckData, inboxData] = await Promise.all([
+    var [d, stuckData, inboxData, priorities, weekly] = await Promise.all([
       apiFetch('/api/dashboard'),
-      apiFetch('/api/pipeline/stuck-count').catch(() => ({ count: 0 })),
-      apiFetch('/api/inbox?limit=0').catch(() => ({ unreadCount: 0 })),
+      apiFetch('/api/pipeline/stuck-count').catch(function() { return { count: 0 }; }),
+      apiFetch('/api/inbox?limit=0').catch(function() { return { unreadCount: 0 }; }),
+      apiFetch('/api/dashboard/priorities').catch(function() { return { unreplied:[], firstTouches:[], manualFollowUps:[], goingCold:[], overdue:[], autoSendPending:0, recentAutoSent:[] }; }),
+      apiFetch('/api/dashboard/weekly-summary').catch(function() { return { emailsSent:0, repliesReceived:0, replyRate:0, newCompanies:0, completedSequences:0, repliedSequences:0, positiveReplies:[] }; }),
     ]);
     updateBadge('badge-inbox', inboxData.unreadCount || 0);
-    const stuckCount = stuckData.count || 0;
-    const stuckClass = stuckCount > 0 ? 'stat-card stat-stuck stat-clickable' : 'stat-card stat-clickable';
-    document.getElementById('stats-grid').innerHTML = `
-      <div class="stat-card stat-clickable" onclick="showPage('prospects')" title="View all companies">
-        <div class="stat-label">Companies</div>
-        <div class="stat-value">${d.totalCompanies}</div>
-        <div class="stat-sub">in your prospect list</div>
-        <div class="stat-link-hint">View prospects →</div>
-      </div>
-      <div class="stat-card stat-clickable" onclick="showPage('pipeline')" title="View contact pipeline">
-        <div class="stat-label">Contacts</div>
-        <div class="stat-value">${d.totalContacts}</div>
-        <div class="stat-sub">across all companies</div>
-        <div class="stat-link-hint">View pipeline →</div>
-      </div>
-      <div class="stat-card highlight stat-clickable" onclick="showPage('sequences')" title="View email sequences">
-        <div class="stat-label">Active Sequences</div>
-        <div class="stat-value">${d.activeEnrollments}</div>
-        <div class="stat-sub">contacts enrolled</div>
-        <div class="stat-link-hint">View sequences →</div>
-      </div>
-      <div class="stat-card stat-clickable" onclick="showPage('activity')" title="View activity log">
-        <div class="stat-label">Emails Sent</div>
-        <div class="stat-value">${d.emailsSent}</div>
-        <div class="stat-sub">total outreach</div>
-        <div class="stat-link-hint">View activity →</div>
-      </div>
-      <div class="stat-card queue stat-clickable" onclick="showPage('queue')" title="View outreach queue">
-        <div class="stat-label">Queue Today</div>
-        <div class="stat-value">${d.queueCount}</div>
-        <div class="stat-sub">ready to send</div>
-        <div class="stat-link-hint">View queue →</div>
-      </div>
-      <div class="${stuckClass}" onclick="showPage('pipeline')" title="View stuck contacts in pipeline" style="${stuckCount > 0 ? 'border-color:var(--danger);' : ''}">
-        <div class="stat-label" style="${stuckCount > 0 ? 'color:var(--danger);' : ''}">Stuck</div>
-        <div class="stat-value" style="${stuckCount > 0 ? 'color:var(--danger);' : ''}">${stuckCount}</div>
-        <div class="stat-sub">${stuckCount > 0 ? 'no contact in 2+ weeks' : 'no stuck contacts'}</div>
-        <div class="stat-link-hint">View pipeline →</div>
-      </div>
-    `;
     updateBadge('badge-queue', d.queueCount);
+    var stuckCount = stuckData.count || 0;
+    var p = priorities;
+    var replies = (d.recentActivity || []).sort(function(a, b) { return new Date(b.sent_at) - new Date(a.sent_at); });
 
-    // Load daily priorities + weekly summary panels
-    loadPriorities();
-    loadWeeklySummary();
+    // ── TILE 1: REPLIES ─────────────────────────────────────────────────
+    var replyCount = replies.length;
+    var unreadCount = replies.filter(function(r) { return !r.notes || r.notes !== 'read'; }).length;
+    var replyBadgeClass = unreadCount > 0 ? 'dt-badge dt-badge-urgent' : 'dt-badge';
+    var replyItems = replies.slice(0, 3).map(function(a) {
+      var isNew = !a.notes || a.notes !== 'read';
+      var rawSnippet = cleanReplyBody(a.body || '');
+      var snippet = rawSnippet.length > 80 ? rawSnippet.substring(0, 80) + '…' : rawSnippet;
+      var sentimentLabels = { positive: '✓', neutral: '⏳', negative: '✗' };
+      var sentimentHtml = a.sentiment ? '<span class="dt-sentiment dt-sentiment-' + a.sentiment + '">' + sentimentLabels[a.sentiment] + '</span>' : '';
+      return '<div class="dt-preview-item' + (isNew ? ' dt-preview-unread' : '') + '" onclick="openContactDetail(' + a.contact_id + ')">' +
+        '<div class="dt-preview-row">' +
+          '<span class="dt-preview-name">' + sentimentHtml + esc(a.first_name) + ' ' + esc(a.last_name || '') + '</span>' +
+          '<span class="dt-preview-co">' + esc(a.company_name || '') + '</span>' +
+          '<span class="dt-preview-date">' + fmtDate(a.sent_at) + '</span>' +
+        '</div>' +
+        (snippet ? '<div class="dt-preview-snippet">"' + esc(snippet) + '"</div>' : '') +
+      '</div>';
+    }).join('');
 
-    const actEl = document.getElementById('recent-activity');
-    // Sort replies newest-first (query uses DISTINCT ON which orders by contact)
-    const replies = (d.recentActivity || []).sort((a, b) => new Date(b.sent_at) - new Date(a.sent_at));
-    if (!replies.length) {
-      actEl.innerHTML = `<div class="empty-state">No replies yet. Replies from prospects will show up here.</div>`;
-      return;
+    // ── TILE 2: QUEUE / OUTREACH ────────────────────────────────────────
+    var firstTouchCount = p.firstTouches.length;
+    var followUpCount = p.manualFollowUps.length;
+    var autoCount = p.autoSendPending;
+    var queueTotal = d.queueCount;
+    var queueItems = p.firstTouches.slice(0, 2).map(function(q) {
+      return '<div class="dt-preview-item" onclick="showPage(\'queue\')">' +
+        '<div class="dt-preview-row">' +
+          '<span class="dt-preview-name">✋ ' + esc(q.first_name) + ' ' + esc(q.last_name || '') + '</span>' +
+          '<span class="dt-preview-co">' + esc(q.company_name || '') + '</span>' +
+        '</div>' +
+        '<div class="dt-preview-snippet">Step 1 — "' + esc((q.step_subject || '').slice(0, 50)) + '"</div>' +
+      '</div>';
+    }).join('');
+    if (followUpCount > 0) {
+      queueItems += '<div class="dt-preview-item" onclick="showPage(\'queue\')">' +
+        '<div class="dt-preview-row"><span class="dt-preview-name">📧 ' + followUpCount + ' manual follow-up' + (followUpCount !== 1 ? 's' : '') + ' ready</span></div></div>';
     }
-    actEl.innerHTML = `<div class="activity-list">${replies.map(a => {
-      const isNew = !a.notes || a.notes !== 'read';
-      const rawSnippet = cleanReplyBody(a.body || '');
-      const snippet = rawSnippet.length > 120 ? rawSnippet.substring(0,120) + '…' : rawSnippet;
-      const hasSequence = !!a.enrollment_id;
-      return `
-      <div class="activity-row${isNew ? ' activity-unread' : ''}" data-activity-id="${a.id}">
-        <div class="activity-content" onclick="openContactDetail(${a.contact_id})" style="cursor:pointer">
-          <div class="activity-header">
-            <span class="activity-name">${esc(a.first_name)} ${esc(a.last_name||'')}</span>
-            <span class="activity-co">${esc(a.company_name||'')}</span>
-            <span class="activity-date">${fmtDate(a.sent_at)}</span>
-          </div>
-          ${snippet ? `<div class="activity-snippet">"${esc(snippet)}"</div>` : ''}
-        </div>
-        <div class="activity-actions">
-          <button class="btn btn-sm btn-primary activity-reply-btn" onclick="event.stopPropagation();openQuickReply(${a.id})">Reply</button>
-          <div class="activity-menu-wrap">
-            <button class="activity-menu-btn" onclick="event.stopPropagation();toggleActivityMenu(this)" title="More actions">⋯</button>
-            <div class="activity-menu">
-              <button onclick="event.stopPropagation();archiveReply(${a.id})">Archive</button>
-              <button onclick="event.stopPropagation();toggleReadReply(${a.id})">${isNew ? 'Mark read' : 'Mark unread'}</button>
-              ${hasSequence ? `<button onclick="event.stopPropagation();removeFromSequence(${a.enrollment_id},${a.id})">Remove from sequence</button>` : ''}
-              <button class="activity-menu-danger" onclick="event.stopPropagation();deleteReply(${a.id})">Delete</button>
-            </div>
-          </div>
-        </div>
-      </div>`;
-    }).join('')}</div>`;
+    if (autoCount > 0) {
+      queueItems += '<div class="dt-preview-item" onclick="showPage(\'queue\')">' +
+        '<div class="dt-preview-row"><span class="dt-preview-name">⚡ ' + autoCount + ' queued for auto-send</span></div></div>';
+    }
+
+    // ── TILE 3: PIPELINE HEALTH ─────────────────────────────────────────
+    var pipelineAlerts = p.overdue.length + p.goingCold.length + stuckCount;
+    var pipelineBadgeClass = pipelineAlerts > 0 ? 'dt-badge dt-badge-warn' : 'dt-badge dt-badge-ok';
+    var pipelineItems = '';
+    if (p.overdue.length > 0) {
+      pipelineItems += p.overdue.slice(0, 2).map(function(o) {
+        return '<div class="dt-preview-item" onclick="openCompanyDetail(' + o.id + ')">' +
+          '<div class="dt-preview-row">' +
+            '<span class="dt-preview-name">⏰ ' + esc(o.name) + '</span>' +
+            '<span class="dt-preview-date">due ' + fmtDate(o.next_step_date) + '</span>' +
+          '</div>' +
+          '<div class="dt-preview-snippet">' + esc(o.next_step || '') + '</div>' +
+        '</div>';
+      }).join('');
+    }
+    if (p.goingCold.length > 0) {
+      pipelineItems += p.goingCold.slice(0, 2).map(function(c) {
+        var daysAgo = Math.round((Date.now() - new Date(c.last_activity_at).getTime()) / 86400000);
+        return '<div class="dt-preview-item" onclick="openCompanyDetail(' + c.id + ')">' +
+          '<div class="dt-preview-row">' +
+            '<span class="dt-preview-name">🧊 ' + esc(c.name) + '</span>' +
+            '<span class="dt-preview-date">' + daysAgo + 'd silent</span>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+    }
+    if (stuckCount > 0 && p.overdue.length === 0 && p.goingCold.length === 0) {
+      pipelineItems += '<div class="dt-preview-item" onclick="showPage(\'pipeline\')">' +
+        '<div class="dt-preview-row"><span class="dt-preview-name" style="color:var(--danger)">' + stuckCount + ' stuck contact' + (stuckCount !== 1 ? 's' : '') + ' — no activity in 2+ weeks</span></div></div>';
+    }
+    if (!pipelineItems) {
+      pipelineItems = '<div class="dt-preview-empty">All clear — no overdue or cold contacts</div>';
+    }
+
+    // ── RENDER TILES ────────────────────────────────────────────────────
+    var tilesEl = document.getElementById('dash-tiles');
+    tilesEl.innerHTML =
+      '<div class="dt-grid">' +
+        // Replies tile
+        '<div class="dt-tile dt-tile-replies" onclick="showPage(\'inbox\')">' +
+          '<div class="dt-tile-header">' +
+            '<div class="dt-tile-icon">💬</div>' +
+            '<div class="dt-tile-title">Replies</div>' +
+            '<div class="' + replyBadgeClass + '">' + unreadCount + ' unread</div>' +
+          '</div>' +
+          (replyItems || '<div class="dt-preview-empty">No replies yet</div>') +
+          (replyCount > 3 ? '<div class="dt-tile-more">View all ' + replyCount + ' →</div>' : '') +
+        '</div>' +
+        // Queue tile
+        '<div class="dt-tile dt-tile-queue" onclick="showPage(\'queue\')">' +
+          '<div class="dt-tile-header">' +
+            '<div class="dt-tile-icon">📤</div>' +
+            '<div class="dt-tile-title">Outreach Queue</div>' +
+            '<div class="dt-badge">' + queueTotal + ' ready</div>' +
+          '</div>' +
+          (queueItems || '<div class="dt-preview-empty">Queue is clear — all caught up</div>') +
+          (firstTouchCount > 2 ? '<div class="dt-tile-more">View all ' + queueTotal + ' →</div>' : '') +
+        '</div>' +
+        // Pipeline tile
+        '<div class="dt-tile dt-tile-pipeline" onclick="showPage(\'pipeline\')">' +
+          '<div class="dt-tile-header">' +
+            '<div class="dt-tile-icon">🔬</div>' +
+            '<div class="dt-tile-title">Pipeline Health</div>' +
+            '<div class="' + pipelineBadgeClass + '">' + (pipelineAlerts > 0 ? pipelineAlerts + ' alert' + (pipelineAlerts !== 1 ? 's' : '') : 'Healthy') + '</div>' +
+          '</div>' +
+          pipelineItems +
+          (p.overdue.length + p.goingCold.length > 4 ? '<div class="dt-tile-more">View pipeline →</div>' : '') +
+        '</div>' +
+      '</div>';
+
+    // ── MINI STATS STRIP ────────────────────────────────────────────────
+    var miniEl = document.getElementById('dash-mini-stats');
+    miniEl.innerHTML =
+      '<div class="dm-strip">' +
+        '<div class="dm-stat" onclick="showPage(\'prospects\')"><span class="dm-val">' + d.totalCompanies + '</span> <span class="dm-label">Companies</span></div>' +
+        '<div class="dm-stat" onclick="showPage(\'pipeline\')"><span class="dm-val">' + d.totalContacts + '</span> <span class="dm-label">Contacts</span></div>' +
+        '<div class="dm-stat" onclick="showPage(\'sequences\')"><span class="dm-val">' + d.activeEnrollments + '</span> <span class="dm-label">Active Sequences</span></div>' +
+        '<div class="dm-stat" onclick="showPage(\'activity\')"><span class="dm-val">' + d.emailsSent + '</span> <span class="dm-label">Total Sent</span></div>' +
+        '<div class="dm-sep"></div>' +
+        '<div class="dm-stat"><span class="dm-val">' + weekly.emailsSent + '</span> <span class="dm-label">Sent This Week</span></div>' +
+        '<div class="dm-stat" onclick="showPage(\'inbox\')"><span class="dm-val" style="color:var(--success,#22c55e)">' + weekly.repliesReceived + '</span> <span class="dm-label">Replies This Week</span></div>' +
+        '<div class="dm-stat"><span class="dm-val">' + weekly.replyRate + '%</span> <span class="dm-label">Reply Rate</span></div>' +
+      '</div>';
+
   } catch(e) { toast(e.message, 'error'); }
 }
 
