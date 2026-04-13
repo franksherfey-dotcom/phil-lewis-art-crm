@@ -7,12 +7,19 @@ const router = express.Router()
 router.get('/', async (req, res) => {
   try {
     const { contact_id, enrollment_id, type } = req.query
-    let sql = 'SELECT * FROM activities WHERE 1=1'
+    let sql = `
+      SELECT a.*,
+             ct.first_name, ct.last_name, ct.company_id,
+             co.name AS company_name
+      FROM activities a
+      LEFT JOIN contacts ct ON ct.id = a.contact_id
+      LEFT JOIN companies co ON co.id = ct.company_id
+      WHERE 1=1`
     const params = []
-    if (contact_id) { sql += ' AND contact_id=$1'; params.push(contact_id) }
-    if (enrollment_id) { sql += ` AND enrollment_id=$${params.length+1}`; params.push(enrollment_id) }
-    if (type) { sql += ` AND type=$${params.length+1}`; params.push(type) }
-    sql += ' ORDER BY sent_at DESC LIMIT 200'
+    if (contact_id) { sql += ' AND a.contact_id=$1'; params.push(contact_id) }
+    if (enrollment_id) { sql += ` AND a.enrollment_id=$${params.length+1}`; params.push(enrollment_id) }
+    if (type) { sql += ` AND a.type=$${params.length+1}`; params.push(type) }
+    sql += ' ORDER BY a.sent_at DESC LIMIT 500'
     res.json(await all(sql, params))
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
