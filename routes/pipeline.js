@@ -3,12 +3,12 @@ const { one, all } = require('../lib/helpers')
 
 const router = express.Router()
 
-// GET /api/pipeline — returns contacts with enrollment + company data for pipeline view
+// GET /api/pipeline
 router.get('/pipeline', async (req, res) => {
   try {
     const contacts = await all(`
       SELECT ct.id, ct.first_name, ct.last_name, ct.email, ct.is_primary,
-             ct.last_contact_at,
+             lc.last_contact_at,
              co.name AS company_name, co.tags AS company_tags,
              e.status AS enrollment_status, e.id AS enrollment_id,
              e.started_at, e.current_step,
@@ -17,6 +17,9 @@ router.get('/pipeline', async (req, res) => {
              COALESCE((SELECT COUNT(*)::int FROM activities WHERE contact_id = ct.id AND type = 'email'), 0) AS emails_sent
       FROM contacts ct
       LEFT JOIN companies co ON ct.company_id = co.id
+      LEFT JOIN LATERAL (
+        SELECT MAX(sent_at) AS last_contact_at FROM activities WHERE contact_id = ct.id
+      ) lc ON true
       LEFT JOIN LATERAL (
         SELECT id, sequence_id, status, started_at, current_step
         FROM enrollments
@@ -27,34 +30,33 @@ router.get('/pipeline', async (req, res) => {
       LEFT JOIN sequences s ON s.id = e.sequence_id
       ORDER BY
         CASE e.status
-          WHEN 'replied' THEN 0
-          WHEN 'active' THEN 1
-          WHEN 'paused' THEN 2
-          WHEN 'completed' THEN 3
-          WHEN 'stopped' THEN 4
-          ELSE 5
+          WHEN 'replied' THEN 0 WHEN 'active' THEN 1 WHEN 'paused' THEN 2
+          WHEN 'completed' THEN 3 WHEN 'stopped' THEN 4 ELSE 5
         END,
-        ct.last_contact_at DESC NULLS LAST
+        lc.last_contact_at DESC NULLS LAST
     `)
     res.json(contacts)
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
-// GET /api/pipeline/stuck-count — contacts in active sequences with no activity for 14+ days
+// GET /api/pipeline/stuck-count
 router.get('/pipeline/stuck-count', async (req, res) => {
   try {
     const result = await one(`
       SELECT COUNT(*)::int AS count
       FROM enrollments e
       JOIN contacts ct ON ct.id = e.contact_id
+      LEFT JOIN LATERAL (
+        SELECT MAX(sent_at) AS last_contact_at FROM activities WHERE contact_id = ct.id
+      ) lc ON true
       WHERE e.status = 'active'
-        AND (ct.last_contact_at IS NULL OR ct.last_contact_at < NOW() - INTERVAL '14 days')
+        AND (lc.last_contact_at IS NULL OR lc.last_contact_at < NOW() - INTERVAL '14 days')
     `)
     res.json({ count: result.count })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
-// GET /api/leads/heatmap — companies with activity metrics for lead scoring
+// GET /api/leads/heatmap
 router.get('/leads/heatmap', async (req, res) => {
   try {
     const leads = await all(`
@@ -69,9 +71,9 @@ router.get('/leads/heatmap', async (req, res) => {
       FROM companies co
       LEFT JOIN LATERAL (
         SELECT
-          COUNT(CASE WHEN a.direction = 'outbound' THEN 1 END)::int AS emails_sent,
-          COUNT(CASE WHEN a.direction = 'inbound' THEN 1 END)::int AS reply_count,
-          MAX(CASE WHEN a.direction = 'inbound' THEN a.sent_at END) AS last_reply_at,
+          COUNT(CASE WHEN a.type = 'email' THEN 1 END)::int AS emails_sent,
+          COUNT(CASE WHEN a.type = 'received_email' THEN 1 END)::int AS reply_count,
+          MAX(CASE WHEN a.type = 'received_email' THEN a.sent_at END) AS last_reply_at,
           (ARRAY_AGG(a.sentiment ORDER BY a.sent_at DESC) FILTER (WHERE a.sentiment IS NOT NULL))[1] AS latest_sentiment
         FROM activities a
         JOIN contacts ct ON ct.id = a.contact_id
