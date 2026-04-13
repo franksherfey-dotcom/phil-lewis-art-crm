@@ -5,16 +5,31 @@ const router = express.Router()
 
 router.get('/inbox', async (req, res) => {
   try {
-    const rows = await all(`
-      SELECT a.id, a.contact_id, a.subject, a.body, a.sent_at, a.sentiment, a.notes,
-             c.first_name, c.last_name, c.email, co.name AS company_name, co.id AS company_id
+    const { search, limit, tab } = req.query
+    const activityType = tab === 'sent' ? 'email' : 'received_email'
+    let sql = `
+      SELECT a.id, a.contact_id, a.subject, a.body, a.status, a.sent_at, a.notes, a.sentiment,
+             c.first_name, c.last_name, c.email, c.title,
+             co.id AS company_id, co.name AS company_name, co.type AS company_type,
+             co.opportunity_value, co.pipeline_stage, co.status AS company_status
       FROM activities a
       LEFT JOIN contacts c ON a.contact_id = c.id
       LEFT JOIN companies co ON c.company_id = co.id
-      WHERE a.type='received_email' AND (a.notes IS NULL OR a.notes NOT IN ('archived'))
-      ORDER BY a.sent_at DESC LIMIT 100
-    `)
-    res.json(rows)
+      WHERE a.type = $1 AND (a.notes IS NULL OR a.notes NOT IN ('archived'))
+    `
+    const params = [activityType]
+    let i = 2
+    if (search) {
+      const s = `%${search}%`
+      sql += ` AND (a.subject ILIKE $${i} OR c.first_name ILIKE $${i+1} OR c.last_name ILIKE $${i+2} OR co.name ILIKE $${i+3})`
+      params.push(s, s, s, s); i += 4
+    }
+    sql += ' ORDER BY a.sent_at DESC'
+    const lim = parseInt(limit)
+    if (lim && lim > 0) { sql += ` LIMIT $${i}`; params.push(lim); i++ }
+    const messages = await all(sql, params)
+    const unread = await one("SELECT COUNT(*)::int AS n FROM activities WHERE type='received_email' AND (notes IS NULL OR notes NOT IN ('read','archived'))")
+    res.json({ messages, unreadCount: unread.n })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
@@ -76,12 +91,10 @@ router.post('/inbox/dedup', async (req, res) => {
 
 function classifySentiment(subject, body) {
   const text = ((subject || '') + ' ' + (body || '')).toLowerCase()
-  const neg = [/not interested/i,/no thanks/i,/unsubscribe/i,/remove me/i,/stop (contact|email|reach)/i,/don'?t (contact|email|reach)/i,/please remove/i,/not (looking|seeking|accepting)/i,/take me off/i,/opt out/i,/not at this time/i,/no longer/i,/cease/i,/do not (want|wish)/i]
-  const later = [/maybe later/i,/not right now/i,/check back/i,/reach out (later|again|next)/i,/touch base (later|next|in)/i,/revisit/i,/try (again|back|next)/i,/circle back/i,/not a good time/i,/another time/i,/not now/i,/down the (road|line)/i,/few months/i,/next (quarter|year|season)/i]
-  const pos = [/interested/i,/love to/i,/would like/i,/tell me more/i,/send (me |us )?(more|info|details|samples)/i,/let'?s (talk|chat|connect|discuss|schedule|set up)/i,/sounds (great|good)/i,/looking forward/i,/excited/i,/great fit/i,/absolutely/i,/set up (a |an )?(call|meeting|time)/i,/schedule (a |an )?(call|meeting|time)/i,/I'?d (love|like) to/i,/can you send/i,/please send/i,/want to (learn|see|hear)/i,/we'?re interested/i]
-  for (const p of neg) if (p.test(text)) return 'negative'
-  for (const p of later) if (p.test(text)) return 'neutral'
-  for (const p of pos) if (p.test(text)) return 'positive'
+  const negPatterns = [/not interested/i, /no thanks/i, /unsubscribe/i, /remove me/i, /stop (contact|email|reach)/i, /please remove/i, /opt out/i, /do not (want|wish)/i]
+  const posPatterns = [/interested/i, /love to/i, /would like/i, /tell me more/i, /let'?s (talk|chat|connect|discuss)/i, /sounds great/i, /looking forward/i, /schedule (a |an )?(call|meeting)/i]
+  for (const p of negPatterns) { if (p.test(text)) return 'negative' }
+  for (const p of posPatterns) { if (p.test(text)) return 'positive' }
   return null
 }
 
@@ -108,15 +121,21 @@ router.post('/inbox/sync', async (req, res) => {
       if (existing) continue
       if (msg.body && msg.body.length > 20) {
         const bodyPrefix = msg.body.substring(0, 100)
-        const dupe = await one(`SELECT id FROM activities WHERE contact_id=$1 AND type='received_email' AND LEFT(COALESCE(body,''), 100) = $2 LIMIT 1`, [contactId, bodyPrefix])
+        const dupe = await one(
+          `SELECT id FROM activities WHERE contact_id=$1 AND type='received_email' AND LEFT(COALESCE(body,''), 100) = $2 LIMIT 1`,
+          [contactId, bodyPrefix]
+        )
         if (dupe) continue
       }
       const sentiment = classifySentiment(msg.subject, msg.body)
-      await run(`INSERT INTO activities (contact_id, type, subject, body, status, sent_at, sentiment) VALUES ($1,'received_email',$2,$3,'received',$4,$5)`,
-        [contactId, msg.subject, msg.body, msg.received_at, sentiment])
+      await run(
+        `INSERT INTO activities (contact_id, type, subject, body, status, sent_at, sentiment)
+         VALUES ($1,'received_email',$2,$3,'received',$4,$5)`,
+        [contactId, msg.subject, msg.body, msg.received_at, sentiment]
+      )
       imported++
-      const actives = await all(`SELECT id FROM enrollments WHERE contact_id=$1 AND status='active'`, [contactId])
-      for (const enr of actives) {
+      const active = await all(`SELECT id FROM enrollments WHERE contact_id=$1 AND status='active'`, [contactId])
+      for (const enr of active) {
         await run(`UPDATE enrollments SET status='replied', completed_at=NOW() WHERE id=$1`, [enr.id])
         autoStopped++
       }
