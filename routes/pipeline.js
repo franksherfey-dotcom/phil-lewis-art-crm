@@ -11,13 +11,14 @@ router.get('/pipeline', async (req, res) => {
              ct.last_contact_at,
              co.name AS company_name, co.tags AS company_tags,
              e.status AS enrollment_status, e.id AS enrollment_id,
-             e.started_at, e.current_step, e.emails_sent,
+             e.started_at, e.current_step,
              s.name AS sequence_name,
-             (SELECT COUNT(*)::int FROM sequence_steps WHERE sequence_id = s.id) AS total_steps
+             (SELECT COUNT(*)::int FROM sequence_steps WHERE sequence_id = s.id) AS total_steps,
+             COALESCE((SELECT COUNT(*)::int FROM activities WHERE contact_id = ct.id AND type = 'email'), 0) AS emails_sent
       FROM contacts ct
       LEFT JOIN companies co ON ct.company_id = co.id
       LEFT JOIN LATERAL (
-        SELECT id, sequence_id, status, started_at, current_step, emails_sent
+        SELECT id, sequence_id, status, started_at, current_step
         FROM enrollments
         WHERE contact_id = ct.id
         ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'replied' THEN 1 WHEN 'paused' THEN 2 ELSE 3 END
