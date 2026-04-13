@@ -208,6 +208,7 @@
         <div class="filters-bar">
           <input type="text" id="search-contacts" placeholder="Search contacts..." oninput="loadContacts()" class="filter-input">
           <button id="btn-not-in-seq" class="btn btn-outline btn-sm filter-toggle" onclick="toggleNotInSequence()" title="Show only contacts not in an active sequence">Not in Sequence</button>
+          <button id="btn-missing-email" class="btn btn-outline btn-sm filter-toggle" onclick="toggleMissingEmail()" title="Show only contacts without an email address">Missing Email</button>
           <button class="btn btn-ghost btn-sm" onclick="clearContactFilters()" style="color:var(--text-muted)">Clear filters</button>
         </div>
 

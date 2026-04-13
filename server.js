@@ -664,7 +664,7 @@ app.delete('/api/companies/:id', async (req, res) => {
 
 app.get('/api/contacts', async (req, res) => {
   try {
-    const { search, company_id, category, tag, not_in_sequence } = req.query
+    const { search, company_id, category, tag, not_in_sequence, missing_email } = req.query
     let sql = `
       SELECT ct.*,
              co.name AS company_name, co.type AS company_type,
@@ -704,6 +704,9 @@ app.get('/api/contacts', async (req, res) => {
     }
     if (not_in_sequence === 'true') {
       sql += ` AND NOT EXISTS (SELECT 1 FROM enrollments WHERE contact_id=ct.id AND status='active')`
+    }
+    if (missing_email === 'true') {
+      sql += ` AND (ct.email IS NULL OR ct.email = '')`
     }
     sql += ' ORDER BY co.name ASC, ct.first_name ASC'
     res.json(await all(sql, params))
@@ -1018,8 +1021,13 @@ app.post('/api/enrollments', async (req, res) => {
     if (!contact_ids || !sequence_id) return res.status(400).json({ error: 'contact_ids and sequence_id required' })
     const ids = Array.isArray(contact_ids) ? contact_ids : [contact_ids]
     let enrolled = 0
+    let skipped = 0
     for (const cid of ids) {
       try {
+        // Skip contacts without an email address — they can't receive sequence emails
+        const contact = await one('SELECT email FROM contacts WHERE id=$1', [cid])
+        if (!contact || !contact.email) { skipped++; continue }
+
         // Check if there's an existing enrollment
         const existing = await one(
           'SELECT id, status FROM enrollments WHERE contact_id=$1 AND sequence_id=$2',
@@ -1051,7 +1059,7 @@ app.post('/api/enrollments', async (req, res) => {
         } catch(e2) { /* skip this contact */ }
       }
     }
-    res.json({ enrolled })
+    res.json({ enrolled, skipped })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 

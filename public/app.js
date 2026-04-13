@@ -1124,6 +1124,7 @@ async function deleteCompany(id) {
 // Track selected contact IDs for bulk actions
 var _selectedContactIds = new Set();
 var _notInSeqActive = false;
+var _missingEmailActive = false;
 var _lastFilteredContacts = []; // store last loaded contacts for mass enrollment
 
 var _contactsTagFilters = [];
@@ -1158,6 +1159,7 @@ async function loadContacts() {
   if (search)         params.set('search', search);
   if (_contactsTagFilters.length) params.set('tag', _contactsTagFilters.join(','));
   if (_notInSeqActive) params.set('not_in_sequence', 'true');
+  if (_missingEmailActive) params.set('missing_email', 'true');
 
   try {
     var contacts = await apiFetch('/api/contacts?' + params.toString());
@@ -1335,13 +1337,23 @@ function toggleNotInSequence() {
   loadContacts();
 }
 
+function toggleMissingEmail() {
+  _missingEmailActive = !_missingEmailActive;
+  var btn = document.getElementById('btn-missing-email');
+  if (btn) btn.classList.toggle('filter-toggle-active', _missingEmailActive);
+  loadContacts();
+}
+
 function clearContactFilters() {
   var search = document.getElementById('search-contacts');
   if (search) search.value = '';
   _contactsTagFilters = [];
   _notInSeqActive = false;
+  _missingEmailActive = false;
   var btn = document.getElementById('btn-not-in-seq');
   if (btn) btn.classList.remove('filter-toggle-active');
+  var btn2 = document.getElementById('btn-missing-email');
+  if (btn2) btn2.classList.remove('filter-toggle-active');
   renderContactsTagChips();
   loadContacts();
 }
@@ -1350,7 +1362,7 @@ function updateMassEnrollBar(contacts) {
   var bar = document.getElementById('mass-enroll-bar');
   if (!bar) return;
   // Show mass enroll bar when filters are active and there are enrollable contacts
-  var hasFilters = _contactsTagFilters.length > 0 || _notInSeqActive;
+  var hasFilters = _contactsTagFilters.length > 0 || _notInSeqActive || _missingEmailActive;
   var enrollable = contacts.filter(function(c) {
     return c.email && c.enrollment_status !== 'active';
   });
@@ -2052,11 +2064,23 @@ async function confirmEnroll() {
     if (el.checked) _enrollChecked.add(parseInt(el.value));
     else _enrollChecked.delete(parseInt(el.value));
   });
-  const checked = Array.from(_enrollChecked);
+  var checked = Array.from(_enrollChecked);
   if (!checked.length) { toast('Select at least one contact', 'error'); return; }
+
+  // Filter out contacts without email — they can't receive sequence emails
+  var withEmail = checked.filter(function(cid) {
+    var c = _allEnrollContacts.find(function(ct) { return ct.id === cid; });
+    return c && c.email;
+  });
+  var skipped = checked.length - withEmail.length;
+  if (skipped > 0) {
+    toast(skipped + ' contact' + (skipped !== 1 ? 's' : '') + ' skipped — no email address', 'error');
+  }
+  if (!withEmail.length) { toast('None of the selected contacts have email addresses', 'error'); return; }
+
   try {
-    const r = await apiFetch('/api/enrollments', { method: 'POST', body: JSON.stringify({ contact_ids: checked, sequence_id: seqId }) });
-    toast(`${r.enrolled} contact${r.enrolled!==1?'s':''} enrolled`, 'success');
+    const r = await apiFetch('/api/enrollments', { method: 'POST', body: JSON.stringify({ contact_ids: withEmail, sequence_id: seqId }) });
+    toast(`${r.enrolled} contact${r.enrolled!==1?'s':''} enrolled` + (skipped > 0 ? ` (${skipped} skipped — no email)` : ''), 'success');
     closeModal('modal-enroll');
     closeModal('modal-company-detail');
     loadQueue();
