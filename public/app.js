@@ -664,7 +664,7 @@ async function loadPriorities() {
     // Unreplied replies — highest priority
     if (p.unreplied.length) {
       html += '<div class="pri-section pri-urgent">';
-      html += '<div class="pri-section-title">💬 Reply to These (' + p.unreplied.length + ')</div>';
+      html += '<div class="pri-section-title pri-title-link" onclick="showPage(\'inbox\')">💬 Reply to These (' + p.unreplied.length + ') →</div>';
       html += p.unreplied.map(function(r) {
         var sentimentLabels = { positive: '✓ Interested', neutral: '⏳ Maybe Later', negative: '✗ Not Interested' };
         var sentiment = r.sentiment ? ' <span class="pri-sentiment pri-sentiment-' + r.sentiment + '">' + (sentimentLabels[r.sentiment] || r.sentiment) + '</span>' : '';
@@ -679,42 +679,42 @@ async function loadPriorities() {
     // First-touch emails (step 1) — need manual review
     if (p.firstTouches.length) {
       html += '<div class="pri-section">';
-      html += '<div class="pri-section-title">✋ First Touches to Review (' + p.firstTouches.length + ')</div>';
+      html += '<div class="pri-section-title pri-title-link" onclick="showPage(\'queue\')">✋ First Touches to Review (' + p.firstTouches.length + ') →</div>';
       html += p.firstTouches.slice(0, 8).map(function(q) {
         return '<div class="pri-item pri-item-clickable" onclick="showPage(\'queue\')">' +
           '<div class="pri-item-name">' + esc(q.first_name) + ' ' + esc(q.last_name || '') + '</div>' +
           '<div class="pri-item-sub">' + esc(q.company_name || '') + ' · "' + esc((q.step_subject || '').slice(0, 50)) + '"</div>' +
         '</div>';
       }).join('');
-      if (p.firstTouches.length > 8) html += '<div class="pri-more">+ ' + (p.firstTouches.length - 8) + ' more</div>';
+      if (p.firstTouches.length > 8) html += '<div class="pri-more" onclick="showPage(\'queue\')">+ ' + (p.firstTouches.length - 8) + ' more in queue →</div>';
       html += '</div>';
     }
 
     // Manual follow-ups (non-auto-send sequences, step 2+)
     if (p.manualFollowUps.length) {
       html += '<div class="pri-section">';
-      html += '<div class="pri-section-title">📧 Follow-Ups to Send (' + p.manualFollowUps.length + ')</div>';
+      html += '<div class="pri-section-title pri-title-link" onclick="showPage(\'queue\')">📧 Follow-Ups to Send (' + p.manualFollowUps.length + ') →</div>';
       html += p.manualFollowUps.slice(0, 5).map(function(q) {
         return '<div class="pri-item pri-item-clickable" onclick="showPage(\'queue\')">' +
           '<div class="pri-item-name">' + esc(q.first_name) + ' ' + esc(q.last_name || '') + ' — Step ' + q.current_step + '</div>' +
           '<div class="pri-item-sub">' + esc(q.company_name || '') + '</div>' +
         '</div>';
       }).join('');
-      if (p.manualFollowUps.length > 5) html += '<div class="pri-more">+ ' + (p.manualFollowUps.length - 5) + ' more in queue</div>';
+      if (p.manualFollowUps.length > 5) html += '<div class="pri-more" onclick="showPage(\'queue\')">+ ' + (p.manualFollowUps.length - 5) + ' more in queue →</div>';
       html += '</div>';
     }
 
     // Auto-send summary
     if (p.autoSendPending > 0 || p.recentAutoSent.length > 0) {
       html += '<div class="pri-section pri-auto">';
-      html += '<div class="pri-section-title">⚡ Auto-Send Activity</div>';
-      if (p.autoSendPending > 0) html += '<div class="pri-item"><div class="pri-item-sub">' + p.autoSendPending + ' follow-up' + (p.autoSendPending !== 1 ? 's' : '') + ' queued for auto-send</div></div>';
+      html += '<div class="pri-section-title pri-title-link" onclick="showPage(\'queue\')">⚡ Auto-Send Activity →</div>';
+      if (p.autoSendPending > 0) html += '<div class="pri-item pri-item-clickable" onclick="showPage(\'queue\')"><div class="pri-item-sub">' + p.autoSendPending + ' follow-up' + (p.autoSendPending !== 1 ? 's' : '') + ' queued for auto-send →</div></div>';
       if (p.recentAutoSent.length > 0) {
-        html += '<div class="pri-item"><div class="pri-item-sub">' + p.recentAutoSent.length + ' email' + (p.recentAutoSent.length !== 1 ? 's' : '') + ' auto-sent in the last 24h</div></div>';
+        html += '<div class="pri-item pri-item-clickable" onclick="showPage(\'activity\')"><div class="pri-item-sub">' + p.recentAutoSent.length + ' email' + (p.recentAutoSent.length !== 1 ? 's' : '') + ' auto-sent in the last 24h →</div></div>';
         p.recentAutoSent.slice(0, 3).forEach(function(a) {
           html += '<div class="pri-item" style="padding-left:12px"><div class="pri-item-sub">→ ' + esc(a.first_name) + ' ' + esc(a.last_name || '') + ' · ' + esc(a.company_name || '') + '</div></div>';
         });
-        if (p.recentAutoSent.length > 3) html += '<div class="pri-more">+ ' + (p.recentAutoSent.length - 3) + ' more</div>';
+        if (p.recentAutoSent.length > 3) html += '<div class="pri-more" onclick="showPage(\'activity\')">+ ' + (p.recentAutoSent.length - 3) + ' more →</div>';
       }
       html += '</div>';
     }
@@ -722,7 +722,7 @@ async function loadPriorities() {
     // Overdue next-steps
     if (p.overdue.length) {
       html += '<div class="pri-section pri-warn">';
-      html += '<div class="pri-section-title">⏰ Overdue Actions (' + p.overdue.length + ')</div>';
+      html += '<div class="pri-section-title pri-title-link" onclick="showPage(\'pipeline\')">⏰ Overdue Actions (' + p.overdue.length + ') →</div>';
       html += p.overdue.map(function(o) {
         return '<div class="pri-item pri-item-clickable" onclick="openCompanyDetail(' + o.id + ')">' +
           '<div class="pri-item-name">' + esc(o.name) + '</div>' +
@@ -735,7 +735,7 @@ async function loadPriorities() {
     // Going cold
     if (p.goingCold.length) {
       html += '<div class="pri-section">';
-      html += '<div class="pri-section-title">🧊 Going Cold (' + p.goingCold.length + ')</div>';
+      html += '<div class="pri-section-title pri-title-link" onclick="showPage(\'prospects\')">🧊 Going Cold (' + p.goingCold.length + ') →</div>';
       html += p.goingCold.slice(0, 5).map(function(c) {
         var daysAgo = Math.round((Date.now() - new Date(c.last_activity_at).getTime()) / 86400000);
         return '<div class="pri-item pri-item-clickable" onclick="openCompanyDetail(' + c.id + ')">' +
@@ -762,12 +762,12 @@ async function loadWeeklySummary() {
     var html = '<div class="ws-panel">';
     html += '<div class="ws-header">📊 Last 7 Days</div>';
     html += '<div class="ws-grid">';
-    html += '<div class="ws-stat"><div class="ws-stat-val">' + w.emailsSent + '</div><div class="ws-stat-label">Sent</div></div>';
-    html += '<div class="ws-stat"><div class="ws-stat-val" style="color:var(--success,#22c55e)">' + w.repliesReceived + '</div><div class="ws-stat-label">Replies</div></div>';
-    html += '<div class="ws-stat"><div class="ws-stat-val">' + w.replyRate + '%</div><div class="ws-stat-label">Reply Rate</div></div>';
-    html += '<div class="ws-stat"><div class="ws-stat-val">' + w.newCompanies + '</div><div class="ws-stat-label">New Prospects</div></div>';
-    html += '<div class="ws-stat"><div class="ws-stat-val">' + w.completedSequences + '</div><div class="ws-stat-label">Sequences Done</div></div>';
-    html += '<div class="ws-stat"><div class="ws-stat-val" style="color:var(--success,#22c55e)">' + w.repliedSequences + '</div><div class="ws-stat-label">Got Replies</div></div>';
+    html += '<div class="ws-stat ws-stat-link" onclick="showPage(\'activity\')"><div class="ws-stat-val">' + w.emailsSent + '</div><div class="ws-stat-label">Sent</div></div>';
+    html += '<div class="ws-stat ws-stat-link" onclick="showPage(\'inbox\')"><div class="ws-stat-val" style="color:var(--success,#22c55e)">' + w.repliesReceived + '</div><div class="ws-stat-label">Replies</div></div>';
+    html += '<div class="ws-stat ws-stat-link" onclick="showPage(\'sequences\')"><div class="ws-stat-val">' + w.replyRate + '%</div><div class="ws-stat-label">Reply Rate</div></div>';
+    html += '<div class="ws-stat ws-stat-link" onclick="showPage(\'prospects\')"><div class="ws-stat-val">' + w.newCompanies + '</div><div class="ws-stat-label">New Prospects</div></div>';
+    html += '<div class="ws-stat ws-stat-link" onclick="showPage(\'sequences\')"><div class="ws-stat-val">' + w.completedSequences + '</div><div class="ws-stat-label">Sequences Done</div></div>';
+    html += '<div class="ws-stat ws-stat-link" onclick="showPage(\'inbox\')"><div class="ws-stat-val" style="color:var(--success,#22c55e)">' + w.repliedSequences + '</div><div class="ws-stat-label">Got Replies</div></div>';
     html += '</div>';
 
     if (w.positiveReplies && w.positiveReplies.length > 0) {
