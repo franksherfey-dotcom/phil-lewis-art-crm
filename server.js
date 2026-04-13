@@ -1599,6 +1599,8 @@ app.get('/api/cron/weekly-digest', async (req, res) => {
     var completedSeqs = await one("SELECT COUNT(*)::int AS n FROM enrollments WHERE status='completed' AND completed_at > NOW() - INTERVAL '7 days'")
     var repliedSeqs = await one("SELECT COUNT(*)::int AS n FROM enrollments WHERE status='replied' AND completed_at > NOW() - INTERVAL '7 days'")
 
+    var replyRate = emailsSent.n > 0 ? Math.round((repliesReceived.n / emailsSent.n) * 100) : 0
+
     // Positive replies this week
     var positiveReplies = await all(`
       SELECT a.subject, a.sent_at, c.first_name, c.last_name, co.name AS company_name
@@ -1676,7 +1678,103 @@ app.get('/api/cron/weekly-digest', async (req, res) => {
     })
 
     console.log('[CRON] Weekly digest sent to', digestEmail)
-    res.json({ ok: true, sent_to: digestEmail })
+
+    // ── Phil's Artist Summary ───────────────────────────────────────────
+    // A cleaner, high-level digest for Phil focused on results
+    var philEmail = settings.phil_email || 'phil@phillewisart.com'
+
+    // Top companies that replied this week
+    var weekReplies = await all(`
+      SELECT DISTINCT ON (co.id)
+        co.name AS company_name, co.type AS company_type, co.website,
+        a.sentiment, c.first_name, c.last_name
+      FROM activities a
+      JOIN contacts c ON a.contact_id = c.id
+      LEFT JOIN companies co ON c.company_id = co.id
+      WHERE a.type = 'received_email' AND a.sent_at > NOW() - INTERVAL '7 days'
+      ORDER BY co.id, a.sent_at DESC
+    `)
+
+    var totalActive = await one("SELECT COUNT(*)::int AS n FROM enrollments WHERE status='active'")
+
+    var philHtml = `
+      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#1a1a1a">
+        <div style="text-align:center;margin-bottom:24px">
+          <h1 style="font-size:24px;margin:0 0 4px 0;color:#1a1a1a">Phil Lewis Art — Licensing Update</h1>
+          <p style="color:#666;font-size:14px;margin:0">Week of ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+        </div>
+
+        <div style="background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;border-radius:12px;padding:24px;margin-bottom:20px;text-align:center">
+          <div style="display:inline-block;margin:0 16px">
+            <div style="font-size:32px;font-weight:800">${emailsSent.n}</div>
+            <div style="font-size:12px;opacity:0.85;margin-top:2px">Emails Sent</div>
+          </div>
+          <div style="display:inline-block;margin:0 16px">
+            <div style="font-size:32px;font-weight:800">${repliesReceived.n}</div>
+            <div style="font-size:12px;opacity:0.85;margin-top:2px">Replies</div>
+          </div>
+          <div style="display:inline-block;margin:0 16px">
+            <div style="font-size:32px;font-weight:800">${replyRate}%</div>
+            <div style="font-size:12px;opacity:0.85;margin-top:2px">Reply Rate</div>
+          </div>
+          <div style="display:inline-block;margin:0 16px">
+            <div style="font-size:32px;font-weight:800">${totalActive.n}</div>
+            <div style="font-size:12px;opacity:0.85;margin-top:2px">Active Outreach</div>
+          </div>
+        </div>
+    `
+
+    if (weekReplies.length > 0) {
+      philHtml += '<div style="background:#f9fafb;border-radius:10px;padding:20px;margin-bottom:20px">'
+      philHtml += '<h2 style="font-size:16px;margin:0 0 14px 0;color:#333">Companies That Replied</h2>'
+      weekReplies.forEach(function(r) {
+        var sentimentIcon = r.sentiment === 'positive' ? '🟢' : (r.sentiment === 'negative' ? '🔴' : '🟡')
+        var contactName = [r.first_name, r.last_name].filter(Boolean).join(' ')
+        philHtml += '<div style="padding:8px 0;border-bottom:1px solid #eee;font-size:14px">'
+        philHtml += sentimentIcon + ' <strong>' + (r.company_name || 'Unknown') + '</strong>'
+        if (contactName) philHtml += ' — ' + contactName
+        if (r.company_type) philHtml += ' <span style="color:#999;font-size:12px">(' + r.company_type + ')</span>'
+        philHtml += '</div>'
+      })
+      philHtml += '</div>'
+    }
+
+    if (positiveReplies.length > 0) {
+      philHtml += '<div style="background:#f0fdf4;border-radius:10px;padding:20px;margin-bottom:20px;border-left:4px solid #22c55e">'
+      philHtml += '<h2 style="font-size:16px;margin:0 0 10px 0;color:#166534">Interested Contacts</h2>'
+      philHtml += '<p style="font-size:13px;color:#555;margin:0 0 8px 0">These contacts showed interest in licensing your art:</p>'
+      positiveReplies.forEach(function(r) {
+        philHtml += '<div style="padding:4px 0;font-size:14px">✓ <strong>' + (r.first_name||'') + ' ' + (r.last_name||'') + '</strong>'
+        philHtml += r.company_name ? ' (' + r.company_name + ')' : ''
+        philHtml += '</div>'
+      })
+      philHtml += '</div>'
+    }
+
+    philHtml += `
+        <div style="text-align:center;margin-top:24px;padding-top:20px;border-top:1px solid #eee">
+          <p style="font-size:13px;color:#999;margin:0">Licensing outreach managed by Frank Sherfey</p>
+          <p style="font-size:12px;color:#bbb;margin:4px 0 0 0">Phil Lewis Art CRM</p>
+        </div>
+      </div>
+    `
+
+    try {
+      await sendEmail({
+        toEmail: philEmail,
+        toName: 'Phil',
+        subject: 'Licensing Update — ' + emailsSent.n + ' outreach, ' + repliesReceived.n + ' replies this week',
+        body: philHtml,
+        isHtml: true,
+        contact: { first_name: 'Phil', last_name: 'Lewis', email: philEmail },
+        company: null,
+      })
+      console.log('[CRON] Phil digest sent to', philEmail)
+    } catch(philErr) {
+      console.error('[CRON] Phil digest error:', philErr.message)
+    }
+
+    res.json({ ok: true, sent_to: [digestEmail, philEmail] })
   } catch (err) {
     console.error('[CRON] Weekly digest error:', err.message)
     res.status(500).json({ error: err.message })
@@ -1818,7 +1916,7 @@ app.post('/api/settings', async (req, res) => {
     const fields = [
       'smtp_host','smtp_port','smtp_user','smtp_from_name','smtp_secure',
       'imap_host','imap_port','imap_secure','imap_sent_folder',
-      'email_signature',
+      'email_signature','phil_email','digest_email',
     ]
     await Promise.all(
       fields

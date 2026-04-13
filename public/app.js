@@ -3148,6 +3148,45 @@ function switchSigTab(tab, btn) {
   }
 }
 
+async function saveDigestSettings() {
+  var msg = document.getElementById('digest-msg');
+  try {
+    await apiFetch('/api/settings', {
+      method: 'POST',
+      body: JSON.stringify({
+        digest_email: document.getElementById('setting-digest-email').value.trim(),
+        phil_email: document.getElementById('setting-phil-email').value.trim() || 'phil@phillewisart.com',
+      })
+    });
+    msg.textContent = 'Digest settings saved.';
+    msg.className = 'settings-msg settings-msg-ok';
+    toast('Digest settings saved', 'success');
+  } catch(e) {
+    msg.textContent = e.message;
+    msg.className = 'settings-msg settings-msg-err';
+  }
+}
+
+async function testDigest() {
+  var msg = document.getElementById('digest-msg');
+  msg.textContent = 'Sending test digest…';
+  msg.className = 'settings-msg';
+  try {
+    var result = await apiFetch('/api/cron/weekly-digest');
+    if (result.ok) {
+      msg.textContent = 'Test digest sent to: ' + (Array.isArray(result.sent_to) ? result.sent_to.join(', ') : result.sent_to);
+      msg.className = 'settings-msg settings-msg-ok';
+      toast('Test digest sent!', 'success');
+    } else {
+      msg.textContent = result.error || 'Failed to send';
+      msg.className = 'settings-msg settings-msg-err';
+    }
+  } catch(e) {
+    msg.textContent = e.message;
+    msg.className = 'settings-msg settings-msg-err';
+  }
+}
+
 async function saveSignature() {
   const val = document.getElementById('sig-editor')?.value || '';
   const msgEl = document.getElementById('sig-msg');
@@ -3448,6 +3487,11 @@ async function loadSettings() {
       sigEl.value = s.email_signature || DEFAULT_SIGNATURE;
       _cachedSignature = sigEl.value;
     }
+    // Digest settings
+    var digestEl = document.getElementById('setting-digest-email');
+    if (digestEl) digestEl.value = s.digest_email || '';
+    var philEl = document.getElementById('setting-phil-email');
+    if (philEl) philEl.value = s.phil_email || 'phil@phillewisart.com';
   } catch(e) { toast(e.message, 'error'); }
 }
 

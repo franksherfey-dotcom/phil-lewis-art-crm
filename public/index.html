@@ -548,6 +548,29 @@
           </div>
           <div id="sig-msg" class="settings-msg"></div>
         </div>
+
+        <!-- ── WEEKLY DIGEST SETTINGS ── -->
+        <div class="settings-card">
+          <h2>📊 Weekly Digest</h2>
+          <p class="settings-help">Monday morning summary emails. One operational digest for you, and a high-level licensing update for Phil.</p>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Your Digest Email</label>
+              <input type="email" id="setting-digest-email" placeholder="frank.sherfey@gmail.com">
+              <small style="color:#888;font-size:0.78rem">Defaults to admin email if blank</small>
+            </div>
+            <div class="form-group">
+              <label>Phil's Email</label>
+              <input type="email" id="setting-phil-email" value="phil@phillewisart.com" placeholder="phil@phillewisart.com">
+              <small style="color:#888;font-size:0.78rem">Weekly licensing update sent to Phil</small>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-primary" onclick="saveDigestSettings()">Save Digest Settings</button>
+            <button class="btn btn-outline" onclick="testDigest()">Send Test Digest Now</button>
+          </div>
+          <div id="digest-msg" class="settings-msg"></div>
+        </div>
       </section>
 
       <!-- ── USERS PAGE (admin only) ── -->
