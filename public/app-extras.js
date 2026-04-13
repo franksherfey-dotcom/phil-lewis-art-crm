@@ -887,7 +887,7 @@ function renderLeadHeatmap(leads) {
 }
 
 // ── ART GALLERY ──────────────────────────────────────────────────────────
-var _artCache = [];
+_artCache = []; // declared in app-core.js
 var _productCache = [];
 var _galleryTopics = [];   // active topic filters (multi-select)
 var _galleryTab = 'products'; // 'products' or 'art'
