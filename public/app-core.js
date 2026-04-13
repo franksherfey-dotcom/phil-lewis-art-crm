@@ -587,6 +587,21 @@ function esc(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+function cleanReplyBody(text) {
+  if (!text) return '';
+  // Strip quoted reply lines (lines starting with >)
+  var lines = text.split('\n');
+  var cleaned = [];
+  for (var i = 0; i < lines.length; i++) {
+    if (/^>/.test(lines[i])) continue;
+    if (/^On .+ wrote:/.test(lines[i])) break;
+    if (/^-{2,}\s*(Original Message|Forwarded)/.test(lines[i])) break;
+    if (/^From:.*@/.test(lines[i])) break;
+    cleaned.push(lines[i]);
+  }
+  return cleaned.join(' ').replace(/\s+/g, ' ').trim();
+}
+
 function cleanEmailBody(text) {
   if (!text) return '';
   return text
