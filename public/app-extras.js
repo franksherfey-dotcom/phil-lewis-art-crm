@@ -1174,7 +1174,7 @@ async function deleteArtImage(id) {
 
 // ── ART PICKER (for sequence editor steps) ──────────────────────────────
 let _artPickerStepNum = null;
-let _stepArtOverrides = {}; // stepNum -> artId or null
+// _stepArtOverrides is declared in app-core.js
 
 function openArtPicker(stepNum) {
   _artPickerStepNum = stepNum;
