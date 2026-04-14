@@ -10,16 +10,25 @@ const JWT_EXPIRES = '30d'
 
 // Migration promise from server.js
 let migrationReady
+router.setMigrationReady = (promise) => { migrationReady = promise }
 
-// Called from server.js to set migrationReady
-router.setMigrationReady = (promise) => {
-  migrationReady = promise
+// Inline auth middleware (decodes JWT and populates req.user)
+function requireAuth(req, res, next) {
+  const header = req.headers.authorization || ''
+  const token = header.startsWith('Bearer ') ? header.slice(7) : null
+  if (!token) return res.status(401).json({ error: 'Not authenticated.' })
+  try {
+    req.user = jwt.verify(token, JWT_SECRET)
+    next()
+  } catch (err) {
+    return res.status(401).json({ error: 'Invalid or expired token.' })
+  }
 }
 
-// POST /api/auth/login
+// POST /api/auth/login  (public — no auth required)
 router.post('/login', async (req, res) => {
   try {
-    await migrationReady  // ensure table exists before first login attempt
+    await migrationReady
     const { username, password } = req.body
     if (!username || !password) return res.status(400).json({ error: 'Username and password required.' })
     const { rows } = await pool.query('SELECT * FROM users WHERE LOWER(username)=LOWER($1)', [username])
@@ -37,7 +46,7 @@ router.post('/login', async (req, res) => {
 })
 
 // GET /api/auth/me
-router.get('/me', async (req, res) => {
+router.get('/me', requireAuth, async (req, res) => {
   try {
     await migrationReady
     const { rows } = await pool.query('SELECT id,username,display_name,email,role,force_password_change,last_login_at FROM users WHERE id=$1', [req.user.userId])
@@ -47,7 +56,7 @@ router.get('/me', async (req, res) => {
 })
 
 // POST /api/auth/change-password
-router.post('/change-password', async (req, res) => {
+router.post('/change-password', requireAuth, async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body
     if (!newPassword || newPassword.length < 8) return res.status(400).json({ error: 'New password must be at least 8 characters.' })
@@ -61,7 +70,6 @@ router.post('/change-password', async (req, res) => {
     }
     const hash = await bcrypt.hash(newPassword, 10)
     await pool.query('UPDATE users SET password_hash=$1, force_password_change=FALSE, updated_at=NOW() WHERE id=$2', [hash, req.user.userId])
-    // Re-issue token with forcePasswordChange=false
     const { rows: updated } = await pool.query('SELECT * FROM users WHERE id=$1', [req.user.userId])
     const token = jwt.sign(
       { userId: updated[0].id, username: updated[0].username, display_name: updated[0].display_name, role: updated[0].role, force_password_change: false },
