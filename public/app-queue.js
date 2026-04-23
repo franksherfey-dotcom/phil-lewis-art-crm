@@ -214,34 +214,40 @@ async function openSwitchSequenceModal(enrollmentId, contactId, currentSeqId) {
     overlay.id = 'modal-switch-sequence';
     overlay.className = 'modal-overlay hidden';
     overlay.innerHTML =
-      '<div class="modal-content" style="max-width:520px">' +
+      '<div class="modal">' +
         '<div class="modal-header">' +
           '<h2>Switch Sequence</h2>' +
-          '<button class="modal-close" onclick="closeModal(\'modal-switch-sequence\')">✕</button>' +
+          '<button class="modal-close" onclick="closeModal(\'modal-switch-sequence\')">\u2715</button>' +
         '</div>' +
-        '<div id="switch-sequence-body" style="padding:16px"></div>' +
+        '<div id="switch-sequence-body"></div>' +
       '</div>';
     document.body.appendChild(overlay);
   }
   var body = document.getElementById('switch-sequence-body');
-  body.innerHTML = '<div style="padding:8px">Loading sequences…</div>';
+  body.innerHTML = '<div style="padding:12px 0;color:var(--text-muted);font-size:13px">Loading sequences\u2026</div>';
   openModal('modal-switch-sequence');
   try {
     var seqs = await apiFetch('/api/sequences');
     body.innerHTML =
-      '<p style="margin:0 0 12px;font-size:13px;color:var(--text-muted)">Move this contact to a different sequence. Their current enrollment will be stopped and they\'ll start at Step 1 of the new sequence.</p>' +
+      '<p style="margin:0 0 14px;font-size:13px;color:var(--text-muted);line-height:1.45">Move this contact to a different sequence. Their current enrollment will be stopped and they\'ll start at Step 1 of the new sequence.</p>' +
       seqs.map(function(s) {
         var isCurrent = s.id === currentSeqId;
-        return '<button class="btn ' + (isCurrent ? 'btn-outline' : 'btn-primary') + ' btn-sm" ' +
-          (isCurrent ? 'disabled' : '') +
-          ' style="display:block;width:100%;text-align:left;margin-bottom:6px;padding:10px 12px" ' +
-          'onclick="doSwitchSequence(' + enrollmentId + ',' + contactId + ',' + s.id + ',\'' + esc(s.name).replace(/'/g, "\\'") + '\')">' +
-          '<strong>' + esc(s.name) + '</strong>' +
-          (isCurrent ? ' <span style="color:var(--text-muted);font-size:11px">(current)</span>' : '') +
-          (s.description ? '<div style="font-size:12px;color:var(--text-muted);margin-top:2px;white-space:normal">' + esc(s.description) + '</div>' : '') +
+        var safeName = esc(s.name).replace(/'/g, "\\'");
+        return '<button ' + (isCurrent ? 'disabled' : '') +
+          ' style="display:block;width:100%;text-align:left;margin-bottom:8px;padding:12px 14px;border-radius:var(--radius);cursor:' + (isCurrent ? 'default' : 'pointer') + ';' +
+            'background:' + (isCurrent ? 'var(--bg)' : 'var(--surface)') + ';' +
+            'border:1.5px solid ' + (isCurrent ? 'var(--border)' : 'var(--primary)') + ';' +
+            'color:' + (isCurrent ? 'var(--text-muted)' : 'var(--primary)') + ';' +
+            'font-family:inherit" ' +
+          (isCurrent ? '' : 'onmouseover="this.style.background=\'var(--primary-pale)\'" onmouseout="this.style.background=\'var(--surface)\'" ') +
+          (isCurrent ? '' : 'onclick="doSwitchSequence(' + enrollmentId + ',' + contactId + ',' + s.id + ',\'' + safeName + '\')"') + '>' +
+          '<div style="font-weight:700;font-size:14px">' + esc(s.name) +
+            (isCurrent ? ' <span style="font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;margin-left:6px">current</span>' : '') +
+          '</div>' +
+          (s.description ? '<div style="font-size:12px;color:var(--text-muted);margin-top:4px;line-height:1.4;font-weight:400">' + esc(s.description) + '</div>' : '') +
         '</button>';
       }).join('');
-  } catch(e) { body.innerHTML = '<div style="color:var(--danger,#c33)">Failed to load sequences: ' + esc(e.message) + '</div>'; }
+  } catch(e) { body.innerHTML = '<div style="padding:16px;color:var(--danger);background:var(--danger-pale);border-radius:var(--radius)">Failed to load sequences: ' + esc(e.message) + '</div>'; }
 }
 
 async function doSwitchSequence(oldEnrollmentId, contactId, newSeqId, newSeqName) {
@@ -496,83 +502,94 @@ async function openNewLeadsModal(hoursArg) {
     overlay.id = 'modal-new-leads';
     overlay.className = 'modal-overlay hidden';
     overlay.innerHTML =
-      '<div class="modal-content" style="max-width:860px">' +
+      '<div class="modal modal-wide">' +
         '<div class="modal-header">' +
           '<h2>New Leads</h2>' +
-          '<button class="modal-close" onclick="closeModal(\'modal-new-leads\')">✕</button>' +
+          '<button class="modal-close" onclick="closeModal(\'modal-new-leads\')">\u2715</button>' +
         '</div>' +
-        '<div style="padding:12px 20px;border-bottom:1px solid var(--border,#e4e6ea);display:flex;gap:8px;align-items:center">' +
-          '<span style="font-size:13px;color:var(--text-muted)">Show leads from the last:</span>' +
+        '<div style="display:flex;gap:8px;align-items:center;margin-bottom:16px">' +
+          '<span style="font-size:12px;color:var(--text-muted);font-weight:600">Show leads from the last:</span>' +
           '<button class="btn btn-ghost btn-sm" onclick="openNewLeadsModal(24)">24h</button>' +
           '<button class="btn btn-ghost btn-sm" onclick="openNewLeadsModal(72)">3 days</button>' +
           '<button class="btn btn-ghost btn-sm" onclick="openNewLeadsModal(168)">7 days</button>' +
         '</div>' +
-        '<div id="new-leads-body" style="padding:16px;max-height:70vh;overflow:auto"></div>' +
+        '<div id="new-leads-body"></div>' +
       '</div>';
     document.body.appendChild(overlay);
   }
   var body = document.getElementById('new-leads-body');
-  body.innerHTML = '<div style="padding:16px;color:var(--text-muted)">Loading…</div>';
+  body.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:13px">Loading\u2026</div>';
   openModal('modal-new-leads');
   try {
     var data = await apiFetch('/api/new-leads?hours=' + hours);
     var cos = data.companies || [];
     if (!cos.length) {
-      body.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text-muted)"><div style="font-size:32px">🌱</div><strong>No new leads in the last ' + hours + ' hours.</strong><div style="margin-top:6px;font-size:12px">The daily prospect finder runs weekday mornings around 9 AM.</div></div>';
+      body.innerHTML =
+        '<div style="padding:40px 20px;text-align:center;color:var(--text-muted)">' +
+          '<div style="font-size:36px;margin-bottom:8px">\ud83c\udf31</div>' +
+          '<div style="font-size:15px;font-weight:700;color:var(--text)">No new leads in the last ' + hours + ' hours</div>' +
+          '<div style="margin-top:6px;font-size:12px">The daily prospect finder runs weekday mornings around 9 AM.</div>' +
+        '</div>';
       return;
     }
-
-    // Summary bar — breakdown by assigned sequence
     var seqCounts = {};
     cos.forEach(function(c) {
       (c.contacts || []).forEach(function(ct) {
-        var key = ct.sequence_name || '— not enrolled —';
+        var key = ct.sequence_name || '\u2014 not enrolled';
         seqCounts[key] = (seqCounts[key] || 0) + 1;
       });
     });
-    var summary = '<div style="margin-bottom:14px;padding:10px 12px;background:var(--bg-alt,#f6f7f9);border-radius:8px;font-size:13px">' +
-      '<strong>' + cos.length + ' new compan' + (cos.length !== 1 ? 'ies' : 'y') + '</strong> &middot; ' +
-      Object.entries(seqCounts).map(function(kv) { return esc(kv[0]) + ': ' + kv[1]; }).join(' &middot; ') +
+    var summaryBits = Object.entries(seqCounts).map(function(kv) {
+      return '<span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--primary)"><strong>' + kv[1] + '</strong> ' + esc(kv[0]) + '</span>';
+    }).join('<span style="color:var(--border)">\u2502</span>');
+    var summary =
+      '<div style="margin-bottom:16px;padding:12px 16px;background:var(--primary-pale);border-radius:var(--radius);display:flex;gap:12px;flex-wrap:wrap;align-items:center">' +
+        '<strong style="color:var(--primary);font-size:13px">' + cos.length + ' new compan' + (cos.length !== 1 ? 'ies' : 'y') + '</strong>' +
+        '<span style="color:var(--border)">\u2502</span>' +
+        summaryBits +
       '</div>';
-
     var html = summary + cos.map(function(c) {
       var added = new Date(c.created_at);
       var addedLabel = added.toLocaleString([], { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' });
       var tagHtml = (c.tags || '').split(',').map(function(t) { return t.trim(); }).filter(Boolean)
-        .map(function(t) { return '<span style="display:inline-block;padding:1px 7px;margin:0 3px 2px 0;background:#eef;border-radius:10px;font-size:11px">' + esc(t) + '</span>'; }).join('');
-      var contactsHtml = (c.contacts || []).map(function(ct) {
+        .map(function(t) { return '<span class="tag-chip" style="color:var(--text-muted);border-color:var(--border);background:var(--bg)">' + esc(t) + '</span>'; }).join(' ');
+      var contactsHtml = (c.contacts || []).map(function(ct, i) {
         var name = [ct.first_name, ct.last_name].filter(Boolean).join(' ');
         var enrollBadge = ct.sequence_name
-          ? '<span style="padding:2px 8px;background:#e8f3ff;color:#0550ae;border-radius:4px;font-size:11px">→ ' + esc(ct.sequence_name) + '</span>'
-          : (ct.email ? '<span style="padding:2px 8px;background:#fff3cd;color:#664d03;border-radius:4px;font-size:11px">not enrolled</span>' : '<span style="padding:2px 8px;background:#f0f0f0;color:#666;border-radius:4px;font-size:11px">no email</span>');
+          ? '<span class="badge" style="background:var(--primary-pale);color:var(--primary)">\u2192 ' + esc(ct.sequence_name) + '</span>'
+          : (ct.email
+              ? '<span class="badge" style="background:var(--warn-pale);color:var(--warn)">not enrolled</span>'
+              : '<span class="badge">no email</span>');
         var actions = ct.enrollment_id
-          ? '<button class="btn btn-ghost btn-xs" onclick="openSwitchSequenceModal(' + ct.enrollment_id + ',' + ct.id + ',' + (ct.sequence_id || 'null') + ')">Switch</button> ' +
-            '<button class="btn btn-ghost btn-xs" onclick="removeFromQueue(' + ct.enrollment_id + ')" title="Remove from sequence" style="color:var(--text-muted)">✕</button>'
+          ? '<button class="btn btn-ghost btn-sm" onclick="openSwitchSequenceModal(' + ct.enrollment_id + ',' + ct.id + ',' + (ct.sequence_id || 'null') + ')">Switch</button>' +
+            '<button class="btn btn-ghost btn-sm" onclick="removeFromQueue(' + ct.enrollment_id + ')" title="Remove from sequence" style="padding:5px 8px;margin-left:4px">\u2715</button>'
           : '';
-        return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px dashed #eee">' +
+        var borderStyle = i === 0 ? '' : 'border-top:1px solid var(--border);';
+        return '<div style="' + borderStyle + 'display:flex;align-items:center;gap:12px;padding:10px 0">' +
           '<div style="flex:1;min-width:0">' +
-            '<div style="font-size:13px"><strong>' + esc(name || '—') + '</strong>' + (ct.is_primary ? ' <span style="font-size:10px;color:var(--text-muted)">(primary)</span>' : '') + (ct.title ? ' <span style="color:var(--text-muted)">· ' + esc(ct.title) + '</span>' : '') + '</div>' +
-            (ct.email ? '<div style="font-size:11px;color:var(--text-muted)">' + esc(ct.email) + '</div>' : '') +
+            '<div style="font-size:13px;font-weight:600">' + esc(name || '\u2014') +
+              (ct.is_primary ? ' <span style="font-size:10px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:0.05em">primary</span>' : '') +
+              (ct.title ? ' <span style="font-weight:400;color:var(--text-muted)">\u00b7 ' + esc(ct.title) + '</span>' : '') +
+            '</div>' +
+            (ct.email ? '<div style="font-size:12px;color:var(--text-muted);margin-top:2px">' + esc(ct.email) + '</div>' : '') +
           '</div>' +
           '<div>' + enrollBadge + '</div>' +
-          '<div>' + actions + '</div>' +
+          (actions ? '<div style="display:flex;gap:4px">' + actions + '</div>' : '') +
         '</div>';
       }).join('');
-
-      return '<div style="margin-bottom:14px;padding:12px 14px;border:1px solid var(--border,#e4e6ea);border-radius:8px">' +
-        '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">' +
-          '<div>' +
-            '<strong style="font-size:15px;cursor:pointer" onclick="closeModal(\'modal-new-leads\');openCompanyDetail(' + c.id + ')">' + esc(c.name) + '</strong>' +
-            (c.city ? ' <span style="color:var(--text-muted);font-size:12px">· ' + esc(c.city) + (c.state ? ', ' + esc(c.state) : '') + '</span>' : '') +
+      return '<div class="card" style="margin-bottom:12px;padding:14px 16px">' +
+        '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:6px">' +
+          '<div style="min-width:0">' +
+            '<a href="#" style="font-size:15px;font-weight:700;color:var(--primary);text-decoration:none" onclick="event.preventDefault();closeModal(\'modal-new-leads\');openCompanyDetail(' + c.id + ')">' + esc(c.name) + '</a>' +
+            (c.city ? ' <span style="color:var(--text-muted);font-size:12px;font-weight:400">\u00b7 ' + esc(c.city) + (c.state ? ', ' + esc(c.state) : '') + '</span>' : '') +
           '</div>' +
-          '<span style="font-size:11px;color:var(--text-muted)">added ' + addedLabel + '</span>' +
+          '<span style="font-size:11px;color:var(--text-muted);white-space:nowrap">added ' + addedLabel + '</span>' +
         '</div>' +
-        (tagHtml ? '<div style="margin:4px 0 6px">' + tagHtml + '</div>' : '') +
-        (c.notes ? '<div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;font-style:italic">' + esc(c.notes) + '</div>' : '') +
-        (contactsHtml || '<div style="font-size:12px;color:var(--text-muted);padding:6px 0">No contacts attached.</div>') +
+        (tagHtml ? '<div style="margin:6px 0 8px;display:flex;flex-wrap:wrap;gap:4px">' + tagHtml + '</div>' : '') +
+        (c.notes ? '<div style="font-size:12px;color:var(--text-muted);margin:6px 0 8px;font-style:italic;line-height:1.4">' + esc(c.notes) + '</div>' : '') +
+        (contactsHtml ? '<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:4px">' + contactsHtml + '</div>' : '<div style="font-size:12px;color:var(--text-muted);padding:8px 0 0">No contacts attached.</div>') +
       '</div>';
     }).join('');
-
     body.innerHTML = html;
-  } catch(e) { body.innerHTML = '<div style="color:var(--danger,#c33);padding:16px">Failed to load: ' + esc(e.message) + '</div>'; }
+  } catch(e) { body.innerHTML = '<div style="padding:16px;color:var(--danger);background:var(--danger-pale);border-radius:var(--radius)">Failed to load: ' + esc(e.message) + '</div>'; }
 }
