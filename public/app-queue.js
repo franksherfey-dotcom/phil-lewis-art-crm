@@ -501,8 +501,15 @@ async function refreshNewLeadsBadge() {
   } catch(e) { /* silent — non-critical */ }
 }
 
+// Per-company sequence override: companyId -> sequenceId (string). Populated
+// when the user picks a different sequence from the dropdown than the suggested one.
+var _newLeadsOverrides = {};
+var _newLeadsHours = 24;
+
 async function openNewLeadsModal(hoursArg) {
   var hours = hoursArg || 24;
+  _newLeadsHours = hours;
+  _newLeadsOverrides = {};
   var overlay = document.getElementById('modal-new-leads');
   if (!overlay) {
     overlay = document.createElement('div');
@@ -530,6 +537,7 @@ async function openNewLeadsModal(hoursArg) {
   try {
     var data = await apiFetch('/api/new-leads?hours=' + hours);
     var cos = data.companies || [];
+    var sequences = data.sequences || [];
     if (!cos.length) {
       body.innerHTML =
         '<div style="padding:40px 20px;text-align:center;color:var(--text-muted)">' +
@@ -539,6 +547,8 @@ async function openNewLeadsModal(hoursArg) {
         '</div>';
       return;
     }
+
+    // Build a badge-style summary of how many contacts sit in each state (unchanged).
     var seqCounts = {};
     cos.forEach(function(c) {
       (c.contacts || []).forEach(function(ct) {
@@ -549,17 +559,50 @@ async function openNewLeadsModal(hoursArg) {
     var summaryBits = Object.entries(seqCounts).map(function(kv) {
       return '<span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--primary)"><strong>' + kv[1] + '</strong> ' + esc(kv[0]) + '</span>';
     }).join('<span style="color:var(--border)">\u2502</span>');
+
+    // Companies that still need enrolling (no active enrollment on any of their contacts).
+    var pendingCos = cos.filter(function(c) {
+      return !(c.contacts || []).some(function(ct) { return ct.enrollment_id; });
+    });
+    // Of those, which are enrollable (have email or derivable info@ domain).
+    var enrollableCount = pendingCos.filter(function(c) { return c.enrollable; }).length;
+
+    var bulkBtn = enrollableCount
+      ? '<button class="btn btn-primary btn-sm" onclick="bulkEnrollNewLeads()" id="new-leads-bulk-btn" ' +
+          'title="Enroll each enrollable company\u2019s generic catch-all contact into its suggested sequence">' +
+          '\u26a1 Enroll all with suggested (' + enrollableCount + ')' +
+        '</button>'
+      : '';
+
     var summary =
       '<div style="margin-bottom:16px;padding:12px 16px;background:var(--primary-pale);border-radius:var(--radius);display:flex;gap:12px;flex-wrap:wrap;align-items:center">' +
         '<strong style="color:var(--primary);font-size:13px">' + cos.length + ' new compan' + (cos.length !== 1 ? 'ies' : 'y') + '</strong>' +
         '<span style="color:var(--border)">\u2502</span>' +
         summaryBits +
+        (bulkBtn ? '<div style="margin-left:auto">' + bulkBtn + '</div>' : '') +
       '</div>';
+
+    // Build a <select> of sequences for the per-row dropdown. Data is passed
+    // server-side; we render once and let the user override per company.
+    function buildSeqSelect(coId, suggestedSeqId) {
+      var opts = sequences.map(function(s) {
+        var sel = String(s.id) === String(suggestedSeqId) ? ' selected' : '';
+        var autoLabel = s.auto_send ? ' (auto)' : '';
+        return '<option value="' + esc(String(s.id)) + '"' + sel + '>' + esc(s.name) + autoLabel + '</option>';
+      }).join('');
+      return '<select class="input input-sm" style="padding:4px 6px;font-size:12px;min-width:170px" ' +
+        'onchange="setNewLeadsOverride(' + coId + ', this.value)">' + opts + '</select>';
+    }
+
     var html = summary + cos.map(function(c) {
       var added = new Date(c.created_at);
       var addedLabel = added.toLocaleString([], { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' });
       var tagHtml = (c.tags || '').split(',').map(function(t) { return t.trim(); }).filter(Boolean)
         .map(function(t) { return '<span class="tag-chip" style="color:var(--text-muted);border-color:var(--border);background:var(--bg)">' + esc(t) + '</span>'; }).join(' ');
+
+      // Company-level state: is any contact enrolled? If so, treat as "done".
+      var anyEnrolled = (c.contacts || []).some(function(ct) { return ct.enrollment_id; });
+
       var contactsHtml = (c.contacts || []).map(function(ct, i) {
         var name = [ct.first_name, ct.last_name].filter(Boolean).join(' ');
         var enrollBadge = ct.sequence_name
@@ -584,7 +627,28 @@ async function openNewLeadsModal(hoursArg) {
           (actions ? '<div style="display:flex;gap:4px">' + actions + '</div>' : '') +
         '</div>';
       }).join('');
-      return '<div class="card" style="margin-bottom:12px;padding:14px 16px">' +
+
+      // Enrollment action row: only show if nobody is enrolled yet and we can enroll.
+      var enrollRow = '';
+      if (!anyEnrolled && c.enrollable && c.suggested_sequence_id) {
+        var autoWarn = c.suggested_sequence_auto_send
+          ? '<span title="Auto-send sequence — step 1 will fire to the generic info@ inbox on schedule" style="font-size:11px;color:var(--warn);margin-left:6px">\u26a1 auto</span>'
+          : '';
+        enrollRow =
+          '<div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap">' +
+            '<span style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em">Enroll in</span>' +
+            buildSeqSelect(c.id, c.suggested_sequence_id) +
+            autoWarn +
+            '<button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="enrollNewLead(' + c.id + ')">Enroll</button>' +
+          '</div>';
+      } else if (!anyEnrolled && !c.enrollable) {
+        enrollRow =
+          '<div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);font-size:12px;color:var(--text-muted)">' +
+            'Not enrollable automatically — no website domain to derive a generic info@ email. Add an email to a contact, then enroll from the contact detail.' +
+          '</div>';
+      }
+
+      return '<div class="card" id="new-lead-card-' + c.id + '" style="margin-bottom:12px;padding:14px 16px">' +
         '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:6px">' +
           '<div style="min-width:0">' +
             '<a href="#" style="font-size:15px;font-weight:700;color:var(--primary);text-decoration:none" onclick="event.preventDefault();closeModal(\'modal-new-leads\');openCompanyDetail(' + c.id + ')">' + esc(c.name) + '</a>' +
@@ -595,8 +659,73 @@ async function openNewLeadsModal(hoursArg) {
         (tagHtml ? '<div style="margin:6px 0 8px;display:flex;flex-wrap:wrap;gap:4px">' + tagHtml + '</div>' : '') +
         (c.notes ? '<div style="font-size:12px;color:var(--text-muted);margin:6px 0 8px;font-style:italic;line-height:1.4">' + esc(c.notes) + '</div>' : '') +
         (contactsHtml ? '<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:4px">' + contactsHtml + '</div>' : '<div style="font-size:12px;color:var(--text-muted);padding:8px 0 0">No contacts attached.</div>') +
+        enrollRow +
       '</div>';
     }).join('');
     body.innerHTML = html;
   } catch(e) { body.innerHTML = '<div style="padding:16px;color:var(--danger);background:var(--danger-pale);border-radius:var(--radius)">Failed to load: ' + esc(e.message) + '</div>'; }
+}
+
+// User picked a different sequence in a row's dropdown. Track it in-memory so
+// subsequent enroll / enroll-all calls honour the override.
+function setNewLeadsOverride(companyId, sequenceId) {
+  _newLeadsOverrides[String(companyId)] = String(sequenceId);
+}
+
+// Enroll a single company via the bulk-enroll endpoint (with 1 item).
+async function enrollNewLead(companyId) {
+  var card = document.getElementById('new-lead-card-' + companyId);
+  var select = card ? card.querySelector('select') : null;
+  var seqId = _newLeadsOverrides[String(companyId)] || (select ? select.value : null);
+  if (!seqId) { toast('Pick a sequence first', 'error'); return; }
+  try {
+    var r = await apiFetch('/api/new-leads/bulk-enroll', {
+      method: 'POST',
+      body: JSON.stringify({ items: [{ company_id: companyId, sequence_id: seqId }] })
+    });
+    var first = (r.results || [])[0] || {};
+    if (first.ok) {
+      var note = first.contact_created ? ' (created ' + esc(first.contact_email) + ')' : '';
+      toast('Enrolled' + note, 'success');
+    } else {
+      toast('Could not enroll: ' + (first.error || 'unknown error'), 'error');
+    }
+  } catch(e) { toast(e.message, 'error'); }
+  // Refresh to reflect new state.
+  openNewLeadsModal(_newLeadsHours);
+  refreshNewLeadsBadge();
+  updateDashboardBadge && updateDashboardBadge();
+}
+
+// Enroll every pending+enrollable company in one request, using the
+// suggested sequence (or any per-row override the user has set).
+async function bulkEnrollNewLeads() {
+  var btn = document.getElementById('new-leads-bulk-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Enrolling\u2026'; }
+  try {
+    var data = await apiFetch('/api/new-leads?hours=' + _newLeadsHours);
+    var items = (data.companies || [])
+      .filter(function(c) {
+        var anyEnrolled = (c.contacts || []).some(function(ct) { return ct.enrollment_id; });
+        return !anyEnrolled && c.enrollable && c.suggested_sequence_id;
+      })
+      .map(function(c) {
+        return {
+          company_id: c.id,
+          sequence_id: _newLeadsOverrides[String(c.id)] || c.suggested_sequence_id,
+        };
+      });
+    if (!items.length) { toast('Nothing to enroll', ''); return; }
+    var r = await apiFetch('/api/new-leads/bulk-enroll', {
+      method: 'POST',
+      body: JSON.stringify({ items: items })
+    });
+    var msg = 'Enrolled ' + r.enrolled + ' compan' + (r.enrolled !== 1 ? 'ies' : 'y');
+    if (r.createdContacts) msg += ' \u00b7 created ' + r.createdContacts + ' generic contact' + (r.createdContacts !== 1 ? 's' : '');
+    if (r.failed) msg += ' \u00b7 ' + r.failed + ' failed';
+    toast(msg, r.failed ? '' : 'success');
+  } catch(e) { toast(e.message, 'error'); }
+  openNewLeadsModal(_newLeadsHours);
+  refreshNewLeadsBadge();
+  updateDashboardBadge && updateDashboardBadge();
 }
