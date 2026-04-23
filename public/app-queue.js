@@ -605,26 +605,55 @@ async function openNewLeadsModal(hoursArg) {
 
       var contactsHtml = (c.contacts || []).map(function(ct, i) {
         var name = [ct.first_name, ct.last_name].filter(Boolean).join(' ');
-        var enrollBadge = ct.sequence_name
-          ? '<span class="badge" style="background:var(--primary-pale);color:var(--primary)">\u2192 ' + esc(ct.sequence_name) + '</span>'
-          : (ct.email
-              ? '<span class="badge" style="background:var(--warn-pale);color:var(--warn)">not enrolled</span>'
-              : '<span class="badge">no email</span>');
-        var actions = ct.enrollment_id
+
+        // Prospect-status badge: prefer the sequence-name chip when the contact
+        // is actively enrolled; otherwise surface the server-computed state.
+        var stateBadge = ct.sequence_name
+          ? '<span class="badge" style="background:var(--primary-pale);color:var(--primary)" title="Active in this sequence">\u2192 ' + esc(ct.sequence_name) + '</span>'
+          : contactStateBadge(ct.contact_state);
+
+        // Enrollment-scoped controls (only visible while actively enrolled).
+        var enrollmentActions = ct.enrollment_id
           ? '<button class="btn btn-ghost btn-sm" onclick="openSwitchSequenceModal(' + ct.enrollment_id + ',' + ct.id + ',' + (ct.sequence_id || 'null') + ')">Switch</button>' +
-            '<button class="btn btn-ghost btn-sm" onclick="removeFromQueue(' + ct.enrollment_id + ')" title="Remove from sequence" style="padding:5px 8px;margin-left:4px">\u2715</button>'
+            '<button class="btn btn-ghost btn-sm" onclick="removeFromQueue(' + ct.enrollment_id + ')" title="Remove from sequence" style="padding:5px 8px">\u2715</button>'
           : '';
+
+        // Per-contact actions: Compose when we have an email, otherwise an
+        // "+ Email" toggle that reveals an inline editor below the row.
+        var primaryAction;
+        if (ct.email && ct.email.trim()) {
+          primaryAction = '<button class="btn btn-outline btn-sm" onclick="openComposeEmailModal(' + ct.id + ',' + JSON.stringify(ct.email) + ',' + JSON.stringify(name) + ',' + (c.id || 'null') + ')" title="Send a one-off email">\u270e Compose</button>';
+        } else {
+          primaryAction = '<button class="btn btn-ghost btn-sm" onclick="toggleInlineEmailEditor(' + ct.id + ')" title="Add an email address">+ Email</button>';
+        }
+
+        var inlineEditor = '';
+        if (!ct.email || !ct.email.trim()) {
+          inlineEditor =
+            '<div id="nl-email-' + ct.id + '" class="nl-email-editor" style="display:none;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;padding:8px;background:var(--bg-alt,#f6f7f9);border-radius:6px">' +
+              '<input type="email" id="nl-email-input-' + ct.id + '" class="input input-sm" style="flex:1;min-width:200px;padding:5px 8px;font-size:12px" placeholder="name@company.com">' +
+              '<button class="btn btn-primary btn-sm" onclick="saveContactEmailInline(' + ct.id + ')">Save</button>' +
+              '<button class="btn btn-ghost btn-sm" onclick="toggleInlineEmailEditor(' + ct.id + ')">Cancel</button>' +
+            '</div>';
+        }
+
         var borderStyle = i === 0 ? '' : 'border-top:1px solid var(--border);';
-        return '<div style="' + borderStyle + 'display:flex;align-items:center;gap:12px;padding:10px 0">' +
-          '<div style="flex:1;min-width:0">' +
-            '<div style="font-size:13px;font-weight:600">' + esc(name || '\u2014') +
-              (ct.is_primary ? ' <span style="font-size:10px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:0.05em">primary</span>' : '') +
-              (ct.title ? ' <span style="font-weight:400;color:var(--text-muted)">\u00b7 ' + esc(ct.title) + '</span>' : '') +
+        return '<div style="' + borderStyle + 'padding:10px 0">' +
+          '<div style="display:flex;align-items:center;gap:12px">' +
+            '<div style="flex:1;min-width:0">' +
+              '<div style="font-size:13px;font-weight:600">' + esc(name || '\u2014') +
+                (ct.is_primary ? ' <span style="font-size:10px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:0.05em">primary</span>' : '') +
+                (ct.title ? ' <span style="font-weight:400;color:var(--text-muted)">\u00b7 ' + esc(ct.title) + '</span>' : '') +
+              '</div>' +
+              (ct.email ? '<div style="font-size:12px;color:var(--text-muted);margin-top:2px">' + esc(ct.email) + '</div>' : '') +
             '</div>' +
-            (ct.email ? '<div style="font-size:12px;color:var(--text-muted);margin-top:2px">' + esc(ct.email) + '</div>' : '') +
+            '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">' +
+              stateBadge +
+              primaryAction +
+              enrollmentActions +
+            '</div>' +
           '</div>' +
-          '<div>' + enrollBadge + '</div>' +
-          (actions ? '<div style="display:flex;gap:4px">' + actions + '</div>' : '') +
+          inlineEditor +
         '</div>';
       }).join('');
 
@@ -728,4 +757,140 @@ async function bulkEnrollNewLeads() {
   openNewLeadsModal(_newLeadsHours);
   refreshNewLeadsBadge();
   updateDashboardBadge && updateDashboardBadge();
+}
+
+// ── PROSPECT STATUS BADGE ────────────────────────────────────────────────
+// Maps the server-computed `contact_state` to a compact coloured pill so the
+// UI shows at a glance whether a prospect has been touched, and how:
+//   in_sequence → rendered upstream when an active enrollment exists
+//   sent_1_1    → teal
+//   contacted   → gray (past sequence email, no active enrollment)
+//   untouched   → neutral outline
+function contactStateBadge(state) {
+  if (state === 'in_sequence') {
+    return '<span class="badge" style="background:var(--primary-pale);color:var(--primary)" title="Active in a sequence">In sequence</span>';
+  }
+  if (state === 'sent_1_1') {
+    return '<span class="badge" style="background:#d1fae5;color:#047857" title="You\'ve sent a 1-1 email">1-1 sent</span>';
+  }
+  if (state === 'contacted') {
+    return '<span class="badge" style="background:#e5e7eb;color:#374151" title="Previously contacted via sequence">Contacted</span>';
+  }
+  return '<span class="badge" style="background:transparent;color:var(--text-muted);border:1px dashed var(--border)" title="No outreach yet">Untouched</span>';
+}
+
+// ── INLINE EMAIL EDITOR ──────────────────────────────────────────────────
+// Lets the user fill in a missing contact email without leaving the modal.
+function toggleInlineEmailEditor(contactId) {
+  var el = document.getElementById('nl-email-' + contactId);
+  if (!el) return;
+  var open = el.style.display !== 'none' && el.style.display !== '';
+  el.style.display = open ? 'none' : 'flex';
+  if (!open) {
+    var input = document.getElementById('nl-email-input-' + contactId);
+    if (input) input.focus();
+  }
+}
+
+async function saveContactEmailInline(contactId) {
+  var input = document.getElementById('nl-email-input-' + contactId);
+  var email = (input && input.value || '').trim();
+  if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
+    toast('Enter a valid email', 'error');
+    return;
+  }
+  try {
+    // Round-trip other fields through PUT so we don't blank them.
+    var current = await apiFetch('/api/contacts/' + contactId);
+    var payload = {
+      company_id: current.company_id,
+      first_name: current.first_name,
+      last_name: current.last_name || '',
+      email: email,
+      phone: current.phone || '',
+      title: current.title || '',
+      linkedin: current.linkedin || '',
+      notes: current.notes || '',
+      is_primary: current.is_primary ? 1 : 0,
+    };
+    await apiFetch('/api/contacts/' + contactId, { method: 'PUT', body: JSON.stringify(payload) });
+    toast('Email saved', 'success');
+    openNewLeadsModal(_newLeadsHours || 24);
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ── COMPOSE 1-1 EMAIL ────────────────────────────────────────────────────
+// Sends a one-off email outside any sequence. Reuses POST /api/inbox/reply,
+// which logs an activity with enrollment_id NULL — the same signal the
+// server's contact_state computation uses to mark a contact as 1-1 sent.
+function openComposeEmailModal(contactId, toEmail, toName, companyId) {
+  var overlay = document.getElementById('modal-compose-1to1');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'modal-compose-1to1';
+    overlay.className = 'modal-overlay hidden';
+    overlay.innerHTML =
+      '<div class="modal">' +
+        '<div class="modal-header">' +
+          '<h2>Compose email</h2>' +
+          '<button class="modal-close" onclick="closeModal(\'modal-compose-1to1\')">\u2715</button>' +
+        '</div>' +
+        '<form id="compose-1to1-form" onsubmit="event.preventDefault();submitComposeEmail();" style="display:flex;flex-direction:column;gap:12px">' +
+          '<div><label style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em">To</label>' +
+            '<div id="compose-1to1-to" style="padding:6px 8px;background:var(--bg-alt,#f6f7f9);border-radius:6px;font-size:13px"></div></div>' +
+          '<div><label style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em">Subject</label>' +
+            '<input type="text" id="compose-1to1-subject" class="input" required></div>' +
+          '<div><label style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em">Body</label>' +
+            '<textarea id="compose-1to1-body" rows="10" class="input" style="font-family:inherit" required></textarea>' +
+            '<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Your saved signature is appended automatically.</div></div>' +
+          '<input type="hidden" id="compose-1to1-contactId">' +
+          '<input type="hidden" id="compose-1to1-companyId">' +
+          '<div style="display:flex;gap:8px;justify-content:flex-end">' +
+            '<button type="button" class="btn btn-ghost" onclick="closeModal(\'modal-compose-1to1\')">Cancel</button>' +
+            '<button type="submit" class="btn btn-primary" id="compose-1to1-send">Send</button></div>' +
+        '</form>' +
+      '</div>';
+    document.body.appendChild(overlay);
+  }
+  document.getElementById('compose-1to1-to').textContent = (toName ? toName + ' ' : '') + '<' + toEmail + '>';
+  document.getElementById('compose-1to1-subject').value = '';
+  document.getElementById('compose-1to1-body').value = '';
+  document.getElementById('compose-1to1-contactId').value = contactId;
+  document.getElementById('compose-1to1-companyId').value = companyId || '';
+  openModal('modal-compose-1to1');
+  setTimeout(function() { document.getElementById('compose-1to1-subject').focus(); }, 50);
+}
+
+async function submitComposeEmail() {
+  var contactId = document.getElementById('compose-1to1-contactId').value;
+  var companyId = document.getElementById('compose-1to1-companyId').value;
+  var subject = document.getElementById('compose-1to1-subject').value.trim();
+  var body = document.getElementById('compose-1to1-body').value.trim();
+  if (!subject || !body) { toast('Subject and body are required', 'error'); return; }
+  var sendBtn = document.getElementById('compose-1to1-send');
+  sendBtn.disabled = true; sendBtn.textContent = 'Sending\u2026';
+  try {
+    var contact = await apiFetch('/api/contacts/' + contactId);
+    if (!contact || !contact.email) throw new Error('Contact has no email');
+    await apiFetch('/api/inbox/reply', {
+      method: 'POST',
+      body: JSON.stringify({
+        toEmail: contact.email,
+        toName: [contact.first_name, contact.last_name].filter(Boolean).join(' '),
+        subject: subject,
+        body: body,
+        isHtml: false,
+        contactId: contactId,
+        companyId: companyId || contact.company_id || null,
+      }),
+    });
+    toast('Email sent', 'success');
+    closeModal('modal-compose-1to1');
+    // Refresh the New Leads modal so the contact_state badge updates to "1-1 sent".
+    var nlModal = document.getElementById('modal-new-leads');
+    if (nlModal && !nlModal.classList.contains('hidden')) {
+      openNewLeadsModal(_newLeadsHours || 24);
+    }
+  } catch (e) { toast(e.message, 'error'); }
+  sendBtn.disabled = false; sendBtn.textContent = 'Send';
 }
