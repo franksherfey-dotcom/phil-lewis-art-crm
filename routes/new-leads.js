@@ -179,26 +179,50 @@ router.post('/bulk-enroll', async (req, res) => {
 
         // Enroll. Mirrors the idempotent logic in routes/enrollments.js so
         // re-running the endpoint is safe: reactivates stopped/completed rows.
+        //
+        // Race condition note: SELECT then INSERT has a TOCTOU window — two
+        // concurrent bulk-enrolls on the same (contact_id, sequence_id) could
+        // both see no existing row and both try to INSERT, tripping the unique
+        // constraint. We catch that and fall back to an UPDATE, same pattern
+        // used by routes/enrollments.js. This also covers any INSERT/UPDATE
+        // that races with a delete (stale existing.id) by falling through to
+        // a keyed UPDATE.
         let enrollmentAction = 'enrolled'
-        const existing = await one(
-          'SELECT id, status FROM enrollments WHERE contact_id=$1 AND sequence_id=$2',
-          [generic.contact_id, sequence_id]
-        )
-        if (existing) {
-          if (existing.status === 'active') {
-            enrollmentAction = 'already_active'
-          } else {
-            await run(
-              "UPDATE enrollments SET status='active', current_step=1, started_at=NOW(), completed_at=NULL WHERE id=$1",
-              [existing.id]
-            )
-            enrollmentAction = 'reactivated'
-          }
-        } else {
-          await run(
-            "INSERT INTO enrollments (contact_id, sequence_id, current_step, status) VALUES ($1,$2,1,'active')",
+        try {
+          const existing = await one(
+            'SELECT id, status FROM enrollments WHERE contact_id=$1 AND sequence_id=$2',
             [generic.contact_id, sequence_id]
           )
+          if (existing) {
+            if (existing.status === 'active') {
+              enrollmentAction = 'already_active'
+            } else {
+              await run(
+                "UPDATE enrollments SET status='active', current_step=1, started_at=NOW(), completed_at=NULL WHERE id=$1",
+                [existing.id]
+              )
+              enrollmentAction = 'reactivated'
+            }
+          } else {
+            await run(
+              "INSERT INTO enrollments (contact_id, sequence_id, current_step, status) VALUES ($1,$2,1,'active')",
+              [generic.contact_id, sequence_id]
+            )
+          }
+        } catch (e) {
+          // Unique-constraint or exclusion-constraint violation (concurrent
+          // insert won the race). Fall back to a keyed UPDATE — if it now
+          // exists and is already active, the WHERE clause leaves it alone;
+          // otherwise it's reactivated.
+          try {
+            await run(
+              "UPDATE enrollments SET status='active', current_step=1, started_at=NOW(), completed_at=NULL WHERE contact_id=$1 AND sequence_id=$2 AND status != 'active'",
+              [generic.contact_id, sequence_id]
+            )
+            enrollmentAction = 'reactivated'
+          } catch (e2) {
+            throw e // both paths failed — let the outer catch record the error
+          }
         }
 
         results.push({
