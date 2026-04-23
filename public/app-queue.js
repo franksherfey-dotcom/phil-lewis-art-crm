@@ -11,9 +11,11 @@ async function loadQueue() {
     _queueCache = queue;
     updateBadge('badge-queue', queue.length);
 
-    // Prune any selections that no longer exist in the queue (e.g. after sends/removals)
-    const validIds = new Set(queue.map(q => q.enrollment_id));
-    _queueSelected.forEach(id => { if (!validIds.has(id)) _queueSelected.delete(id); });
+    // Prune any selections that no longer exist in the queue (e.g. after sends/removals).
+    // IDs are coerced to strings: the API returns strings while onclick handlers inline
+    // bare numbers, so mixing types in the Set silently breaks lookups.
+    const validIds = new Set(queue.map(q => String(q.enrollment_id)));
+    _queueSelected.forEach(id => { if (!validIds.has(String(id))) _queueSelected.delete(id); });
 
     const btn = document.getElementById('send-all-btn');
     const infoEl = document.getElementById('queue-info');
@@ -67,7 +69,7 @@ async function loadQueue() {
       const stepSummary = Object.entries(stepCounts).map(([k,v]) => `${k}: ${v}`).join(' · ');
 
       // Master checkbox state for the group
-      const groupIds = g.items.map(it => it.enrollment_id);
+      const groupIds = g.items.map(it => String(it.enrollment_id));
       const selectedInGroup = groupIds.filter(id => _queueSelected.has(id)).length;
       const allChecked = selectedInGroup === groupIds.length && groupIds.length > 0;
       const someChecked = selectedInGroup > 0 && !allChecked;
@@ -90,7 +92,7 @@ async function loadQueue() {
             </div>
           </div>
           ${isOpen ? `<div class="queue-group-body">${g.items.map(item => {
-            const isSel = _queueSelected.has(item.enrollment_id);
+            const isSel = _queueSelected.has(String(item.enrollment_id));
             return `
             <div class="queue-item queue-item-clickable${isSel ? ' queue-item-selected' : ''}" onclick="openQueueDetail(${item._index})">
               <div class="queue-item-check" onclick="event.stopPropagation()">
@@ -153,16 +155,21 @@ function renderQueueBulkBar() {
 }
 
 function toggleQueueSelect(enrollmentId, checked) {
-  if (checked) _queueSelected.add(enrollmentId);
-  else _queueSelected.delete(enrollmentId);
+  var id = String(enrollmentId);
+  if (checked) _queueSelected.add(id);
+  else _queueSelected.delete(id);
   loadQueue();
 }
 
 function toggleQueueGroupSelect(seqId, checked) {
-  var items = _queueCache.filter(function(q) { return q.sequence_id === seqId; });
+  // Compare as strings: _queueCache items come from the API with string IDs,
+  // but seqId arrives as a number (inlined bare into the onclick attribute).
+  var key = String(seqId);
+  var items = _queueCache.filter(function(q) { return String(q.sequence_id) === key; });
   items.forEach(function(it) {
-    if (checked) _queueSelected.add(it.enrollment_id);
-    else _queueSelected.delete(it.enrollment_id);
+    var id = String(it.enrollment_id);
+    if (checked) _queueSelected.add(id);
+    else _queueSelected.delete(id);
   });
   loadQueue();
 }
@@ -176,7 +183,7 @@ async function removeFromQueue(enrollmentId) {
   if (!confirm('Remove this contact from the sequence? They will stop receiving scheduled emails.')) return;
   try {
     await apiFetch('/api/enrollments/' + enrollmentId, { method: 'DELETE' });
-    _queueSelected.delete(enrollmentId);
+    _queueSelected.delete(String(enrollmentId));
     toast('Removed from sequence', 'success');
     loadQueue();
     updateDashboardBadge();
