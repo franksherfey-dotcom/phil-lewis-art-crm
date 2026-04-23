@@ -3,12 +3,18 @@
 let _queueCache = [];
 
 let _queueExpanded = {}; // seqId -> bool (default open)
+let _queueSelected = new Set(); // enrollment_id set for bulk actions
 
 async function loadQueue() {
   try {
     const queue = await apiFetch('/api/queue');
     _queueCache = queue;
     updateBadge('badge-queue', queue.length);
+
+    // Prune any selections that no longer exist in the queue (e.g. after sends/removals)
+    const validIds = new Set(queue.map(q => q.enrollment_id));
+    _queueSelected.forEach(id => { if (!validIds.has(id)) _queueSelected.delete(id); });
+
     const btn = document.getElementById('send-all-btn');
     const infoEl = document.getElementById('queue-info');
     const listEl = document.getElementById('queue-list');
@@ -23,6 +29,7 @@ async function loadQueue() {
           <p style="margin-top:6px">All caught up. Enroll more contacts in sequences to see items here.</p>
         </div>
       `;
+      renderQueueBulkBar();
       return;
     }
 
@@ -59,10 +66,18 @@ async function loadQueue() {
       });
       const stepSummary = Object.entries(stepCounts).map(([k,v]) => `${k}: ${v}`).join(' · ');
 
+      // Master checkbox state for the group
+      const groupIds = g.items.map(it => it.enrollment_id);
+      const selectedInGroup = groupIds.filter(id => _queueSelected.has(id)).length;
+      const allChecked = selectedInGroup === groupIds.length && groupIds.length > 0;
+      const someChecked = selectedInGroup > 0 && !allChecked;
+      const masterChk = `<input type="checkbox" class="queue-group-check" ${allChecked ? 'checked' : ''} ${someChecked ? 'data-indeterminate="1"' : ''} onclick="event.stopPropagation();toggleQueueGroupSelect(${g.id}, this.checked)" title="Select all in this sequence" style="margin-right:6px">`;
+
       return `
         <div class="queue-group">
           <div class="queue-group-header" onclick="toggleQueueGroup(${g.id})">
             <div class="queue-group-left">
+              ${masterChk}
               <span class="queue-group-arrow">${isOpen ? '▾' : '▸'}</span>
               <span class="queue-group-name">${esc(g.name)}</span>
               ${isAutoSend ? '<span class="seq-auto-badge seq-auto-on" style="font-size:11px">⚡ Auto</span>' : ''}
@@ -74,8 +89,13 @@ async function loadQueue() {
               <button class="btn btn-ghost btn-sm" onclick="openSequenceModal(${g.id})">Edit Sequence</button>
             </div>
           </div>
-          ${isOpen ? `<div class="queue-group-body">${g.items.map(item => `
-            <div class="queue-item queue-item-clickable" onclick="openQueueDetail(${item._index})">
+          ${isOpen ? `<div class="queue-group-body">${g.items.map(item => {
+            const isSel = _queueSelected.has(item.enrollment_id);
+            return `
+            <div class="queue-item queue-item-clickable${isSel ? ' queue-item-selected' : ''}" onclick="openQueueDetail(${item._index})">
+              <div class="queue-item-check" onclick="event.stopPropagation()">
+                <input type="checkbox" ${isSel ? 'checked' : ''} onclick="event.stopPropagation();toggleQueueSelect(${item.enrollment_id}, this.checked)" title="Select">
+              </div>
               <div class="queue-item-info">
                 <div class="queue-contact">${esc(item.first_name)} ${esc(item.last_name||'')}</div>
                 <div class="queue-company">${esc(item.company_name||'No company')} ${item.company_type ? `· ${typeName(item.company_type)}` : ''}</div>
@@ -87,12 +107,101 @@ async function loadQueue() {
               <div class="queue-actions" onclick="event.stopPropagation()">
                 <button class="btn btn-ghost btn-sm" onclick="previewEmail(${item.enrollment_id})">Preview</button>
                 <button class="btn btn-primary btn-sm" onclick="sendOne(${item.enrollment_id})">Send</button>
+                <button class="btn btn-ghost btn-sm" style="color:var(--text-muted);padding:0 8px" onclick="removeFromQueue(${item.enrollment_id})" title="Remove from sequence">✕</button>
               </div>
-            </div>
-          `).join('')}</div>` : ''}
+            </div>`;
+          }).join('')}</div>` : ''}
         </div>`;
     }).join('');
+
+    // Paint indeterminate state on master checkboxes (can't set via attribute)
+    listEl.querySelectorAll('.queue-group-check[data-indeterminate="1"]').forEach(el => { el.indeterminate = true; });
+
+    renderQueueBulkBar();
   } catch(e) { toast(e.message, 'error'); }
+}
+
+// ── BULK SELECT / REMOVE ─────────────────────────────────────────────────
+
+function renderQueueBulkBar() {
+  var bar = document.getElementById('queue-bulk-bar');
+  if (!bar) {
+    // Inject the bar above the queue list on first use
+    var anchor = document.getElementById('queue-list');
+    if (!anchor) return;
+    bar = document.createElement('div');
+    bar.id = 'queue-bulk-bar';
+    bar.className = 'queue-bulk-bar hidden';
+    bar.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 14px;margin-bottom:10px;background:var(--bg-alt,#f6f7f9);border:1px solid var(--border,#e4e6ea);border-radius:8px;font-size:14px';
+    bar.innerHTML =
+      '<strong id="queue-bulk-count">0 selected</strong>' +
+      '<button class="btn btn-danger btn-sm" onclick="bulkRemoveFromQueue()">Remove from sequence</button>' +
+      '<button class="btn btn-ghost btn-sm" onclick="clearQueueSelection()">Clear selection</button>';
+    anchor.parentNode.insertBefore(bar, anchor);
+  }
+  var n = _queueSelected.size;
+  if (n === 0) {
+    bar.classList.add('hidden');
+    bar.style.display = 'none';
+  } else {
+    bar.classList.remove('hidden');
+    bar.style.display = 'flex';
+    var countEl = document.getElementById('queue-bulk-count');
+    if (countEl) countEl.textContent = n + ' selected';
+  }
+}
+
+function toggleQueueSelect(enrollmentId, checked) {
+  if (checked) _queueSelected.add(enrollmentId);
+  else _queueSelected.delete(enrollmentId);
+  loadQueue();
+}
+
+function toggleQueueGroupSelect(seqId, checked) {
+  var items = _queueCache.filter(function(q) { return q.sequence_id === seqId; });
+  items.forEach(function(it) {
+    if (checked) _queueSelected.add(it.enrollment_id);
+    else _queueSelected.delete(it.enrollment_id);
+  });
+  loadQueue();
+}
+
+function clearQueueSelection() {
+  _queueSelected.clear();
+  loadQueue();
+}
+
+async function removeFromQueue(enrollmentId) {
+  if (!confirm('Remove this contact from the sequence? They will stop receiving scheduled emails.')) return;
+  try {
+    await apiFetch('/api/enrollments/' + enrollmentId, { method: 'DELETE' });
+    _queueSelected.delete(enrollmentId);
+    toast('Removed from sequence', 'success');
+    loadQueue();
+    updateDashboardBadge();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function bulkRemoveFromQueue() {
+  var ids = Array.from(_queueSelected);
+  if (!ids.length) return;
+  if (!confirm('Remove ' + ids.length + ' contact' + (ids.length !== 1 ? 's' : '') + ' from their sequences? They will stop receiving scheduled emails.')) return;
+  var ok = 0, fail = 0;
+  // Small concurrency: fire in batches of 6
+  var batchSize = 6;
+  for (var i = 0; i < ids.length; i += batchSize) {
+    var batch = ids.slice(i, i + batchSize);
+    var results = await Promise.all(batch.map(function(id) {
+      return apiFetch('/api/enrollments/' + id, { method: 'DELETE' })
+        .then(function() { return true; })
+        .catch(function() { return false; });
+    }));
+    results.forEach(function(r) { if (r) ok++; else fail++; });
+  }
+  _queueSelected.clear();
+  toast('Removed ' + ok + ' from sequence' + (fail ? ' · ' + fail + ' failed' : ''), fail ? '' : 'success');
+  loadQueue();
+  updateDashboardBadge();
 }
 
 function countCampaigns(queue) {
@@ -197,6 +306,7 @@ async function openQueueDetail(index) {
     <div class="queue-detail-actions">
       <button class="btn btn-primary" onclick="sendFromQueueDetail(${item.enrollment_id})">Send Email</button>
       <button class="btn btn-outline" onclick="previewFromQueueDetail(${item.enrollment_id})">Preview</button>
+      <button class="btn btn-danger" onclick="removeFromQueue(${item.enrollment_id});closeModal('modal-queue-detail')">Remove from Sequence</button>
       <button class="btn btn-outline" onclick="closeModal('modal-queue-detail')">Cancel</button>
     </div>
   `;
@@ -306,4 +416,3 @@ async function updateDashboardBadge() {
   const queue = await apiFetch('/api/queue');
   updateBadge('badge-queue', queue.length);
 }
-
