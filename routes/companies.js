@@ -32,9 +32,9 @@ router.get('/', async (req, res) => {
     }
     if (tag) {
       const tags = tag.split(',').filter(Boolean)
-      if (tags.length === 1) { sql += ` AND (',' || c.tags || ',') ILIKE $${i}`; params.push(`%,${tags[0]},%`); i++ }
+      if (tags.length === 1) { sql += ` AND (',' || REPLACE(c.tags, ' ', '') || ',') ILIKE $${i}`; params.push(`%,${tags[0]},%`); i++ }
       else if (tags.length > 1) {
-        sql += ` AND (${tags.map((_,j) => `(',' || c.tags || ',') ILIKE $${i+j}`).join(' OR ')})`
+        sql += ` AND (${tags.map((_,j) => `(',' || REPLACE(c.tags, ' ', '') || ',') ILIKE $${i+j}`).join(' OR ')})`
         tags.forEach(t => params.push(`%,${t},%`)); i += tags.length
       }
     }
