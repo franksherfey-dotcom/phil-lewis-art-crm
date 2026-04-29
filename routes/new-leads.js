@@ -86,11 +86,23 @@ router.get('/', async (req, res) => {
     if (!companies.length) return res.json({ hours, companies: [], sequences: [] })
 
     const ids = companies.map(c => c.id)
+    // contact_state:
+    //   in_sequence — has an active enrollment
+    //   sent_1_1    — a 1-1 email activity (enrollment_id IS NULL) but no active sequence
+    //   contacted   — past sequence email, no active enrollment and no 1-1 activity
+    //   untouched   — nothing
     const contacts = await all(`
       SELECT c.id, c.company_id, c.first_name, c.last_name, c.title, c.email,
              c.is_primary,
              e.id AS enrollment_id, e.status AS enrollment_status, e.current_step,
-             e.sequence_id, s.name AS sequence_name
+             e.sequence_id, s.name AS sequence_name,
+             CASE
+               WHEN EXISTS (SELECT 1 FROM enrollments en WHERE en.contact_id = c.id AND en.status = 'active') THEN 'in_sequence'
+               WHEN EXISTS (SELECT 1 FROM activities a WHERE a.contact_id = c.id AND a.type = 'email' AND a.enrollment_id IS NULL) THEN 'sent_1_1'
+               WHEN EXISTS (SELECT 1 FROM activities a WHERE a.contact_id = c.id AND a.type = 'email') THEN 'contacted'
+               ELSE 'untouched'
+             END AS contact_state,
+             (SELECT MAX(a.sent_at) FROM activities a WHERE a.contact_id = c.id AND a.type = 'email') AS last_emailed_at
       FROM contacts c
       LEFT JOIN LATERAL (
         SELECT e2.id, e2.status, e2.current_step, e2.sequence_id

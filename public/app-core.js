@@ -68,8 +68,8 @@ const PRESET_TAGS = [
 
 // Phil's core licensing industries — shown as filter chips on the Prospects page
 const INDUSTRY_TAGS = [
-  'apparel', 'hard-goods', 'outdoor', 'surf', 'skateboard', 'snowboard',
-  'drinkware', 'footwear', 'puzzles', 'cards', 'fabric', 'lifestyle', 'licensing'
+  'apparel', 'artist-collab', 'hard-goods', 'outdoor', 'surf', 'camping', 'skateboard', 'snowboard',
+  'drinkware', 'festival', 'footwear', 'puzzles', 'cards', 'fabric', 'lifestyle', 'licensing'
 ];
 
 function tagClass(tag) {
