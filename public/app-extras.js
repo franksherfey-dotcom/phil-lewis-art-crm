@@ -240,7 +240,7 @@ function openQrArtPicker() {
 
 function selectQrArt(artId) {
   var cache = (typeof _artCache !== 'undefined') ? _artCache : [];
-  var art = cache.find(function(a) { return a.id === artId; });
+  var art = cache.find(function(a) { return String(a.id) === String(artId); });
   if (!art) return;
   _qrArtOverride = _artToImage(art);
   document.getElementById('qr-art-picker').innerHTML = '';
@@ -355,7 +355,7 @@ function openQdArtPicker(companyTags) {
 }
 
 function selectQdArt(artId) {
-  var art = (_artCache || []).find(function(a) { return a.id === artId; });
+  var art = (_artCache || []).find(function(a) { return String(a.id) === String(artId); });
   if (!art) return;
 
   var textarea = document.getElementById('queue-edit-body');
@@ -1111,7 +1111,7 @@ function openArtModal(id = null) {
   document.getElementById('art-modal-title').textContent = id ? 'Edit Art Image' : 'Add Art Image';
 
   if (id) {
-    const art = _artCache.find(a => a.id === id);
+    const art = _artCache.find(a => String(a.id) === String(id));
     if (art) {
       form.querySelector('[name="art_id"]').value = art.id;
       form.querySelector('[name="art_title"]').value = art.title;

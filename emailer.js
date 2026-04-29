@@ -1,6 +1,7 @@
 const nodemailer = require('nodemailer')
 const MailComposer = require('nodemailer/lib/mail-composer')
 const { ImapFlow } = require('imapflow')
+const { simpleParser } = require('mailparser')
 const pool = require('./lib/db')
 
 async function getSettings() {
@@ -122,7 +123,22 @@ async function sendEmail({ toEmail, toName, subject, body, isHtml, contact, comp
   return { resolvedSubject, resolvedBody }
 }
 
-// Sync received emails from IMAP inbox and match to CRM contacts
+// Maximum stored body length. Generous so full email threads fit, but capped to keep
+// pathologically large messages (giant attachments serialized as text, etc.) from blowing
+// up the activities table.
+const MAX_BODY_LENGTH = 50000
+
+// Sync received emails from IMAP inbox and match to CRM contacts.
+//
+// Uses mailparser (the standard sister library to nodemailer/imapflow) to handle:
+//   - MIME multipart parsing (text/plain vs text/html parts)
+//   - Content-Transfer-Encoding decoding (base64, quoted-printable, 7bit, 8bit)
+//   - Charset conversion (UTF-8, ISO-8859-1, etc.)
+//   - HTML-to-text fallback when no text/plain part exists
+//
+// Replaces the previous regex-based MIME extraction which had two bugs:
+//   1. Did not decode base64-encoded bodies (stored raw base64 gibberish)
+//   2. Hard-truncated bodies at 2000 chars (cut messages mid-sentence)
 async function syncInbox(settings, knownEmails) {
   if (!settings.imap_host || !settings.smtp_user || !settings.smtp_pass) {
     throw new Error('IMAP not configured.')
@@ -151,41 +167,35 @@ async function syncInbox(settings, knownEmails) {
 
       for await (const msg of client.fetch(messages.length ? messages : '1:0', {
         envelope: true,
-        bodyStructure: true,
         source: true,
       })) {
         const fromAddr = msg.envelope?.from?.[0]?.address?.toLowerCase()
         if (!fromAddr) continue
         if (!knownEmails.has(fromAddr)) continue
-        // Extract plain text body — strip MIME boundaries and headers
+
+        // Parse the raw RFC 2822 source with mailparser. This handles MIME parts,
+        // base64/quoted-printable decoding, charset conversion, and HTML fallback.
+        let parsed = null
         let bodyText = ''
         try {
-          const src = msg.source.toString('utf8')
-          // Try to extract the text/plain MIME part first
-          const plainMatch = src.match(/Content-Type:\s*text\/plain[^\r\n]*\r?\n(?:Content-Transfer-Encoding:[^\r\n]*\r?\n)?(?:[^\r\n]*\r?\n)*?\r?\n([\s\S]*?)(?:\r?\n--|\s*$)/)
-          if (plainMatch) {
-            bodyText = plainMatch[1]
-          } else {
-            // Fallback: grab text after main headers
-            const split = src.split(/\r?\n\r?\n/)
-            bodyText = split.slice(1).join('\n\n')
-          }
-          // Clean up: strip HTML tags, MIME boundaries, content headers, and quoted-printable artifacts
+          parsed = await simpleParser(msg.source)
+          // Prefer plain text part. Fall back to HTML stripped of tags if no text part exists.
+          bodyText = parsed.text || (parsed.html ? parsed.html.replace(/<[^>]+>/g, '') : '')
           bodyText = bodyText
-            .replace(/<[^>]+>/g, '')
-            .replace(/^--.*$/gm, '')
-            .replace(/^Content-(?:Type|Transfer-Encoding|Disposition):[^\r\n]*/gm, '')
-            .replace(/=\r?\n/g, '')       // quoted-printable soft line breaks
-            .replace(/=([0-9A-Fa-f]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
             .replace(/\n{3,}/g, '\n\n')
             .trim()
-            .slice(0, 2000)
-        } catch {}
+          if (bodyText.length > MAX_BODY_LENGTH) {
+            bodyText = bodyText.slice(0, MAX_BODY_LENGTH) + '\n\n[... message truncated]'
+          }
+        } catch (e) {
+          console.warn('mailparser failed for inbound message; storing empty body:', e.message)
+        }
+
         received.push({
           from_email: fromAddr,
-          subject: msg.envelope?.subject || '(no subject)',
+          subject: parsed?.subject || msg.envelope?.subject || '(no subject)',
           body: bodyText,
-          received_at: msg.envelope?.date || new Date(),
+          received_at: parsed?.date || msg.envelope?.date || new Date(),
         })
       }
     } finally {

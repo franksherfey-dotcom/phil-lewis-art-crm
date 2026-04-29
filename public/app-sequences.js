@@ -403,7 +403,7 @@ async function openArtPicker(stepNum) {
 }
 
 function selectStepArt(stepNum, artId) {
-  const art = _artCache ? _artCache.find(a => a.id === artId) : null;
+  const art = _artCache ? _artCache.find(a => String(a.id) === String(artId)) : null;
   if (art) _stepArtOverrides[stepNum] = art;
   closeModal('modal-art-picker');
   updateStepArtPreview(stepNum);
@@ -449,7 +449,7 @@ async function openQueueArtPicker(enrollmentId) {
 }
 
 function selectQueueArt(artId) {
-  const art = _artCache ? _artCache.find(a => a.id === artId) : null;
+  const art = _artCache ? _artCache.find(a => String(a.id) === String(artId)) : null;
   if (art) _queueArtOverride = art;
   closeModal('modal-art-picker');
   updateQueueArtPreview();
