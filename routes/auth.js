@@ -5,7 +5,7 @@ const pool = require('../lib/db')
 
 const router = express.Router()
 
-const JWT_SECRET = process.env.JWT_SECRET || 'pla-crm-secret-please-set-JWT_SECRET-env-var'
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-only-insecure-secret'
 const JWT_EXPIRES = '30d'
 
 // Migration promise from server.js
