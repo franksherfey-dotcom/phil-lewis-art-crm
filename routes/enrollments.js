@@ -1,5 +1,5 @@
 const express = require('express')
-const { one, all, run, autoSetNextStep } = require('../lib/helpers')
+const { one, all, run, autoSetNextStep, emailBlocked } = require('../lib/helpers')
 
 const router = express.Router()
 
@@ -20,6 +20,7 @@ router.post('/', async (req, res) => {
         if (!contact || !contact.email) { skipped++; continue }
         // Never enroll do-not-contact contacts or companies (existing partners, blocked senders)
         if (contact.do_not_contact || contact.company_dnc) { skipped++; continue }
+        if (await emailBlocked(contact.email)) { skipped++; continue }
 
         // Check if there's an existing enrollment
         const existing = await one(

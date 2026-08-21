@@ -1,5 +1,5 @@
 const express = require('express')
-const { one, all, run } = require('../lib/helpers')
+const { one, all, run, emailBlocked } = require('../lib/helpers')
 
 const router = express.Router()
 
@@ -189,6 +189,11 @@ router.post('/bulk-enroll', async (req, res) => {
             company_id, sequence_id, ok: false,
             error: e.code === 'NO_DOMAIN' ? 'no website domain to derive info@ email' : e.message
           })
+          continue
+        }
+
+        if (await emailBlocked(generic.email)) {
+          results.push({ company_id, sequence_id, ok: false, error: 'email/domain is on the do-not-contact blocklist' })
           continue
         }
 

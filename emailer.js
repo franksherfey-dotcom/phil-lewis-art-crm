@@ -73,6 +73,16 @@ async function appendToSentFolder(settings, rawMessage) {
 }
 
 async function sendEmail({ toEmail, toName, subject, body, isHtml, contact, company, inReplyTo, references }) {
+  // Permanent outbound firewall: refuse to send to any blocked address or domain,
+  // regardless of which feature initiated the send or when the contact was created.
+  const to = (toEmail || '').toLowerCase().trim()
+  const toDomain = '@' + (to.split('@')[1] || '')
+  const { rows: blockedRows } = await pool.query(
+    'SELECT 1 FROM blocked_senders WHERE pattern = $1 OR pattern = $2 LIMIT 1', [to, toDomain])
+  if (blockedRows.length) {
+    throw new Error(`Blocked: ${toEmail} is on the do-not-contact blocklist.`)
+  }
+
   const settings = await getSettings()
   if (!settings.smtp_host || !settings.smtp_user) {
     throw new Error('SMTP not configured. Go to Settings to set up your email.')
