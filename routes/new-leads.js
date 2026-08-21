@@ -169,9 +169,12 @@ router.post('/bulk-enroll', async (req, res) => {
         continue
       }
       try {
-        const company = await one('SELECT id, name, website FROM companies WHERE id=$1', [company_id])
+        const company = await one('SELECT id, name, website, do_not_contact FROM companies WHERE id=$1', [company_id])
         if (!company) {
           results.push({ company_id, sequence_id, ok: false, error: 'company not found' }); continue
+        }
+        if (company.do_not_contact) {
+          results.push({ company_id, sequence_id, ok: false, error: 'company is marked do-not-contact' }); continue
         }
         const seq = await one('SELECT id FROM sequences WHERE id=$1', [sequence_id])
         if (!seq) {

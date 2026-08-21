@@ -14,8 +14,12 @@ router.post('/', async (req, res) => {
     for (const cid of ids) {
       try {
         // Skip contacts without an email address — they can't receive sequence emails
-        const contact = await one('SELECT email FROM contacts WHERE id=$1', [cid])
+        const contact = await one(
+          `SELECT c.email, c.do_not_contact, co.do_not_contact AS company_dnc
+           FROM contacts c LEFT JOIN companies co ON co.id = c.company_id WHERE c.id=$1`, [cid])
         if (!contact || !contact.email) { skipped++; continue }
+        // Never enroll do-not-contact contacts or companies (existing partners, blocked senders)
+        if (contact.do_not_contact || contact.company_dnc) { skipped++; continue }
 
         // Check if there's an existing enrollment
         const existing = await one(

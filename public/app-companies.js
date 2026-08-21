@@ -46,7 +46,7 @@ async function loadCompanies() {
     el.innerHTML = companies.map(c => `
       <div class="company-card" onclick="openCompanyDetail(${c.id})">
         <div class="company-card-header">
-          <div class="company-name">${esc(c.name)}</div>
+          <div class="company-name">${esc(c.name)}${c.do_not_contact ? ' <span title="Do not contact — excluded from all outreach">&#128683;</span>' : ''}</div>
           <span class="type-badge type-${c.type}">${typeName(c.type)}</span>
         </div>
         ${c.tags ? `<div class="company-tags">${renderTagChips(c.tags)}</div>` : ''}
