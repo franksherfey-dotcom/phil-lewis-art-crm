@@ -117,7 +117,7 @@ router.put('/:id', async (req, res) => {
 // PATCH /api/companies/:id
 router.patch('/:id', async (req, res) => {
   try {
-    const allowed = ['pipeline_stage','opportunity_value','next_step','next_step_date','last_activity_at','status','notes','tags']
+    const allowed = ['pipeline_stage','opportunity_value','next_step','next_step_date','last_activity_at','status','notes','tags','do_not_contact']
     const sets = []
     const vals = []
     let i = 1

@@ -9,6 +9,7 @@ router.get('/inbox', async (req, res) => {
     const activityType = tab === 'sent' ? 'email' : 'received_email'
     let sql = `
       SELECT a.id, a.contact_id, a.subject, a.body, a.status, a.sent_at, a.notes, a.sentiment,
+             a.is_automated,
              c.first_name, c.last_name, c.email, c.title,
              co.id AS company_id, co.name AS company_name, co.type AS company_type,
              co.opportunity_value, co.pipeline_stage, co.status AS company_status
@@ -19,6 +20,9 @@ router.get('/inbox', async (req, res) => {
     `
     const params = [activityType]
     let i = 2
+    const view = req.query.view || (activityType === 'received_email' ? 'human' : 'all')
+    if (view === 'human') sql += ' AND COALESCE(a.is_automated, FALSE) = FALSE'
+    if (view === 'automated') sql += ' AND COALESCE(a.is_automated, FALSE) = TRUE'
     if (search) {
       const s = `%${search}%`
       sql += ` AND (a.subject ILIKE $${i} OR c.first_name ILIKE $${i+1} OR c.last_name ILIKE $${i+2} OR co.name ILIKE $${i+3})`
@@ -28,7 +32,7 @@ router.get('/inbox', async (req, res) => {
     const lim = parseInt(limit)
     if (lim && lim > 0) { sql += ` LIMIT $${i}`; params.push(lim); i++ }
     const messages = await all(sql, params)
-    const unread = await one("SELECT COUNT(*)::int AS n FROM activities WHERE type='received_email' AND (notes IS NULL OR notes NOT IN ('read','archived'))")
+    const unread = await one("SELECT COUNT(*)::int AS n FROM activities WHERE type='received_email' AND COALESCE(is_automated, FALSE) = FALSE AND (notes IS NULL OR notes NOT IN ('read','archived'))")
     res.json({ messages, unreadCount: unread.n })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
@@ -98,6 +102,18 @@ function classifySentiment(subject, body) {
   return null
 }
 
+// ── AUTOMATED MAIL DETECTION ────────────────────────────────────────────────
+const AUTO_SUBJECT_RX = /(auto|automatic).{0,10}reply|we'?ve received|received your (request|message|email|note)|out of office|conversation #/i
+const AUTO_BODY_RX = /unsubscribe|view (this email )?in (your |the )?browser|email preferences|manage preferences|please type your reply above this line|this is an automated (response|reply|message)|thank you for contacting|we have received your (email|message|request)|outside of business hours/i
+function isAutomatedMessage(subject, body) {
+  return AUTO_SUBJECT_RX.test(subject || '') || AUTO_BODY_RX.test((body || '').slice(0, 4000))
+}
+function senderBlocked(patterns, email) {
+  const e = (email || '').toLowerCase()
+  const domain = '@' + (e.split('@')[1] || '')
+  return patterns.some(p => p === e || p === domain)
+}
+
 router.post('/inbox/sync', async (req, res) => {
   try {
     const rows = await all('SELECT key, value FROM settings')
@@ -108,10 +124,12 @@ router.post('/inbox/sync', async (req, res) => {
     contacts.forEach(c => { emailToContact[c.email.toLowerCase()] = c })
     const knownEmails = new Set(Object.keys(emailToContact))
     const received = await syncInbox(settings, knownEmails)
+    const blockedPatterns = (await all('SELECT pattern FROM blocked_senders')).map(r => r.pattern)
     let imported = 0, autoStopped = 0, opportunitiesCreated = 0
     for (const msg of received) {
       const contact = emailToContact[msg.from_email]
       if (!contact) continue
+      if (senderBlocked(blockedPatterns, msg.from_email)) continue
       const contactId = contact.id
       const existing = await one(
         `SELECT id FROM activities WHERE contact_id=$1 AND type='received_email' AND subject=$2
@@ -127,22 +145,23 @@ router.post('/inbox/sync', async (req, res) => {
         )
         if (dupe) continue
       }
-      const sentiment = classifySentiment(msg.subject, msg.body)
+      const automated = isAutomatedMessage(msg.subject, msg.body)
+      const sentiment = automated ? null : classifySentiment(msg.subject, msg.body)
       await run(
-        `INSERT INTO activities (contact_id, type, subject, body, status, sent_at, sentiment)
-         VALUES ($1,'received_email',$2,$3,'received',$4,$5)`,
-        [contactId, msg.subject, msg.body, msg.received_at, sentiment]
+        `INSERT INTO activities (contact_id, type, subject, body, status, sent_at, sentiment, is_automated)
+         VALUES ($1,'received_email',$2,$3,'received',$4,$5,$6)`,
+        [contactId, msg.subject, msg.body, msg.received_at, sentiment, automated]
       )
       imported++
-      const active = await all(`SELECT id FROM enrollments WHERE contact_id=$1 AND status='active'`, [contactId])
+      const active = automated ? [] : await all(`SELECT id FROM enrollments WHERE contact_id=$1 AND status='active'`, [contactId])
       for (const enr of active) {
         await run(`UPDATE enrollments SET status='replied', completed_at=NOW() WHERE id=$1`, [enr.id])
         autoStopped++
       }
-      if (contact.company_id && typeof autoSetNextStep === 'function') {
+      if (!automated && contact.company_id && typeof autoSetNextStep === 'function') {
         try { await autoSetNextStep(contact.company_id, 'reply_received') } catch (e) {}
       }
-      if (contact.company_id) {
+      if (!automated && contact.company_id) {
         const co = await one('SELECT opportunity_value, status FROM companies WHERE id=$1', [contact.company_id])
         if (co && (!co.opportunity_value || parseFloat(co.opportunity_value) === 0)) {
           await run(`UPDATE companies SET opportunity_value=5000, pipeline_stage='Interested', status='interested', last_activity_at=NOW(), updated_at=NOW() WHERE id=$1`, [contact.company_id])
@@ -157,6 +176,35 @@ router.post('/inbox/sync', async (req, res) => {
     console.error('inbox/sync error:', err)
     res.status(500).json({ error: err.message })
   }
+})
+
+// PATCH /api/inbox/:id/automated — manually toggle robot/human
+router.patch('/inbox/:id/automated', async (req, res) => {
+  try {
+    await run('UPDATE activities SET is_automated=$1 WHERE id=$2', [!!req.body.automated, req.params.id])
+    res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// POST /api/inbox/block — block a sender email or their whole domain.
+// Also marks matching contacts do-not-contact, stops their active enrollments,
+// and sweeps their past inbound into the Automated tab.
+router.post('/inbox/block', async (req, res) => {
+  try {
+    const { email, scope } = req.body
+    if (!email || !email.includes('@')) return res.status(400).json({ error: 'email required' })
+    const pattern = scope === 'domain' ? '@' + email.toLowerCase().split('@')[1] : email.toLowerCase()
+    await run('INSERT INTO blocked_senders (pattern, reason) VALUES ($1,$2) ON CONFLICT (pattern) DO NOTHING', [pattern, 'Blocked from inbox'])
+    const matchSql = scope === 'domain' ? "LOWER(email) LIKE '%' || $1" : 'LOWER(email) = $1'
+    const affected = await all(`SELECT id FROM contacts WHERE ${matchSql}`, [pattern])
+    const ids = affected.map(r => r.id)
+    if (ids.length) {
+      await run('UPDATE contacts SET do_not_contact=TRUE WHERE id = ANY($1::bigint[])', [ids])
+      await run(`UPDATE enrollments SET status='stopped', completed_at=NOW() WHERE status='active' AND contact_id = ANY($1::bigint[])`, [ids])
+      await run(`UPDATE activities SET is_automated=TRUE WHERE type='received_email' AND contact_id = ANY($1::bigint[])`, [ids])
+    }
+    res.json({ ok: true, pattern, contactsBlocked: ids.length })
+  } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
 router.post('/inbox/reply', async (req, res) => {

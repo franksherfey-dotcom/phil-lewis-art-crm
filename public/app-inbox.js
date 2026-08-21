@@ -62,7 +62,9 @@ async function loadInbox() {
     }
 
     // Inbox or Sent tab
-    const params = new URLSearchParams({ tab: _inboxTab, limit: '200' });
+    const isAutoTab = _inboxTab === 'automated';
+    const params = new URLSearchParams({ tab: isAutoTab ? 'inbox' : _inboxTab, limit: '200' });
+    params.set('view', isAutoTab ? 'automated' : (_inboxTab === 'inbox' ? 'human' : 'all'));
     if (search) params.set('search', search);
     const data = await apiFetch(`/api/inbox?${params}`);
     _inboxCache = data.messages || [];
@@ -116,6 +118,8 @@ async function loadInbox() {
                 <button class="sentiment-btn sentiment-btn-neutral ${m.sentiment==='neutral'?'active':''}" title="Neutral" onclick="setSentiment(${i},'neutral')">&#9679;</button>
                 <button class="sentiment-btn sentiment-btn-negative ${m.sentiment==='negative'?'active':''}" title="Negative" onclick="setSentiment(${i},'negative')">&#9679;</button>
               </div>
+              ${_inboxTab !== 'sent' ? `<button class="inbox-delete-btn" title="${m.is_automated ? 'This is a real person — move to Inbox' : 'This is a robot — move to Automated'}" onclick="toggleAutomatedMsg(${i})">${m.is_automated ? '&#128100;' : '&#129302;'}</button>
+              <button class="inbox-delete-btn" title="Block sender" onclick="blockSenderPrompt(${i})">&#128683;</button>` : ''}
               <button class="inbox-delete-btn" title="Delete" onclick="deleteInboxMessage(${i})">&#128465;</button>
             </div>
           </div>
@@ -894,4 +898,27 @@ async function submitImport() {
 }
 
 
+}
+
+
+// ── AUTOMATED TRIAGE & BLOCKING ─────────────────────────────────────────────
+async function toggleAutomatedMsg(i) {
+  const m = _inboxCache[i]; if (!m) return;
+  try {
+    await apiFetch(`/api/inbox/${m.id}/automated`, { method: 'PATCH', body: JSON.stringify({ automated: !m.is_automated }) });
+    toast(!m.is_automated ? 'Moved to Automated' : 'Moved to Inbox');
+    loadInbox();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function blockSenderPrompt(i) {
+  const m = _inboxCache[i]; if (!m || !m.email) return toast('No sender email on this message', 'error');
+  const domain = m.email.split('@')[1];
+  const choice = prompt(`Block future mail from:\n  1 = ${m.email}\n  2 = everyone @${domain}\n\nBlocking also marks them do-not-contact and stops sequences. Type 1 or 2:`, '1');
+  if (choice !== '1' && choice !== '2') return;
+  try {
+    const r = await apiFetch('/api/inbox/block', { method: 'POST', body: JSON.stringify({ email: m.email, scope: choice === '2' ? 'domain' : 'email' }) });
+    toast(`Blocked ${r.pattern} (${r.contactsBlocked} contact${r.contactsBlocked === 1 ? '' : 's'} marked do-not-contact)`);
+    loadInbox();
+  } catch(e) { toast(e.message, 'error'); }
 }

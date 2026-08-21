@@ -25,6 +25,12 @@ router.post('/send', async (req, res) => {
     if (enr.status !== 'active') return res.status(400).json({ error: 'Enrollment not active' })
     if (!enr.email) return res.status(400).json({ error: 'Contact has no email address' })
 
+    const dnc = await one(
+      'SELECT c.do_not_contact AS c_dnc, co.do_not_contact AS co_dnc FROM contacts c LEFT JOIN companies co ON co.id=c.company_id WHERE c.id=$1',
+      [enr.contact_id]
+    )
+    if (dnc && (dnc.c_dnc || dnc.co_dnc)) return res.status(400).json({ error: 'Blocked: contact or company is marked do-not-contact.' })
+
     const step = await one(
       'SELECT * FROM sequence_steps WHERE sequence_id=$1 AND step_number=$2',
       [enr.sequence_id, enr.current_step]
